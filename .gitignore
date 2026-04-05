@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+
+# Simulation artefacts
+*.vcd
+obj_dir/
+*.log
+
+# Feedback data (server-side, do not commit)
+feedback.jsonl
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All About VLSI — Zero to Hero Verilog</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     LANDING PAGE
+     ═══════════════════════════════════════════════════════ -->
+<div id="landing-page" style="display:flex; flex-direction:column; height:100vh; overflow-y:auto;">
+
+  <!-- Nav -->
+  <nav class="landing-nav">
+    <div class="logo">
+      <div class="logo-chip">⬡</div>
+      All About <em>&nbsp;VLSI</em>
+    </div>
+    <div class="landing-nav-right">
+      <span id="server-status" style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);">● connecting…</span>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">Free · Open · Interactive</div>
+    <h1 class="hero-title">
+      Master Verilog &<br>
+      <span class="hl">VLSI Design</span>
+    </h1>
+    <p class="hero-sub">
+      From logic gates to SPI controllers — learn hardware description language
+      with real iverilog simulation, interactive waveforms, and hands-on challenges.
+    </p>
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="openModule('m1')">
+        ▶ Start Learning Free
+      </button>
+      <button class="btn-secondary" onclick="openModule('m4')">
+        Jump to Advanced
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-num" id="stat-lessons">0</div>
+      <div class="stat-label">Lessons</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">6</div>
+      <div class="stat-label">Modules</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">3</div>
+      <div class="stat-label">Levels</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">Real</div>
+      <div class="stat-label">iverilog Sim</div>
+    </div>
+  </div>
+
+  <!-- Modules -->
+  <div class="modules-section">
+    <div class="section-title">Curriculum</div>
+    <div class="section-sub">Pick a module to begin. Progress is saved automatically.</div>
+    <div class="modules-grid" id="modules-grid"></div>
+  </div>
+
+  <div style="height:60px;"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     LESSON PAGE
+     ═══════════════════════════════════════════════════════ -->
+<div id="lesson-page" style="display:none; height:100vh; flex-direction:column;">
+
+  <!-- Lesson Nav -->
+  <nav class="lesson-nav">
+    <button class="back-btn" onclick="goHome()">← Home</button>
+    <span class="lesson-nav-title" id="lesson-nav-title">Lesson</span>
+
+    <div class="lesson-nav-center">
+      <div class="progress-dots" id="progress-dots"></div>
+    </div>
+
+    <div class="nav-prev-next">
+      <button id="btn-prev" onclick="navPrev()" title="Previous lesson">‹ Prev</button>
+      <button id="btn-next" onclick="navNext()" title="Next lesson">Next ›</button>
+    </div>
+
+    <select class="sim-select" id="sim-select" title="Simulator" onchange="onSimSelectChange()">
+      <option value="iverilog">iverilog</option>
+      <option value="verilator">verilator</option>
+    </select>
+    <input type="text" id="verilator-flags" class="verilator-flags-input"
+           value="--no-timing" title="Extra Verilator flags (e.g. --timing --Wall)"
+           style="display:none;">
+
+    <button class="run-btn" id="run-btn" onclick="runSimulation()">
+      <svg viewBox="0 0 10 10"><polygon points="1,0 10,5 1,10"/></svg>
+      Run
+    </button>
+  </nav>
+
+  <!-- Lesson Body -->
+  <div class="lesson-body">
+
+    <!-- Sidebar -->
+    <aside class="lesson-sidebar">
+      <div class="sidebar-module-header">
+        <div class="sidebar-mod-title" id="sidebar-mod-title">Module</div>
+      </div>
+      <div class="sidebar-lessons" id="sidebar-lessons"></div>
+      <div class="sidebar-footer">
+        <div class="sidebar-progress-label">
+          <span id="sidebar-prog-label">0/0 lessons</span>
+          <span id="sidebar-prog-pct">0%</span>
+        </div>
+        <div class="sidebar-prog-track">
+          <div class="sidebar-prog-fill" id="sidebar-prog-fill" style="width:0%"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Theory Pane -->
+    <div class="theory-pane">
+      <div class="pane-header">
+        <span class="pane-label">📖 Theory</span>
+      </div>
+      <div class="theory-content" id="theory-content"></div>
+    </div>
+
+    <!-- Editor Pane -->
+    <div class="editor-pane">
+      <div class="editor-header">
+        <button class="file-tab active" id="tab-design" onclick="switchEditorTab('design')">design.v</button>
+        <button class="file-tab"        id="tab-tb"     onclick="switchEditorTab('tb')">testbench.v</button>
+      </div>
+      <div class="editor-wrap">
+        <!-- Design editor -->
+        <div class="line-nums" id="lnum-design"></div>
+        <textarea class="code-editor" id="editor-design"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
+        </textarea>
+        <!-- Testbench editor -->
+        <div class="line-nums" id="lnum-tb" style="display:none;"></div>
+        <textarea class="code-editor" id="editor-tb"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+          style="display:none;">
+        </textarea>
+      </div>
+    </div>
+
+    <!-- Output + Waveform Pane -->
+    <div class="output-pane" id="output-pane">
+
+      <!-- Console -->
+      <div class="output-header">
+        <span class="pane-label">Console</span>
+        <button onclick="clearConsole()" style="font-family:var(--mono);font-size:0.6rem;background:none;border:none;color:var(--muted);cursor:pointer;margin-left:4px;" title="Clear">clear</button>
+        <span class="status-pill" id="status-pill">idle</span>
+      </div>
+      <div id="console-output"></div>
+      <div class="result-banner" id="result-banner"></div>
+
+      <!-- Next Lesson -->
+      <div class="next-lesson-wrap">
+        <button class="next-lesson-btn" id="btn-next-lesson" onclick="navNext()">
+          Next Lesson →
+        </button>
+      </div>
+
+      <!-- Waveform -->
+      <div class="wave-pane" id="wave-pane">
+        <div class="wave-header">
+          <span class="pane-label">⏱ Waveform</span>
+          <span id="wave-info" style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);"></span>
+          <div style="margin-left:auto;display:flex;gap:4px;">
+            <button onclick="waveZoomOut()" title="Zoom out" style="font-family:var(--mono);font-size:0.65rem;background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:2px 7px;border-radius:4px;cursor:pointer;">−</button>
+            <button onclick="waveZoomIn()"  title="Zoom in"  style="font-family:var(--mono);font-size:0.65rem;background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:2px 7px;border-radius:4px;cursor:pointer;">+</button>
+            <button onclick="waveFit()"     title="Fit"      style="font-family:var(--mono);font-size:0.65rem;background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:2px 7px;border-radius:4px;cursor:pointer;">fit</button>
+            <button class="wave-expand-btn" id="wave-expand-btn" onclick="toggleWaveExpand()">⟩ expand</button>
+          </div>
+        </div>
+        <div class="wave-scroll-area" id="wave-scroll">
+          <canvas id="wave-canvas"></canvas>
+        </div>
+        <div style="padding:3px 10px;font-family:var(--mono);font-size:0.58rem;color:var(--muted);border-top:1px solid var(--border);">
+          Scroll to zoom · Hover to inspect signals
+        </div>
+      </div>
+
+    </div><!-- /output-pane -->
+
+  </div><!-- /lesson-body -->
+</div><!-- /lesson-page -->
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- ── FEEDBACK FAB ── -->
+<button class="feedback-fab" id="feedback-fab" onclick="openFeedback()" title="Send feedback on this lesson">
+  💬 Feedback
+</button>
+
+<!-- Feedback modal -->
+<div class="feedback-overlay" id="feedback-overlay" onclick="closeFeedback()"></div>
+<div class="feedback-modal" id="feedback-modal">
+  <div class="feedback-header">
+    <span class="feedback-title">📝 Lesson Feedback</span>
+    <button class="feedback-close" onclick="closeFeedback()">✕</button>
+  </div>
+  <div class="feedback-lesson-label" id="feedback-lesson-label"></div>
+  <div class="feedback-stars" id="feedback-stars">
+    <span data-v="1" onclick="setRating(1)">★</span>
+    <span data-v="2" onclick="setRating(2)">★</span>
+    <span data-v="3" onclick="setRating(3)">★</span>
+    <span data-v="4" onclick="setRating(4)">★</span>
+    <span data-v="5" onclick="setRating(5)">★</span>
+  </div>
+  <textarea id="feedback-comment" class="feedback-textarea"
+    placeholder="What could be improved? Any confusion? (optional)"></textarea>
+  <div class="feedback-actions">
+    <button class="feedback-btn-cancel" onclick="closeFeedback()">Cancel</button>
+    <button class="feedback-btn-send"   onclick="submitFeedback()">Send ↗</button>
+  </div>
+</div>
+
+<!-- ── SCRIPTS ── -->
+<!-- Curriculum modules — add new chapter: create modules/mN.js and add a line here -->
+<script src="/lessons/modules/m1.js"></script>
+<script src="/lessons/modules/m2.js"></script>
+<script src="/lessons/modules/m3.js"></script>
+<script src="/lessons/modules/m4.js"></script>
+<script src="/lessons/modules/m5.js"></script>
+<script src="/lessons/modules/m6.js"></script>
+<script src="/lessons/curriculum.js"></script>
+<script src="/js/waveform.js"></script>
+<script src="/js/app.js"></script>
+
+<script>
+  // Count total lessons for stats
+  window.addEventListener('DOMContentLoaded', () => {
+    const total = CURRICULUM.reduce((s, m) => s + m.lessons.length, 0);
+    document.getElementById('stat-lessons').textContent = total;
+  });
+</script>
+
+</body>
+</html>
