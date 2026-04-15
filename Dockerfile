@@ -16,5 +16,10 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 # copy the rest of the app
 COPY . .
 
+# Ensure the static directory exists and has correct permissions so FastAPI
+# can serve the frontend. This guards against accidental omission or a
+# .dockerignore rule stripping the directory at build time.
+RUN mkdir -p /app/static && chmod -R 755 /app/static
+
 # Railway injects $PORT at runtime; default to 8080 locally
 CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
