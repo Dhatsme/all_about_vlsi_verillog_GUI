@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from pathlib import Path
 import subprocess, tempfile, os, shutil, json, datetime, logging
 
 app = FastAPI(title="AllAboutVLSI Backend")
@@ -153,15 +154,16 @@ def simulate(req: SimRequest):
         }
 
 # ── STATIC FILES ──────────────────────────────────────────────────────────────
-_static_dir = os.path.join(os.path.dirname(__file__), "static")
-if not os.path.isdir(_static_dir):
-    logging.warning(
-        "WARNING: static/ directory not found at %s — the frontend will not be served. "
-        "Ensure the directory is present in the Docker image and the working directory is correct.",
+_static_dir = Path(__file__).parent / "static"
+if not _static_dir.is_dir():
+    logging.error(
+        "static/ directory not found at %s — creating an empty fallback. "
+        "The frontend will not render correctly until static files are present.",
         _static_dir,
     )
+    _static_dir.mkdir(parents=True, exist_ok=True)
 else:
     logging.info("static/ directory found at %s — mounting frontend.", _static_dir)
 
 # serve static frontend — must be last
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/", StaticFiles(directory=str(_static_dir), html=True), name="static")
