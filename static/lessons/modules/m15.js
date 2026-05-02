@@ -53,6 +53,8 @@ endmodule
 import uvm_pkg::*;
 
 // ── UVM Test ─────────────────────────────────────────────────────────────────
+// Extends uvm_test — the root of every UVM test hierarchy.
+// No agent / sequencer / driver needed for a hello-world.
 class hello_test extends uvm_test;
   \`uvm_component_utils(hello_test)
 
@@ -60,13 +62,13 @@ class hello_test extends uvm_test;
     super.new(name, parent);
   endfunction
 
+  // run_phase is the main simulation phase.
+  // raise_objection keeps the sim alive; drop_objection ends it.
   task run_phase(uvm_phase phase);
     phase.raise_objection(this);
-
     \`uvm_info("HELLO", "=== Hello from UVM on Verilator! ===", UVM_NONE)
-    \`uvm_info("HELLO", "run_phase executing — objections raised.", UVM_NONE)
-    \`uvm_info("HELLO", "Dropping objection — test complete.",      UVM_NONE)
-
+    \`uvm_info("HELLO", "run_phase executing — objections raised.",  UVM_LOW)
+    \`uvm_info("HELLO", "Dropping objection — test complete.",       UVM_LOW)
     phase.drop_objection(this);
   endtask
 endclass

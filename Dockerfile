@@ -28,14 +28,15 @@ RUN git clone --depth=1 \
         https://github.com/antmicro/uvm-verilator.git \
         /opt/uvm
 
-# Patch uvm_sequencer.svh for Verilator 5.020 strict parameterized-type checking.
-# Verilator 5.020 rejects passing 'this' (resolved as the specialized type
-# uvm_sequencer#(REQ,RSP)) where the port constructor expects uvm_component.
-# An explicit cast is the correct fix; this is a Verilator bug, not a UVM bug.
-RUN sed -i "s/seq_item_export = new (\"seq_item_export\", this)/seq_item_export = new (\"seq_item_export\", uvm_component'(this))/" \
-        /opt/uvm/src/seq/uvm_sequencer.svh
-
 ENV UVM_HOME=/opt/uvm
+
+# uvm_sequencer.svh has a parameterized-type bug with Verilator 5.020 that
+# cannot be suppressed with a flag — it is a hard %Error. The hello-world
+# and basic UVM lessons only need uvm_test / phases / reporting; they don't
+# use sequencers. Commenting out the sequencer include in uvm_pkg.sv lets
+# the package compile cleanly without removing anything the lessons use.
+RUN sed -i 's|`include "uvm_seq.svh"|// `include "uvm_seq.svh"  // disabled: sequencer has Verilator 5.020 type compat issue|' \
+        /opt/uvm/src/uvm_pkg.sv
 
 # Pre-warm the UVM package: compile it to C++ once during the image build so
 # that the expensive elaboration step does NOT have to run on every user request.
