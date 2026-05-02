@@ -1038,23 +1038,297 @@ textarea.code-editor {
 .next-lesson-btn:hover { background: rgba(0,212,170,0.15); }
 .next-lesson-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-/* ── VERILATOR FLAGS INPUT ── */
-.verilator-flags-input {
+/* ── VERILATOR OPTIONS BUTTON ── */
+.veri-opts-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--mono);
-  font-size: 0.62rem;
+  font-size: 0.65rem;
+  padding: 5px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.veri-opts-btn:hover  { color: var(--accent); border-color: var(--accent); }
+.veri-opts-btn.active { color: var(--accent); border-color: var(--accent); background: rgba(0,212,170,0.08); }
+
+/* ── VERILATOR OPTIONS PANEL ── */
+.veri-panel {
+  position: fixed;
+  top: var(--nav-h);
+  right: 0;
+  z-index: 200;
+  width: 340px;
+  max-height: calc(100vh - var(--nav-h));
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border2);
+  border-top: none;
+  border-right: none;
+  border-radius: 0 0 0 12px;
+  box-shadow: -8px 8px 32px rgba(0,0,0,0.5);
+  animation: veri-slide-in 0.18s ease;
+}
+@keyframes veri-slide-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+#veri-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 199;
+}
+
+.veri-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.veri-panel-title {
+  font-family: var(--head);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.veri-ver-badge {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  padding: 1px 7px;
+  border-radius: 3px;
+  background: rgba(79,142,247,0.12);
+  border: 1px solid rgba(79,142,247,0.25);
+  color: var(--accent2);
+}
+.veri-panel-close {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 5px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.veri-panel-close:hover { color: var(--warn); }
+
+.veri-panel-body {
+  padding: 12px 0 8px;
+}
+
+/* ── Panel sections ── */
+.veri-section {
+  padding: 8px 16px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.veri-section:last-child { border-bottom: none; }
+
+.veri-section-title {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* Radio options */
+.veri-radio-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+  margin-bottom: 2px;
+}
+.veri-radio-label:hover { background: rgba(255,255,255,0.03); }
+.veri-radio-label input[type="radio"] {
+  margin-top: 3px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.veri-radio-text strong {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  color: var(--text);
+  font-weight: 600;
+}
+.veri-radio-text em {
+  display: block;
+  font-style: normal;
+  font-size: 0.68rem;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+/* Checkbox options */
+.veri-check-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 4px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.73rem;
+  color: var(--dim);
+  transition: background 0.12s, color 0.12s;
+  margin-bottom: 1px;
+}
+.veri-check-label:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+.veri-check-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+.veri-check-label code {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--accent2);
+  background: rgba(79,142,247,0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* Optimization select */
+.veri-select-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+.veri-select {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  background: var(--panel);
+  border: 1px solid var(--border2);
+  color: var(--dim);
+  padding: 4px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  flex: 1;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.veri-select:focus { border-color: var(--accent); color: var(--text); }
+
+/* Extra flags input */
+.veri-extra-input {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 0.7rem;
   background: var(--panel);
   border: 1px solid var(--border2);
   color: var(--dim);
   border-radius: 5px;
-  padding: 3px 8px;
-  width: 160px;
+  padding: 5px 8px;
   outline: none;
-  transition: border-color 0.15s;
+  box-sizing: border-box;
+  transition: border-color 0.15s, color 0.15s;
 }
-.verilator-flags-input:focus {
-  border-color: var(--accent);
-  color: var(--text);
+.veri-extra-input:focus { border-color: var(--accent); color: var(--text); }
+.veri-extra-input::placeholder { color: var(--muted); }
+
+/* Active flags preview */
+.veri-flags-preview {
+  margin: 4px 16px 0;
+  padding: 7px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  color: var(--accent);
+  word-break: break-all;
+  line-height: 1.6;
+  min-height: 28px;
+  display: none;
 }
+.veri-flags-preview.has-flags { display: block; }
+
+/* ── UVM sub-section ── */
+.uvm-unavail {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--warn);
+  background: rgba(247,111,111,0.07);
+  border: 1px solid rgba(247,111,111,0.2);
+  border-radius: 5px;
+  padding: 5px 10px;
+  margin-bottom: 6px;
+}
+.uvm-subopts {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: rgba(79,142,247,0.04);
+  border: 1px solid rgba(79,142,247,0.15);
+  border-radius: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.uvm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.uvm-label {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--muted);
+  width: 72px;
+  flex-shrink: 0;
+}
+.uvm-hint {
+  font-size: 0.69rem;
+  color: var(--muted);
+  line-height: 1.6;
+  border-top: 1px solid var(--border);
+  padding-top: 7px;
+  margin-top: 2px;
+}
+.uvm-hint code {
+  font-family: var(--mono);
+  font-size: 0.67rem;
+  color: var(--accent2);
+  background: rgba(79,142,247,0.08);
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
+/* Panel actions */
+.veri-panel-actions {
+  padding: 8px 16px 6px;
+  display: flex;
+  justify-content: flex-end;
+}
+.veri-reset-btn {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  padding: 4px 12px;
+  background: none;
+  border: 1px solid var(--border2);
+  color: var(--muted);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.veri-reset-btn:hover { color: var(--text); border-color: var(--dim); }
 
 /* ── FEEDBACK FAB ── */
 .feedback-fab {

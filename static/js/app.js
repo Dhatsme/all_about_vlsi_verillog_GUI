@@ -39,6 +39,8 @@ window.addEventListener('DOMContentLoaded', () => {
   $('editor-tb').addEventListener('keydown',     tabKey);
 
   pingServer();
+  fetchVerilatorInfo();
+  fetchUvmInfo();
 });
 
 // ── LANDING PAGE ─────────────────────────────────────────────────────────────
@@ -281,30 +283,44 @@ async function runSimulation() {
   const designCode = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-design`] || lesson.design;
   const tbCode     = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-tb`]     || lesson.testbench;
 
-  // collect extra verilator flags from the flags input
-  const extraFlags = (tool === 'verilator')
-    ? ($('verilator-flags').value.trim().split(/\s+/).filter(Boolean))
-    : [];
+  // collect verilator flags from GUI panel (or empty for iverilog)
+  const extraFlags = (tool === 'verilator') ? getVerilatorFlags() : [];
+
+  const useUvm  = tool === 'verilator' && $('vf-uvm') && $('vf-uvm').checked;
+  const uvmTest = useUvm ? ($('vf-uvm-test').value.trim()) : '';
+  const uvmVerb = useUvm ? ($('vf-uvm-verb').value || 'UVM_MEDIUM') : 'UVM_MEDIUM';
 
   // UI: running state
+  const runLabel = useUvm ? '⏳ Compiling UVM…' : 'Running...';
   btn.disabled = true;
-  btn.innerHTML = `<svg viewBox="0 0 10 10" style="fill:var(--bg)"><polygon points="1,0 10,5 1,10"/></svg> Running...`;
+  btn.innerHTML = `<svg viewBox="0 0 10 10" style="fill:var(--bg)"><polygon points="1,0 10,5 1,10"/></svg> ${runLabel}`;
   pill.className = 'status-pill run';
   pill.textContent = 'running';
   $('result-banner').className = 'result-banner';
   clearConsole();
 
+  const isLintOnly = extraFlags.includes('--lint-only');
   const flagsLabel = tool === 'verilator'
-    ? `verilator --sv ${extraFlags.join(' ')} design.sv tb.sv`
+    ? `verilator --cc --sv --trace ${extraFlags.join(' ')} design.sv tb.sv`
     : `iverilog -g2012 design.v testbench.v`;
   addConsoleLine(`$ ${flagsLabel}`, 'o-info');
+  if (useUvm) {
+    addConsoleLine('// UVM mode — compiling uvm_pkg.sv (~1–3 min first run)', 'o-dim');
+    if (uvmTest) addConsoleLine(`// +UVM_TESTNAME=${uvmTest}  +UVM_VERBOSITY=${uvmVerb}`, 'o-dim');
+  }
   markTask(0, true);
 
   try {
     const res = await fetch('/simulate', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ design: designCode, testbench: tbCode, tool, extra_flags: extraFlags })
+      body:    JSON.stringify({
+        design: designCode, testbench: tbCode, tool,
+        extra_flags: extraFlags,
+        use_uvm: useUvm,
+        uvm_test: uvmTest,
+        uvm_verbosity: uvmVerb,
+      })
     });
 
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -315,10 +331,26 @@ async function runSimulation() {
       pill.textContent = 'error';
       addConsoleLine('', '');
       addConsoleLine('Compilation error:', 'o-err');
-      data.output.split('\n').forEach(l => l.trim() && addConsoleLine(l, 'o-err'));
+      data.output.split('\n').forEach(l => {
+        if (!l.trim()) return;
+        // distinguish warnings vs errors for Verilator output
+        const cls = (l.includes('%Warning') && !l.includes('%Error')) ? 'o-dim' : 'o-err';
+        addConsoleLine(l, cls);
+      });
       showBanner('fail', '✗ Compilation failed — fix errors above');
     } else {
-      addConsoleLine(`$ vvp sim`, 'o-info');
+      if (isLintOnly) {
+        addConsoleLine('', '');
+        data.output.split('\n').forEach(l => l.trim() && addConsoleLine(l, 'o-ok'));
+        pill.className   = 'status-pill ok';
+        pill.textContent = 'lint ok';
+        showBanner('pass', '✓ Lint passed — no issues found');
+        showToast('✓ Lint OK', 'info');
+        btn.disabled  = false;
+        btn.innerHTML = `<svg viewBox="0 0 10 10" style="fill:var(--bg)"><polygon points="1,0 10,5 1,10"/></svg> Run`;
+        return;
+      }
+      addConsoleLine(`$ ${tool === 'verilator' ? './obj_dir/Vtb' : 'vvp sim'}`, 'o-info');
       addConsoleLine('', '');
 
       data.output.split('\n').forEach(line => {
@@ -432,7 +464,190 @@ function toggleWaveExpand() {
 // ── SIM SELECT ───────────────────────────────────────────────────────────────
 function onSimSelectChange() {
   const isVeri = $('sim-select').value === 'verilator';
-  $('verilator-flags').style.display = isVeri ? 'inline-block' : 'none';
+  $('veri-opts-btn').style.display = isVeri ? 'inline-flex' : 'none';
+  if (!isVeri) closeVerilatorPanel();
+}
+
+// ── VERILATOR OPTIONS PANEL ───────────────────────────────────────────────────
+let _veriPanelOpen = false;
+
+function toggleVerilatorPanel() {
+  _veriPanelOpen ? closeVerilatorPanel() : openVerilatorPanel();
+}
+
+function openVerilatorPanel() {
+  _veriPanelOpen = true;
+  $('veri-panel').style.display    = 'block';
+  $('veri-backdrop').style.display = 'block';
+  $('veri-opts-btn').classList.add('active');
+  updateFlagsPreview();
+  fetchUvmInfo();   // refresh UVM availability every time the panel opens
+}
+
+function closeVerilatorPanel() {
+  _veriPanelOpen = false;
+  $('veri-panel').style.display    = 'none';
+  $('veri-backdrop').style.display = 'none';
+  $('veri-opts-btn').classList.remove('active');
+}
+
+function resetVerilatorOptions() {
+  // Timing: back to --no-timing
+  $('vf-no-timing').checked = true;
+  $('vf-timing').checked    = false;
+  // Warnings: all off
+  ['vf-Wall','vf-Wnofatal','vf-WnoWIDTH','vf-WnoUNUSED',
+   'vf-WnoUNDRIVEN','vf-WnoCASE','vf-WnoUNSIGNED'].forEach(id => {
+    $(id).checked = false;
+  });
+  // Optimization: default
+  $('vf-opt').value = '';
+  // Features: all off
+  $('vf-assert').checked    = false;
+  $('vf-coverage').checked  = false;
+  $('vf-lint-only').checked = false;
+  // UVM: off
+  $('vf-uvm').checked         = false;
+  $('vf-uvm-test').value      = '';
+  $('vf-uvm-verb').value      = 'UVM_MEDIUM';
+  $('uvm-subopts').style.display = 'none';
+  // Extra: clear
+  $('vf-extra').value = '';
+  updateFlagsPreview();
+}
+
+// ── UVM TOGGLE ────────────────────────────────────────────────────────────────
+function onUvmToggle() {
+  const on = $('vf-uvm').checked;
+  $('uvm-subopts').style.display = on ? 'flex' : 'none';
+  // UVM requires --timing; lock the radio when UVM is on
+  if (on) {
+    $('vf-timing').checked    = true;
+    $('vf-no-timing').checked = false;
+    $('vf-no-timing').disabled = true;
+    $('vf-timing').disabled    = false;
+  } else {
+    $('vf-no-timing').disabled = false;
+    $('vf-timing').disabled    = false;
+  }
+  updateFlagsPreview();
+}
+
+/** Read all panel controls and return an array of Verilator flag strings. */
+function getVerilatorFlags() {
+  const flags = [];
+
+  // Timing
+  const timingEl = document.querySelector('input[name="veri-timing"]:checked');
+  if (timingEl) flags.push(timingEl.value);
+
+  // Warnings
+  const warnMap = {
+    'vf-Wall':       '--Wall',
+    'vf-Wnofatal':   '--Wno-fatal',
+    'vf-WnoWIDTH':   '--Wno-WIDTH',
+    'vf-WnoUNUSED':  '--Wno-UNUSED',
+    'vf-WnoUNDRIVEN':'--Wno-UNDRIVEN',
+    'vf-WnoCASE':    '--Wno-CASEINCOMPLETE',
+    'vf-WnoUNSIGNED':'--Wno-UNSIGNED',
+  };
+  for (const [id, flag] of Object.entries(warnMap)) {
+    if ($(id) && $(id).checked) flags.push(flag);
+  }
+
+  // Optimization
+  const opt = $('vf-opt') && $('vf-opt').value;
+  if (opt) flags.push(opt);
+
+  // Features
+  if ($('vf-assert')   && $('vf-assert').checked)   flags.push('--assert');
+  if ($('vf-coverage') && $('vf-coverage').checked) flags.push('--coverage');
+  if ($('vf-lint-only')&& $('vf-lint-only').checked)flags.push('--lint-only');
+
+  // Extra free-form flags
+  const extra = $('vf-extra') ? $('vf-extra').value.trim() : '';
+  if (extra) flags.push(...extra.split(/\s+/).filter(f => f.startsWith('-')));
+
+  return flags;
+}
+
+/** Live-update the flags preview bar inside the panel. */
+function updateFlagsPreview() {
+  const preview = $('veri-flags-preview');
+  if (!preview) return;
+  const flags = getVerilatorFlags();
+  // Always show the fixed backend flags too for full transparency
+  const allFlags = ['--cc','--exe','--build','--sv','--trace', ...flags];
+  if (allFlags.length > 3) {
+    preview.textContent = 'verilator ' + allFlags.join(' ');
+    preview.classList.add('has-flags');
+  } else {
+    preview.textContent = '';
+    preview.classList.remove('has-flags');
+  }
+}
+
+// Wire up live preview updates whenever any option changes
+document.addEventListener('DOMContentLoaded', () => {
+  const panelInputs = [
+    'vf-no-timing','vf-timing','vf-Wall','vf-Wnofatal',
+    'vf-WnoWIDTH','vf-WnoUNUSED','vf-WnoUNDRIVEN','vf-WnoCASE','vf-WnoUNSIGNED',
+    'vf-opt','vf-assert','vf-coverage','vf-lint-only',
+    'vf-uvm','vf-uvm-test','vf-uvm-verb',
+    'vf-extra',
+  ];
+  panelInputs.forEach(id => {
+    const el = $(id);
+    if (el) el.addEventListener('change', updateFlagsPreview);
+    if (el) el.addEventListener('input',  updateFlagsPreview);
+  });
+});
+
+// ── VERILATOR VERSION BADGE ───────────────────────────────────────────────────
+async function fetchVerilatorInfo() {
+  try {
+    const r = await fetch('/verilator-info');
+    if (!r.ok) return;
+    const info = await r.json();
+    const badge = $('veri-ver-badge');
+    if (!badge) return;
+    if (!info.available) {
+      badge.textContent = 'not installed';
+      badge.style.background = 'rgba(247,111,111,0.12)';
+      badge.style.color = 'var(--warn)';
+    } else {
+      const ver = info.version || 'unknown';
+      badge.textContent = ver.replace('Verilator ','v').split(' ')[0];
+      if (info.major >= 5) {
+        badge.style.background = 'rgba(79,219,143,0.12)';
+        badge.style.color = 'var(--success)';
+      }
+    }
+  } catch (_) { /* ignore */ }
+}
+
+// ── UVM AVAILABILITY CHECK ────────────────────────────────────────────────────
+async function fetchUvmInfo() {
+  try {
+    const r = await fetch('/uvm-info');
+    if (!r.ok) return;
+    const info = await r.json();
+    const unavailMsg  = $('uvm-unavail-msg');
+    const toggleRow   = $('uvm-toggle-row');
+    const uvmCheckbox = $('vf-uvm');
+    if (!unavailMsg) return;
+    if (!info.available) {
+      // UVM library not on server — show warning, disable checkbox
+      unavailMsg.style.display = 'block';
+      unavailMsg.textContent   = `⚠ UVM library not found — ${info.reason}`;
+      if (uvmCheckbox)  uvmCheckbox.disabled = true;
+      if (toggleRow)    toggleRow.style.opacity = '0.45';
+    } else {
+      unavailMsg.style.display = 'none';
+      if (uvmCheckbox) uvmCheckbox.disabled = false;
+      if (toggleRow)   toggleRow.style.opacity = '';
+    }
+  } catch (_) { /* ignore — server may not have the endpoint yet */ }
 }
 
 // ── FEEDBACK ─────────────────────────────────────────────────────────────────
