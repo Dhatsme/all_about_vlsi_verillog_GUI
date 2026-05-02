@@ -295,6 +295,8 @@ def simulate(req: SimRequest):
                     "--Wno-WIDTHEXPAND",
                     "--Wno-CASEINCOMPLETE",
                     "--Wno-UNOPTFLAT",
+                    "--Wno-CASTCONST",      # UVM $cast used polymorphically; Verilator flags as always-true/false
+                    "--Wno-MISINDENT",      # indentation style warnings in UVM library source
                 ]
 
             # Don't duplicate defaults the user already supplied
