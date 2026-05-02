@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>All About VLSI — Zero to Hero Verilog</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -98,9 +99,10 @@
       <option value="iverilog">iverilog</option>
       <option value="verilator">verilator</option>
     </select>
-    <input type="text" id="verilator-flags" class="verilator-flags-input"
-           value="--no-timing" title="Extra Verilator flags (e.g. --timing --Wall)"
-           style="display:none;">
+    <button class="veri-opts-btn" id="veri-opts-btn" onclick="toggleVerilatorPanel()"
+            title="Verilator compiler options" style="display:none;">
+      ⚙ Options
+    </button>
 
     <button class="run-btn" id="run-btn" onclick="runSimulation()">
       <svg viewBox="0 0 10 10"><polygon points="1,0 10,5 1,10"/></svg>
@@ -201,6 +203,160 @@
   </div><!-- /lesson-body -->
 </div><!-- /lesson-page -->
 
+<!-- ═══════════════════════════════════════════════════════
+     VERILATOR OPTIONS PANEL
+     ═══════════════════════════════════════════════════════ -->
+<div id="veri-panel" class="veri-panel" style="display:none;">
+  <div class="veri-panel-header">
+    <span class="veri-panel-title">⚙ Verilator Options</span>
+    <span id="veri-ver-badge" class="veri-ver-badge"></span>
+    <button class="veri-panel-close" onclick="toggleVerilatorPanel()">✕</button>
+  </div>
+
+  <div class="veri-panel-body">
+
+    <!-- ── Timing ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Timing Mode</div>
+      <label class="veri-radio-label">
+        <input type="radio" name="veri-timing" id="vf-no-timing" value="--no-timing" checked>
+        <span class="veri-radio-text">
+          <strong>--no-timing</strong>
+          <em>Ignore #delays — safe for combinational logic &amp; most designs</em>
+        </span>
+      </label>
+      <label class="veri-radio-label">
+        <input type="radio" name="veri-timing" id="vf-timing" value="--timing">
+        <span class="veri-radio-text">
+          <strong>--timing</strong>
+          <em>Real #delay simulation — requires Verilator 5.x</em>
+        </span>
+      </label>
+    </div>
+
+    <!-- ── Warnings ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Warnings</div>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-Wall">
+        <span><code>--Wall</code> — enable all warnings</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-Wnofatal">
+        <span><code>--Wno-fatal</code> — warnings are non-fatal</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoWIDTH">
+        <span><code>--Wno-WIDTH</code> — suppress bit-width mismatch</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoUNUSED">
+        <span><code>--Wno-UNUSED</code> — suppress unused signal warnings</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoUNDRIVEN">
+        <span><code>--Wno-UNDRIVEN</code> — suppress undriven signal warnings</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoCASE">
+        <span><code>--Wno-CASEINCOMPLETE</code> — suppress incomplete case</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoUNSIGNED">
+        <span><code>--Wno-UNSIGNED</code> — suppress unsigned comparison</span>
+      </label>
+    </div>
+
+    <!-- ── Optimization ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Optimization</div>
+      <div class="veri-select-row">
+        <label for="vf-opt">Level:</label>
+        <select id="vf-opt" class="veri-select">
+          <option value="">default</option>
+          <option value="-O0">-O0 &nbsp;(no optimization)</option>
+          <option value="-O1">-O1 &nbsp;(light)</option>
+          <option value="-O2">-O2 &nbsp;(medium)</option>
+          <option value="-O3">-O3 &nbsp;(full — slower compile)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Features ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Language &amp; Features</div>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-assert">
+        <span><code>--assert</code> — enable SystemVerilog assertions (SVA)</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-coverage">
+        <span><code>--coverage</code> — enable code coverage</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-lint-only">
+        <span><code>--lint-only</code> — lint only, skip simulation</span>
+      </label>
+    </div>
+
+    <!-- ── UVM ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">UVM — Universal Verification Methodology</div>
+      <div id="uvm-unavail-msg" class="uvm-unavail" style="display:none;">
+        ⚠ UVM library not detected on this server
+      </div>
+      <label class="veri-check-label" id="uvm-toggle-row">
+        <input type="checkbox" id="vf-uvm" onchange="onUvmToggle()">
+        <span>Enable UVM &nbsp;<em style="color:var(--muted);font-style:normal;font-size:0.66rem;">(forces --timing, requires Verilator 5.x)</em></span>
+      </label>
+
+      <!-- UVM sub-options — shown only when checkbox is ticked -->
+      <div id="uvm-subopts" class="uvm-subopts" style="display:none;">
+        <div class="uvm-row">
+          <label class="uvm-label" for="vf-uvm-test">Test name</label>
+          <input type="text" id="vf-uvm-test" class="veri-extra-input"
+                 placeholder="e.g. my_test  (maps to +UVM_TESTNAME)">
+        </div>
+        <div class="uvm-row">
+          <label class="uvm-label" for="vf-uvm-verb">Verbosity</label>
+          <select id="vf-uvm-verb" class="veri-select">
+            <option value="UVM_NONE">UVM_NONE</option>
+            <option value="UVM_LOW">UVM_LOW</option>
+            <option value="UVM_MEDIUM" selected>UVM_MEDIUM</option>
+            <option value="UVM_HIGH">UVM_HIGH</option>
+            <option value="UVM_FULL">UVM_FULL</option>
+            <option value="UVM_DEBUG">UVM_DEBUG</option>
+          </select>
+        </div>
+        <div class="uvm-hint">
+          Your testbench must <code>import uvm_pkg::*;</code> and
+          <code>`include "uvm_macros.svh"</code>.
+          Use <code>run_test();</code> to launch the test.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Extra Flags ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Extra Flags <span style="font-weight:400;color:var(--muted)">(advanced)</span></div>
+      <input type="text" id="vf-extra"
+             class="veri-extra-input"
+             placeholder="e.g. --pins-bv 2 +define+SIM">
+    </div>
+
+    <!-- ── Active flags preview ── -->
+    <div class="veri-flags-preview" id="veri-flags-preview"></div>
+
+    <!-- ── Actions ── -->
+    <div class="veri-panel-actions">
+      <button class="veri-reset-btn" onclick="resetVerilatorOptions()">↺ Reset defaults</button>
+    </div>
+
+  </div><!-- /veri-panel-body -->
+</div><!-- /veri-panel -->
+<!-- Panel backdrop -->
+<div id="veri-backdrop" style="display:none;" onclick="closeVerilatorPanel()"></div>
+
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
@@ -240,6 +396,8 @@
 <script src="/lessons/modules/m4.js"></script>
 <script src="/lessons/modules/m5.js"></script>
 <script src="/lessons/modules/m6.js"></script>
+<script src="/lessons/modules/m13.js"></script>
+<script src="/lessons/modules/m15.js"></script>
 <script src="/lessons/curriculum.js"></script>
 <script src="/js/waveform.js"></script>
 <script src="/js/app.js"></script>
