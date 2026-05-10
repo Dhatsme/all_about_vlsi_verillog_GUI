@@ -47,7 +47,7 @@ module counter #(parameter W = 4)(
   output logic [W-1:0]     count
 );
   always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n) count <= '0;          // '0 fills all bits with 0
+    if (!rst_n) count <= '0;
     else        count <= count + 1'b1;
   end
 endmodule`,
@@ -58,25 +58,22 @@ module tb;
   logic       rst_n = 0;
   logic [3:0] count;
 
-  always #5 clk = ~clk;   // 100 MHz
+  always #5 clk = ~clk;
 
   counter #(.W(4)) dut (.clk(clk), .rst_n(rst_n), .count(count));
 
-  // always_comb in testbench — reacts instantly when count changes
   logic [3:0] expected;
-  always_comb expected = count;   // just mirrors for this demo
+  always_comb expected = count;
 
   initial begin
     $display("=== L1: logic / always_ff / always_comb ===");
 
-    // hold in reset for 3 clocks
     repeat(3) @(posedge clk);
     if (count === 4'b0000)
       $display("PASS reset holds count at 0");
     else
       $display("FAIL count=%0d during reset", count);
 
-    // release reset — counter should start counting
     rst_n = 1;
     repeat(4) @(posedge clk);
     #1;
@@ -85,7 +82,6 @@ module tb;
     else
       $display("FAIL count=%0d (expected 4)", count);
 
-    // check wrap-around at 15 → 0
     repeat(12) @(posedge clk);
     #1;
     if (count === 4'd0)
@@ -147,13 +143,11 @@ module fsm_enum (
 );
   state_t next;
 
-  // registered state
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) state <= IDLE;
     else        state <= next;
   end
 
-  // combinational next-state logic
   always_comb begin
     unique case (state)
       IDLE:   next = start ? SETUP  : IDLE;
@@ -165,7 +159,6 @@ module fsm_enum (
 endmodule`,
 
       testbench: `\`timescale 1ns/1ps
-// Forward-declare the enum so tb can use it
 typedef enum logic [1:0] { IDLE=2'd0, SETUP=2'd1, ACCESS=2'd2 } state_t;
 
 module tb;
@@ -195,7 +188,6 @@ module tb;
     if (state === ACCESS) $display("PASS SETUP -> ACCESS");
     else                  $display("FAIL state=%0d (expected ACCESS)", state);
 
-    // stay in ACCESS while done=0
     repeat(2) @(posedge clk); #1;
     if (state === ACCESS) $display("PASS ACCESS holds while done=0");
     else                  $display("FAIL left ACCESS prematurely state=%0d", state);
@@ -250,7 +242,6 @@ endmodule`,
   logic  [3:0] strobe;
 } bus_pkt_t;
 
-// A tiny transaction FIFO (depth 1) using the struct as port type
 module pkt_reg (
   input  logic     clk,
   input  logic     rst_n,
@@ -302,7 +293,6 @@ module tb;
 
     repeat(2) @(posedge clk); rst_n = 1;
 
-    // Send a write transaction
     @(posedge clk); #1;
     in_pkt  = '{ addr: 32'h0000_0010, data: 32'hDEAD_BEEF,
                  write: 1'b1, strobe: 4'hF };
@@ -318,7 +308,6 @@ module tb;
       $display("FAIL write pkt: valid=%b addr=%08h data=%08h",
                out_valid, out_pkt.addr, out_pkt.data);
 
-    // Send a read transaction (write=0)
     @(posedge clk); #1;
     in_pkt  = '{ addr: 32'h0000_0020, data: 32'h0,
                  write: 1'b0, strobe: 4'h0 };
@@ -426,7 +415,6 @@ module tb;
   apb_if bus (.clk(clk));
   apb_slave dut (.bus(bus.slave_mp), .rst_n(rst_n));
 
-  // Drive the master side
   initial begin
     bus.psel    = 0; bus.penable = 0;
     bus.pwrite  = 0; bus.paddr   = '0; bus.pwdata  = '0;
@@ -469,7 +457,6 @@ module tb;
     if (rd === 32'hBEEF_0002) $display("PASS reg[1] = %08h", rd);
     else                      $display("FAIL reg[1] = %08h", rd);
 
-    // Overwrite and re-read
     apb_write(32'h00, 32'h1234_ABCD);
     apb_read (32'h00, rd);
     if (rd === 32'h1234_ABCD) $display("PASS overwrite reg[0] = %08h", rd);
@@ -521,7 +508,6 @@ module dut_stub;
 endmodule`,
 
       testbench: `\`timescale 1ns/1ps
-// ── Base transaction class ────────────────────────────────────────────────
 class Transaction;
   logic [31:0] addr;
   logic [31:0] data;
@@ -539,7 +525,6 @@ class Transaction;
   endfunction
 endclass
 
-// ── Child class — adds a byte-enable field ────────────────────────────────
 class BurstTransaction extends Transaction;
   int unsigned length;
 
@@ -554,23 +539,20 @@ class BurstTransaction extends Transaction;
   endfunction
 endclass
 
-// ── Testbench ─────────────────────────────────────────────────────────────
 module tb;
   initial begin
     Transaction      base_txn;
     BurstTransaction burst_txn;
-    Transaction      poly_ref;   // polymorphic handle
+    Transaction      poly_ref;
 
     $display("=== L5: SystemVerilog classes ===");
 
-    // Base class
     base_txn = new(32'hAABB_0000, 32'h1234_5678, 1'b1);
     if (base_txn.addr === 32'hAABB_0000 && base_txn.write === 1'b1)
       $display("PASS base class: %s", base_txn.description());
     else
       $display("FAIL base class addr=%08h", base_txn.addr);
 
-    // Child class — inherits addr/data/write, adds length
     burst_txn = new(32'hCCDD_0004, 32'hDEAD_BEEF, 1'b1, 8);
     if (burst_txn.length === 8 && burst_txn.addr === 32'hCCDD_0004)
       $display("PASS child class: %s", burst_txn.description());
@@ -578,7 +560,6 @@ module tb;
       $display("FAIL child class addr=%08h len=%0d",
                burst_txn.addr, burst_txn.length);
 
-    // Polymorphism — base handle points to child object
     poly_ref = burst_txn;
     if (poly_ref.addr === 32'hCCDD_0004)
       $display("PASS polymorphic handle: %s", poly_ref.description());
@@ -597,7 +578,7 @@ endmodule`,
       title: 'L6 — Putting it together: SV testbench + DUT',
       theory: `
         <h2>Combining SV Features in a Real Testbench</h2>
-        <p>This final lesson wires together everything from L1–L5:</p>
+        <p>This lesson wires together everything from L1–L5:</p>
         <ul>
           <li><strong>DUT</strong>: the APB slave from L4, written with <code>logic</code>,
               <code>always_ff</code>, <code>always_comb</code>.</li>
@@ -660,12 +641,11 @@ module apb_slave (apb_if.slave_mp bus, input logic rst_n);
 endmodule`,
 
       testbench: `\`timescale 1ns/1ps
-// ── Transaction class ─────────────────────────────────────────────────────
 class ApbTxn;
   logic [31:0] addr;
   logic [31:0] data;
   logic        write;
-  logic [31:0] exp_rdata;   // expected read-back value
+  logic [31:0] exp_rdata;
 
   function new(logic [31:0] a, logic [31:0] d, logic w, logic [31:0] exp=0);
     addr      = a;
@@ -675,7 +655,6 @@ class ApbTxn;
   endfunction
 endclass
 
-// ── Driver — drives apb_if from an ApbTxn ────────────────────────────────
 class ApbDriver;
   virtual apb_if.master_mp vif;
 
@@ -691,13 +670,12 @@ class ApbDriver;
     vif.psel   = 1; vif.penable = 0;
     @(posedge vif.clk); #1;
     vif.penable = 1;
-    #2;   // sample prdata before clock edge
+    #2;
     @(posedge vif.clk); #1;
     vif.psel = 0; vif.penable = 0;
   endtask
 endclass
 
-// ── Scoreboard ───────────────────────────────────────────────────────────
 class Scoreboard;
   int pass_cnt = 0;
   int fail_cnt = 0;
@@ -717,7 +695,6 @@ class Scoreboard;
   endfunction
 endclass
 
-// ── Top-level testbench ───────────────────────────────────────────────────
 module tb;
   logic clk   = 0;
   logic rst_n = 0;
@@ -743,12 +720,10 @@ module tb;
 
     repeat(3) @(posedge clk); rst_n = 1;
 
-    // Write 3 registers
     txn = new(32'h00, 32'hAABB_0001, 1'b1); drv.drive(txn);
     txn = new(32'h04, 32'h1122_3302, 1'b1); drv.drive(txn);
     txn = new(32'h08, 32'hDEAD_0003, 1'b1); drv.drive(txn);
 
-    // Read back and check via scoreboard
     txn = new(32'h00, '0, 1'b0);
     drv.drive(txn); #1;
     rd_val = bus.prdata;
@@ -796,16 +771,15 @@ endmodule`,
           </tr>
         </table>
 
-        <h3>Property & sequence keywords</h3>
-        <pre><code>// |-> : overlapping implication (check starts same cycle)
-// |=> : non-overlapping implication (check starts next cycle)
-// ##N : N-cycle delay
-// [*N]: repeat N times
+        <h3>Property & sequence keywords (Verilator-supported subset)</h3>
+        <pre><code>// |-> : overlapping implication
+// |=> : non-overlapping implication (starts next cycle)
+// ##N : fixed N-cycle delay  (ranges ##[N:M] not supported in Verilator)
 
 property req_ack;
-  @(posedge clk) req |=> ##[0:3] ack;
+  @(posedge clk) req |=> ##1 ack;   // req at T → ack at T+2
 endproperty
-assert property (req_ack) else $error("ack not seen within 4 cycles of req");</code></pre>
+assert property (req_ack) else $error("ack missing 2 cycles after req");</code></pre>
 
         <p>Concurrent assertions are the backbone of formal verification and also run
         during simulation — any violation prints an error message with the failing time.</p>
@@ -820,11 +794,11 @@ assert property (req_ack) else $error("ack not seen within 4 cycles of req");</c
       tasks: [
         'Enable --assert in ⚙ Options, add --timing, set simulator to verilator',
         'Run and confirm all PASS lines appear with no assertion errors',
-        'Force a failure: change the ack_delay parameter from 2 to 6 (beyond the ##[0:3] window) and observe the assertion error',
+        'Force a failure: change ACK_DELAY from 2 to 5 and observe the SVA error for req_ack_exact',
       ],
-      hint: 'Concurrent assertions in Verilator require --assert. Violations print %Error lines that count as simulation failures.',
+      hint: 'Verilator supports ##N fixed delays but not ##[N:M] ranges in concurrent assertions. Use disable iff (!rst_n) to mask assertions during reset.',
 
-      design: `// Handshake unit: asserts ack within 1-4 cycles of req
+      design: `// Handshake unit: drives ack exactly ACK_DELAY cycles after req
 module handshake #(parameter ACK_DELAY = 2) (
   input  logic clk,
   input  logic rst_n,
@@ -853,21 +827,23 @@ module handshake #(parameter ACK_DELAY = 2) (
     end
   end
 
-  // ── Concurrent assertion: ack must arrive within 4 cycles of req ──────
-  property req_ack_window;
+  // ── Concurrent assertion: ack must arrive exactly 2 cycles after req ───
+  // |=> shifts 1 cycle, ##1 shifts 1 more → checks at T+2 (matches ACK_DELAY=2)
+  // Note: ##[N:M] range syntax is NOT supported by Verilator — use fixed ##N
+  property req_ack_exact;
     @(posedge clk) disable iff (!rst_n)
-    req |=> ##[0:3] ack;
+    req |=> ##1 ack;
   endproperty
-  assert property (req_ack_window)
-    else $error("SVA FAIL: ack not seen within 4 cycles of req at time %0t", $time);
+  assert property (req_ack_exact)
+    else $error("SVA FAIL: ack not seen 2 cycles after req at time %0t", $time);
 
-  // ── Concurrent assertion: ack must not fire without a preceding req ────
-  property no_spurious_ack;
+  // ── Concurrent assertion: ack must be a single-cycle pulse ────────────
+  property ack_single_pulse;
     @(posedge clk) disable iff (!rst_n)
-    ack |-> $past(req, 1) || $past(req, 2) || $past(req, 3) || $past(req, 4);
+    ack |=> !ack;
   endproperty
-  assert property (no_spurious_ack)
-    else $error("SVA FAIL: ack fired without a preceding req at time %0t", $time);
+  assert property (ack_single_pulse)
+    else $error("SVA FAIL: ack stayed high for more than 1 cycle at time %0t", $time);
 endmodule`,
 
       testbench: `\`timescale 1ns/1ps
@@ -877,14 +853,12 @@ module tb;
   logic req   = 0;
   logic ack;
 
-  always #5 clk = ~clk;   // 100 MHz
+  always #5 clk = ~clk;
 
-  // ACK_DELAY=2 — ack arrives 2 cycles after req, well within the 4-cycle window
+  // ACK_DELAY=2: ack arrives 2 cycles after req — matches the ##1 assertion
   handshake #(.ACK_DELAY(2)) dut (.clk(clk), .rst_n(rst_n), .req(req), .ack(ack));
 
-  // ── Immediate assertion helper ────────────────────────────────────────
   task check_ack(input string label, input logic exp_ack);
-    // immediate assertion
     assert (ack === exp_ack)
       $display("PASS %s: ack=%b", label, ack);
     else begin
@@ -897,45 +871,39 @@ module tb;
   initial begin
     $display("=== L7: SystemVerilog Assertions (SVA) ===");
 
-    // Reset
     repeat(3) @(posedge clk); rst_n = 1;
 
-    // ── Test 1: no req → no ack ──────────────────────────────────────────
+    // Test 1: no req → no ack
     repeat(3) @(posedge clk); #1;
-    check_ack("no req → no ack", 1'b0);
+    check_ack("no req -> no ack", 1'b0);
 
-    // ── Test 2: req pulse → expect ack after ACK_DELAY clocks ───────────
+    // Test 2: req pulse → ack after 2 cycles
     @(posedge clk); #1; req = 1;
     @(posedge clk); #1; req = 0;
-
-    // wait up to 5 cycles for ack
     for (i = 0; i < 5; i++) begin
       @(posedge clk); #1;
       if (ack) break;
     end
-    check_ack("req→ack handshake", 1'b1);
+    check_ack("req->ack handshake", 1'b1);
 
-    // ── Test 3: ack clears next cycle ────────────────────────────────────
+    // Test 3: ack clears next cycle
     @(posedge clk); #1;
     check_ack("ack cleared after 1 cycle", 1'b0);
 
-    // ── Test 4: two back-to-back requests ────────────────────────────────
-    @(posedge clk); #1; req = 1;
-    @(posedge clk); #1; req = 0;
-    repeat(4) @(posedge clk); #1;
-    // second req
+    // Test 4: second request
+    repeat(2) @(posedge clk); #1;
     req = 1; @(posedge clk); #1; req = 0;
     for (i = 0; i < 5; i++) begin
       @(posedge clk); #1;
       if (ack) break;
     end
-    check_ack("second req→ack", 1'b1);
+    check_ack("second req->ack", 1'b1);
 
     $display("PASS all immediate assertions passed; check above for SVA violations");
     $finish;
   end
 endmodule`,
-      expected: ['PASS no req', 'PASS req→ack handshake', 'PASS ack cleared', 'PASS second req', 'PASS all immediate assertions'],
+      expected: ['PASS no req', 'PASS req->ack handshake', 'PASS ack cleared', 'PASS second req', 'PASS all immediate assertions'],
     },
 
   ]
