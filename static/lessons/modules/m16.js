@@ -771,5 +771,172 @@ endmodule`,
       expected: ['PASS reg[0]', 'PASS reg[1]', 'PASS reg[2]', 'Scoreboard: 3 PASS'],
     },
 
+    // ─── L7 ──────────────────────────────────────────────────────────────────
+    {
+      id: 'm16-l7',
+      title: 'L7 — SystemVerilog Assertions (SVA)',
+      theory: `
+        <h2>SystemVerilog Assertions</h2>
+        <p>Assertions let you embed correctness checks <em>inside</em> the design or testbench.
+        Instead of writing <code>if (bad_condition) $display("FAIL")</code> everywhere, you
+        declare a property once and the simulator checks it automatically on every clock cycle.</p>
+
+        <h3>Two flavours</h3>
+        <table>
+          <tr><th>Type</th><th>Syntax</th><th>When checked</th></tr>
+          <tr>
+            <td><strong>Immediate</strong></td>
+            <td><code>assert (expr) else $error("msg");</code></td>
+            <td>Right now — like an if-statement</td>
+          </tr>
+          <tr>
+            <td><strong>Concurrent</strong></td>
+            <td><code>assert property (@(posedge clk) prop);</code></td>
+            <td>Every clock edge, for the life of the simulation</td>
+          </tr>
+        </table>
+
+        <h3>Property & sequence keywords</h3>
+        <pre><code>// |-> : overlapping implication (check starts same cycle)
+// |=> : non-overlapping implication (check starts next cycle)
+// ##N : N-cycle delay
+// [*N]: repeat N times
+
+property req_ack;
+  @(posedge clk) req |=> ##[0:3] ack;
+endproperty
+assert property (req_ack) else $error("ack not seen within 4 cycles of req");</code></pre>
+
+        <p>Concurrent assertions are the backbone of formal verification and also run
+        during simulation — any violation prints an error message with the failing time.</p>
+
+        <h3>How to run</h3>
+        <ol>
+          <li>Simulator → <strong>verilator</strong>.</li>
+          <li>In <strong>⚙ Options</strong> tick <code>--assert</code> and add <code>--timing</code>.</li>
+          <li>Run — expect PASS lines from the immediate checks and no assertion failures.</li>
+        </ol>
+      `,
+      tasks: [
+        'Enable --assert in ⚙ Options, add --timing, set simulator to verilator',
+        'Run and confirm all PASS lines appear with no assertion errors',
+        'Force a failure: change the ack_delay parameter from 2 to 6 (beyond the ##[0:3] window) and observe the assertion error',
+      ],
+      hint: 'Concurrent assertions in Verilator require --assert. Violations print %Error lines that count as simulation failures.',
+
+      design: `// Handshake unit: asserts ack within 1-4 cycles of req
+module handshake #(parameter ACK_DELAY = 2) (
+  input  logic clk,
+  input  logic rst_n,
+  input  logic req,
+  output logic ack
+);
+  logic [2:0] cnt;
+
+  always_ff @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+      cnt <= '0;
+      ack <= 1'b0;
+    end else if (req && cnt == '0) begin
+      cnt <= 1;
+      ack <= 1'b0;
+    end else if (cnt != '0) begin
+      if (cnt == ACK_DELAY[2:0]) begin
+        ack <= 1'b1;
+        cnt <= '0;
+      end else begin
+        cnt <= cnt + 1'b1;
+        ack <= 1'b0;
+      end
+    end else begin
+      ack <= 1'b0;
+    end
+  end
+
+  // ── Concurrent assertion: ack must arrive within 4 cycles of req ──────
+  property req_ack_window;
+    @(posedge clk) disable iff (!rst_n)
+    req |=> ##[0:3] ack;
+  endproperty
+  assert property (req_ack_window)
+    else $error("SVA FAIL: ack not seen within 4 cycles of req at time %0t", $time);
+
+  // ── Concurrent assertion: ack must not fire without a preceding req ────
+  property no_spurious_ack;
+    @(posedge clk) disable iff (!rst_n)
+    ack |-> $past(req, 1) || $past(req, 2) || $past(req, 3) || $past(req, 4);
+  endproperty
+  assert property (no_spurious_ack)
+    else $error("SVA FAIL: ack fired without a preceding req at time %0t", $time);
+endmodule`,
+
+      testbench: `\`timescale 1ns/1ps
+module tb;
+  logic clk   = 0;
+  logic rst_n = 0;
+  logic req   = 0;
+  logic ack;
+
+  always #5 clk = ~clk;   // 100 MHz
+
+  // ACK_DELAY=2 — ack arrives 2 cycles after req, well within the 4-cycle window
+  handshake #(.ACK_DELAY(2)) dut (.clk(clk), .rst_n(rst_n), .req(req), .ack(ack));
+
+  // ── Immediate assertion helper ────────────────────────────────────────
+  task check_ack(input string label, input logic exp_ack);
+    // immediate assertion
+    assert (ack === exp_ack)
+      $display("PASS %s: ack=%b", label, ack);
+    else begin
+      $display("FAIL %s: ack=%b (expected %b)", label, ack, exp_ack);
+      $error("immediate assertion failed");
+    end
+  endtask
+
+  integer i;
+  initial begin
+    $display("=== L7: SystemVerilog Assertions (SVA) ===");
+
+    // Reset
+    repeat(3) @(posedge clk); rst_n = 1;
+
+    // ── Test 1: no req → no ack ──────────────────────────────────────────
+    repeat(3) @(posedge clk); #1;
+    check_ack("no req → no ack", 1'b0);
+
+    // ── Test 2: req pulse → expect ack after ACK_DELAY clocks ───────────
+    @(posedge clk); #1; req = 1;
+    @(posedge clk); #1; req = 0;
+
+    // wait up to 5 cycles for ack
+    for (i = 0; i < 5; i++) begin
+      @(posedge clk); #1;
+      if (ack) break;
+    end
+    check_ack("req→ack handshake", 1'b1);
+
+    // ── Test 3: ack clears next cycle ────────────────────────────────────
+    @(posedge clk); #1;
+    check_ack("ack cleared after 1 cycle", 1'b0);
+
+    // ── Test 4: two back-to-back requests ────────────────────────────────
+    @(posedge clk); #1; req = 1;
+    @(posedge clk); #1; req = 0;
+    repeat(4) @(posedge clk); #1;
+    // second req
+    req = 1; @(posedge clk); #1; req = 0;
+    for (i = 0; i < 5; i++) begin
+      @(posedge clk); #1;
+      if (ack) break;
+    end
+    check_ack("second req→ack", 1'b1);
+
+    $display("PASS all immediate assertions passed; check above for SVA violations");
+    $finish;
+  end
+endmodule`,
+      expected: ['PASS no req', 'PASS req→ack handshake', 'PASS ack cleared', 'PASS second req', 'PASS all immediate assertions'],
+    },
+
   ]
 });
