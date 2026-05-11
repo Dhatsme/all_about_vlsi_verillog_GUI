@@ -1477,11 +1477,106 @@ textarea.code-editor {
   border-color: var(--accent);
 }
 
-/* ── RESPONSIVE ── */
+/* ── RESPONSIVE (desktop) ── */
 @media (max-width: 1100px) {
   :root { --theory-w: 300px; }
 }
 @media (max-width: 900px) {
   :root { --sidebar-w: 200px; --theory-w: 260px; }
   .output-pane { width: 300px; }
+}
+
+/* ── MOBILE TAB BAR (hidden on desktop) ── */
+.mob-tab-bar {
+  display: none;
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 52px;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  z-index: 100;
+}
+.mob-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-family: var(--body);
+  font-size: 0.62rem;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  padding: 6px 4px;
+}
+.mob-tab:hover  { color: var(--dim); }
+.mob-tab.active { color: var(--accent); background: rgba(0,212,170,0.06); }
+.mob-tab-icon   { font-size: 1.2rem; line-height: 1; }
+
+/* ── MOBILE (≤768px) ── */
+@media (max-width: 768px) {
+  /* Landing */
+  .landing-nav { padding: 0 16px; }
+  .hero { padding: 40px 20px 24px; }
+  .hero-title { font-size: clamp(1.8rem, 8vw, 2.5rem); }
+  .hero-sub   { font-size: 0.88rem; margin-bottom: 24px; }
+  .hero-actions { flex-direction: column; align-items: stretch; }
+  .btn-primary, .btn-secondary { justify-content: center; }
+  .stats-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    padding: 0;
+    margin-top: 32px;
+  }
+  .stat {
+    padding: 14px 12px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+  }
+  .stat:nth-child(2n) { border-right: none; }
+  .stat:nth-child(3), .stat:nth-child(4) { border-bottom: none; }
+  .modules-section { padding: 28px 16px; }
+  .modules-grid { grid-template-columns: 1fr; }
+
+  /* Lesson nav */
+  .lesson-nav { padding: 0 8px; gap: 6px; overflow: hidden; }
+  .lesson-nav-center { display: none; }
+  .nav-prev-next { display: none; }
+  .lesson-nav-title { max-width: 120px; font-size: 0.75rem; }
+  .sim-select { display: none; }
+  .veri-opts-btn { display: none !important; }
+
+  /* Lesson body: stack panes, show only active */
+  .lesson-body { position: relative; overflow: hidden; }
+  .lesson-sidebar,
+  .theory-pane,
+  .editor-pane,
+  .output-pane {
+    display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    bottom: 52px;
+    width: 100% !important;
+    min-width: 0 !important;
+    border-right: none;
+  }
+  .lesson-sidebar.mob-active,
+  .theory-pane.mob-active,
+  .editor-pane.mob-active,
+  .output-pane.mob-active { display: flex; flex-direction: column; }
+
+  /* Show tab bar */
+  .mob-tab-bar { display: flex; }
+
+  /* Verilator panel full-width */
+  .veri-panel { width: 100%; border-radius: 0; border-left: none; }
+
+  /* Toast + FAB above tab bar */
+  .toast        { bottom: 68px; right: 12px; }
+  .feedback-fab { bottom: 68px; right: 12px; }
+  .feedback-modal { right: 8px; bottom: 120px; width: calc(100vw - 16px); }
 }

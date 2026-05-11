@@ -103,12 +103,33 @@ function openLesson(modId, lessonId) {
   $('lesson-nav-title').textContent = lesson.title;
   $('result-banner').className = 'result-banner';
   $('result-banner').textContent = '';
+
+  if (window.innerWidth <= 768) mobTab('code');
 }
 
 function goHome() {
   $('lesson-page').style.display  = 'none';
   $('landing-page').style.display = 'flex';
   buildLandingPage(); // refresh progress
+}
+
+// ── MOBILE TAB SWITCHING ──────────────────────────────────────────────────────
+function mobTab(tab) {
+  if (window.innerWidth > 768) return;
+  ['lesson-sidebar', 'theory-pane', 'editor-pane', 'output-pane'].forEach(cls => {
+    document.querySelector('.' + cls).classList.remove('mob-active');
+  });
+  document.querySelectorAll('.mob-tab').forEach(t => t.classList.remove('active'));
+  const map = {
+    lessons: ['lesson-sidebar', 'mob-tab-lessons'],
+    theory:  ['theory-pane',    'mob-tab-theory'],
+    code:    ['editor-pane',    'mob-tab-code'],
+    output:  ['output-pane',    'mob-tab-output'],
+  };
+  if (map[tab]) {
+    document.querySelector('.' + map[tab][0]).classList.add('mob-active');
+    $(map[tab][1]).classList.add('active');
+  }
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
@@ -374,6 +395,9 @@ async function runSimulation() {
         showBanner('pass', '✓ Simulation ran successfully');
         showToast('✓ Simulation complete', 'info');
       }
+
+      // auto-switch to output on mobile
+      if (window.innerWidth <= 768) mobTab('output');
 
       // render waveform
       if (data.vcd && data.vcd.trim()) {
