@@ -104,7 +104,8 @@ function openLesson(modId, lessonId) {
   $('result-banner').className = 'result-banner';
   $('result-banner').textContent = '';
 
-  if (window.innerWidth <= 768) mobTab('code');
+  // On mobile: show Theory first so user reads the explanation before coding
+  if (window.innerWidth <= 768) mobTab('theory');
 }
 
 function goHome() {
@@ -177,11 +178,13 @@ function renderTheory(lesson) {
       </div>`).join('');
   $('theory-content').appendChild(tasksEl);
 
-  // hint
+  // hint — HTML-escape code content and wrap in <pre> to preserve whitespace
+  const escapedHint = lesson.hint
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const hintWrap = document.createElement('div');
   hintWrap.innerHTML = `
     <button class="hint-toggle" onclick="toggleHint()">💡 Show Hint</button>
-    <div class="hint-box" id="hint-box">${lesson.hint}</div>
+    <div class="hint-box" id="hint-box"><pre class="hint-pre">${escapedHint}</pre></div>
   `;
   $('theory-content').appendChild(hintWrap);
   STATE.hintVisible = false;
