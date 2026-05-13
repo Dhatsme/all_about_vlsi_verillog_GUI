@@ -1,6 +1,6 @@
-// Module SV1 — Getting Started with SystemVerilog
-// One lesson: anatomy of a module → user types a complete rain alarm from scratch.
-// Verilator 5.020 safe: logic type, always_comb, basic operators only.
+// Module msv1 — Getting Started with SystemVerilog
+// All three lessons have blank design tabs — user types every line.
+// Verilator 5.020 safe: logic, always_comb, bitwise operators only.
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
   id: 'msv1',
   title: 'Getting Started with SystemVerilog',
@@ -9,123 +9,143 @@
   lessons: [
 
     // ─────────────────────────────────────────────────────────────────────
-    // L1 — Read a complete module, understand every line.
-    // The code is fully written. Student reads, studies, then hits Run.
+    // L1 — User types rain_alarm from scratch
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'msv1l1',
-      title: 'L1 — Anatomy of a Module',
+      title: 'L1 — Your First Module',
       theory: `
-<h2>Welcome to SystemVerilog</h2>
-<p>SystemVerilog is a language for describing <strong>hardware</strong> — not programs that run step by step,
-but circuits that exist physically and react to signals instantly.
-Everything you write becomes gates, wires, and flip-flops on a chip.</p>
+<h2>What is SystemVerilog?</h2>
+<p>SystemVerilog describes <strong>hardware</strong> — not programs that run step by step, but circuits that exist physically and react to signals instantly. Everything you write becomes gates and wires on a real chip.</p>
 
 <h2>The module — your basic building block</h2>
-<p>In SystemVerilog, every circuit is a <strong>module</strong>. Think of a module exactly like a chip
-you'd buy at an electronics store: it has <em>input pins</em>, <em>output pins</em>,
-and logic inside connecting them.</p>
+<p>Every circuit is a <strong>module</strong>. Think of it like a chip you’d buy from an electronics store: it has <em>input pins</em>, <em>output pins</em>, and logic inside connecting them.</p>
 
-<pre class="code-block">module  chip_name  ( port_list );
+<pre class="code-block">module  NAME  ( port_list );
 
   // — logic lives here —
 
 endmodule</pre>
 
 <table class="truth-table">
-  <tr><th>Part</th><th>What it does</th></tr>
-  <tr><td><code>module</code></td><td>Opens a new hardware block — like drawing a chip boundary</td></tr>
-  <tr><td><code>chip_name</code></td><td>You choose the name — describes what the circuit does</td></tr>
-  <tr><td><code>( port_list );</code></td><td>The pins — each input and output listed here</td></tr>
-  <tr><td><code>endmodule</code></td><td>Closes the boundary — every module must have one</td></tr>
+  <tr><th>Keyword</th><th>What it does</th></tr>
+  <tr><td><code>module</code></td><td>Opens a new circuit block</td></tr>
+  <tr><td><code>NAME</code></td><td>You choose — should describe what the circuit does</td></tr>
+  <tr><td><code>( port_list );</code></td><td>All the pins — inputs and outputs listed here</td></tr>
+  <tr><td><code>endmodule</code></td><td>Closes the block — every module must have this</td></tr>
 </table>
 
-<h2>Ports — the pins on the chip</h2>
-<p>Each port has three words: <strong>direction</strong>, <strong>type</strong>, <strong>name</strong>.</p>
-<pre class="code-block">  input  logic raining,     // direction=input  type=logic  name=raining
-  input  logic window_open, // direction=input  type=logic  name=window_open
-  output logic alert        // direction=output type=logic  name=alert
-  //                  ↑
-  //        NO comma on the last port — this is a common mistake</pre>
+<h2>Declaring ports (pins)</h2>
+<p>Each port needs three words: <strong>direction</strong> &rarr; <strong>type</strong> &rarr; <strong>name</strong></p>
+<pre class="code-block">  input  logic raining,     // ← comma: more ports follow
+  input  logic window_open, // ← comma
+  output logic alert        // ← NO comma: this is the LAST port</pre>
 
 <table class="truth-table">
-  <tr><th>Keyword</th><th>Meaning</th></tr>
-  <tr><td><code>input</code></td><td>Signal comes <em>into</em> this module from outside</td></tr>
-  <tr><td><code>output</code></td><td>Signal goes <em>out</em> of this module to the outside</td></tr>
-  <tr><td><code>logic</code></td><td>The universal signal type in SystemVerilog — use it for everything</td></tr>
+  <tr><th>Word</th><th>Meaning</th></tr>
+  <tr><td><code>input</code></td><td>Signal comes INTO this module from outside</td></tr>
+  <tr><td><code>output</code></td><td>Signal goes OUT of this module</td></tr>
+  <tr><td><code>logic</code></td><td>Universal signal type in SystemVerilog — use it for every signal</td></tr>
 </table>
 
-<h3>Why <code>logic</code> and not <code>wire</code>?</h3>
-<p>Older Verilog used <code>wire</code> for outputs of gates and <code>reg</code> for outputs of procedural
-blocks — confusing rules that led to bugs. SystemVerilog replaces both with a single
-keyword: <code>logic</code>. It works everywhere. Just use <code>logic</code> for every signal.</p>
+<p><strong>Comma rule:</strong> every port gets a comma <em>except the very last one</em>. After all ports, write <code>);</code> to close the port list.</p>
 
-<h2>always_comb — where combinational logic lives</h2>
-<p><code>always_comb</code> is a procedural block that describes <strong>combinational logic</strong> — logic
-that has no clock and whose output depends only on the current inputs.
-Every time an input changes, the block re-evaluates instantly.</p>
-
+<h2>always_comb — combinational logic</h2>
+<p>A block that describes logic with no clock. Every time an input changes, the output re-evaluates instantly — just like real gates.</p>
 <pre class="code-block">  always_comb begin
-    alert = raining &amp; window_open;   // &amp; means AND
+    alert = raining &amp; window_open;  // &amp; = AND gate
   end</pre>
 
+<h2>Operators</h2>
 <table class="truth-table">
-  <tr><th>Operator</th><th>Gate</th><th>Example</th></tr>
-  <tr><td><code>&amp;</code></td><td>AND</td><td><code>a &amp; b</code> — 1 only when both a=1 AND b=1</td></tr>
-  <tr><td><code>|</code></td><td>OR</td><td><code>a | b</code> — 1 when a=1 OR b=1 (or both)</td></tr>
-  <tr><td><code>~</code></td><td>NOT</td><td><code>~a</code> — flips the bit: 0→1, 1→0</td></tr>
-  <tr><td><code>^</code></td><td>XOR</td><td><code>a ^ b</code> — 1 when a and b are different</td></tr>
+  <tr><th>Symbol</th><th>Gate</th><th>Meaning</th></tr>
+  <tr><td><code>&amp;</code></td><td>AND</td><td>1 only when BOTH inputs are 1</td></tr>
+  <tr><td><code>|</code></td><td>OR</td><td>1 when AT LEAST ONE input is 1</td></tr>
+  <tr><td><code>~</code></td><td>NOT</td><td>Inverts the bit: 0&rarr;1, 1&rarr;0</td></tr>
+  <tr><td><code>^</code></td><td>XOR</td><td>1 when inputs are DIFFERENT</td></tr>
 </table>
 
-<h2>This lesson — read every line, then hit Run</h2>
-<p>The design tab contains a <strong>complete, working rain alarm</strong>.
-Every line is annotated. Read each line carefully — you will write code
-exactly like this yourself in the very next lesson.</p>
-<p>After reading, switch to the Testbench tab and read that too.
-Then hit <strong>Run</strong> — watch the four test cases print in the console.</p>
+<h2>What you are building — a rain alarm</h2>
+<p>Alert fires only when it is raining <strong>AND</strong> the window is open:</p>
+<table class="truth-table">
+  <tr><th>raining</th><th>window_open</th><th>alert</th><th>Reason</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td>All clear</td></tr>
+  <tr><td>1</td><td>0</td><td>0</td><td>Raining, window closed — safe</td></tr>
+  <tr><td>0</td><td>1</td><td>0</td><td>Window open, dry — no problem</td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td>Rain + open window = ALERT!</td></tr>
+</table>
+
+<h2>Complete reference — every line you will type</h2>
+<pre class="code-block">module rain_alarm (          // line 1: keyword + module name
+  input  logic raining,      // line 2: first input, comma
+  input  logic window_open,  // line 3: second input, comma
+  output logic alert         // line 4: output, NO comma
+);                           // line 5: ); closes the port list
+
+  always_comb begin          // line 7: opens logic block
+    alert = raining &amp; window_open;  // line 8: AND the two inputs
+  end                        // line 9: closes the block
+
+endmodule                    // line 11: closes the module</pre>
+
+<p><strong>Now switch to the Code tab</strong> and type every line following the tasks below.</p>
       `,
       tasks: [
-        'Open the Design tab — read every single annotated line top to bottom',
-        'Find the keyword module on line 1 and the name rain_alarm',
-        'Find the two input ports: raining and window_open — both use type logic',
-        'Find the output port: alert — notice there is NO comma after it (it is the last port)',
-        'Find ); on its own line — this semicolon closes the port list, not a curly brace',
-        'Find the always_comb begin block — this is where combinational logic lives',
-        'Read the logic: alert = raining & window_open — the & is the AND operator',
-        'Find end — this closes the always_comb block',
-        'Find endmodule at the bottom — the module boundary is now closed',
-        'Switch to the Testbench tab — read how it declares logic signals and connects the DUT',
-        'Hit Run — all four cases should print PASS',
-        'Notice case 3: raining=1, window_open=1 → alert=1 (rain AND open window = danger!)'
+        'Switch to the Code tab — the editor is blank. You type every character.',
+        '── Line 1: open the module ──',
+        '  module rain_alarm (',
+        '── Line 2: first input port (comma at the end!) ──',
+        '  input  logic raining,',
+        '── Line 3: second input port (comma at the end!) ──',
+        '  input  logic window_open,',
+        '── Line 4: output port — NO comma (it is the last port) ──',
+        '  output logic alert',
+        '── Line 5: close the port list with ); ──',
+        ');',
+        '── Blank line, then open the logic block ──',
+        '  always_comb begin',
+        '── The logic: AND both inputs together ──',
+        '    alert = raining & window_open;',
+        '── Close the always_comb block ──',
+        '  end',
+        '── Blank line, then close the module ──',
+        'endmodule',
+        'Hit Run — all four PASS lines should appear in the Output tab',
       ],
-      hint: 'Nothing to change this lesson — just read and run. The next lesson starts blank!',
+      hint:
+`module rain_alarm (
+  input  logic raining,
+  input  logic window_open,
+  output logic alert
+);
+
+  always_comb begin
+    alert = raining & window_open;
+  end
+
+endmodule`,
       design:
-`// ──────────────────────────────────────────────────────────────
-//  COMPLETE CODE — read every annotated line, then hit Run.
-//  You will write code just like this from scratch in Lesson 2.
-// ──────────────────────────────────────────────────────────────
-
-module rain_alarm (          // 'module' opens the circuit boundary
-                             // 'rain_alarm' is the name of this module
-  input  logic raining,      // pin 1: 1 = rain sensor detects rain
-  input  logic window_open,  // pin 2: 1 = window is open
-  output logic alert         // pin 3: 1 = sound the alarm  ← NO comma (last port)
-);                           // ); closes the port list
-
-  always_comb begin          // combinational block: re-evaluates when any input changes
-    alert = raining & window_open;  // & is AND — alert only when BOTH are 1
-  end                        // closes the always_comb block
-
-endmodule                    // closes the module boundary`,
+`// Type the rain_alarm module here.
+// Read the Theory tab first — it has a full annotated reference card.
+//
+// Ports to declare:
+//   input  logic raining      — 1 = rain detected
+//   input  logic window_open  — 1 = window is open
+//   output logic alert        — 1 = sound the alarm
+//
+// Logic: alert = raining & window_open   (& means AND)
+//
+// Delete this comment block and start typing:
+`,
       testbench:
 `\`timescale 1ns/1ps
 module tb;
-  logic raining, window_open, alert;  // declare signals as logic (SV style)
+  logic raining, window_open, alert;
 
-  rain_alarm dut (                    // instantiate the module under test
-    .raining    (raining),            // connect port raining    to signal raining
-    .window_open(window_open),        // connect port window_open to signal window_open
-    .alert      (alert)               // connect port alert       to signal alert
+  rain_alarm dut (
+    .raining    (raining),
+    .window_open(window_open),
+    .alert      (alert)
   );
 
   task automatic check(
@@ -141,10 +161,10 @@ module tb;
 
   initial begin
     $display("=== Rain Alarm Test ===");
-    check(0, 0,  0);   // no rain, window closed  — no alert
-    check(1, 0,  0);   // raining but window shut — no alert
-    check(0, 1,  0);   // window open but dry     — no alert
-    check(1, 1,  1);   // rain + open window      — ALERT!
+    check(0, 0,  0);
+    check(1, 0,  0);
+    check(0, 1,  0);
+    check(1, 1,  1);
     $display("Rain alarm working correctly!");
     $finish;
   end
@@ -157,92 +177,69 @@ endmodule`,
     },
 
     // ─────────────────────────────────────────────────────────────────────
-    // L2 — Write it yourself from scratch.
-    // Design tab is blank. Tasks walk through every single line.
-    // Goal: type a complete working module, hit Run, see all PASS.
+    // L2 — Door chime: introduces ~ (NOT operator)
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'msv1l2',
-      title: 'L2 — Write Your First Module',
+      title: 'L2 — Door Chime',
       theory: `
-<h2>Now you type everything</h2>
-<p>Last lesson you read a complete module. This lesson the design tab is <strong>blank</strong>.
-You will type every single line yourself, following the tasks on the left.
-The testbench is already provided — your job is to write the design that makes it pass.</p>
+<h2>New operator: ~ (NOT)</h2>
+<p>NOT flips a single bit. Put <code>~</code> directly in front of a signal name — no space needed:</p>
+<pre class="code-block">~muted   // muted=0 &rarr; ~muted=1 (sound ON)
+         // muted=1 &rarr; ~muted=0 (sound OFF)</pre>
 
-<h2>Quick reference — the structure you are building</h2>
-<pre class="code-block">module  NAME  (
-  input  logic  PORT_NAME,   ← comma after every port except the last
-  input  logic  PORT_NAME,
-  output logic  PORT_NAME    ← NO comma here — it is the last port
+<h2>Combining AND and NOT in one expression</h2>
+<pre class="code-block">chime = button &amp; ~muted;
+//             &uarr;    &uarr;
+//             AND  NOT muted</pre>
+<p>Read it as: &ldquo;chime is 1 when button is pressed AND the sound is not muted.&rdquo;</p>
+
+<h2>What you are building — a smart doorbell</h2>
+<table class="truth-table">
+  <tr><th>button</th><th>muted</th><th>chime</th><th>Reason</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td>Nobody pressed</td></tr>
+  <tr><td>1</td><td>0</td><td>1</td><td>Pressed, not muted — chime!</td></tr>
+  <tr><td>1</td><td>1</td><td>0</td><td>Pressed but muted — silence</td></tr>
+  <tr><td>0</td><td>1</td><td>0</td><td>Muted, no press — silence</td></tr>
+</table>
+
+<h2>Port list rules (recap)</h2>
+<ul>
+  <li>Every port except the last gets a <strong>comma</strong></li>
+  <li>After all ports write <code>);</code> — semicolon closes the header</li>
+  <li>Logic goes inside <code>always_comb begin&hellip;end</code></li>
+  <li><code>endmodule</code> on its own line at the very bottom</li>
+</ul>
+
+<h2>Complete reference card</h2>
+<pre class="code-block">module door_chime (
+  input  logic button,    // line 2: 1 = button pressed, comma
+  input  logic muted,     // line 3: 1 = sound off, comma
+  output logic chime      // line 4: 1 = ring, NO comma
 );
 
   always_comb begin
-    output_port = expression;
+    chime = button &amp; ~muted;  // AND with NOT
   end
 
 endmodule</pre>
 
-<h2>What you are building: a door chime</h2>
-<p>A smart doorbell that chimes <em>only when</em> someone presses the button
-<strong>and</strong> the sound is not muted:</p>
-
-<div class="flow-diagram">
-  <div class="flow-step">button<small>input</small></div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">AND gate<small>always_comb</small></div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">chime<small>output</small></div>
-  <div class="flow-arrow">←</div>
-  <div class="flow-step">~muted<small>NOT muted</small></div>
-</div>
-
-<table class="truth-table">
-  <tr><th>button</th><th>muted</th><th>chime</th><th>Why</th></tr>
-  <tr><td>0</td><td>0</td><td>0</td><td>Nobody pressed the button</td></tr>
-  <tr><td>1</td><td>0</td><td>1</td><td>Button pressed, not muted — chime!</td></tr>
-  <tr><td>1</td><td>1</td><td>0</td><td>Button pressed but muted — silence</td></tr>
-  <tr><td>0</td><td>1</td><td>0</td><td>Muted and nobody pressed — silent</td></tr>
-</table>
-
-<h2>The logic expression</h2>
-<pre class="code-block">chime = button &amp; ~muted;
-//             ↑   ↑
-//             AND  NOT muted (inverts: muted=1 → ~muted=0, muted=0 → ~muted=1)</pre>
-
-<h2>Port list — the two tricky rules</h2>
-<ul>
-  <li><strong>Comma rule:</strong> every port gets a comma <em>except the very last one</em></li>
-  <li><strong>Semicolon rule:</strong> the closing <code>);</code> needs a semicolon — it ends the module header</li>
-</ul>
-
-<h2>Ready? Start typing in the Design tab — follow the tasks one line at a time.</h2>
+<p><strong>Switch to Code tab &rarr;</strong> type the full module following the tasks.</p>
       `,
       tasks: [
-        'The design tab is blank — you type everything. Follow these tasks one line at a time.',
-        'Type the module keyword and name (leave a space before the opening paren):',
-        '  module door_chime (',
-        'Press Enter. Now declare the first input port:',
-        '  input  logic button,',
-        '  (two spaces indent, then input, two spaces, logic, one space, button, comma)',
-        'Press Enter. Declare the second input port:',
-        '  input  logic muted,',
-        'Press Enter. Declare the output port — NO comma at the end:',
-        '  output logic chime',
-        'Press Enter. Close the port list with );',
-        ');',
-        'Press Enter twice (blank line for readability). Now open the logic block:',
-        '  always_comb begin',
-        'Press Enter. Write the logic expression — button AND (NOT muted):',
-        '    chime = button & ~muted;',
-        '  (four spaces indent, then chime, space, =, space, button, space, &, space, ~muted, semicolon)',
-        'Press Enter. Close the always_comb block:',
-        '  end',
-        'Press Enter twice. Close the module:',
-        'endmodule',
-        'Hit Run — all four rows should print PASS',
-        'Verify row 2: button=1 muted=0 → chime=1 (chime rings!)',
-        'Verify row 3: button=1 muted=1 → chime=0 (muted — silence)'
+        'Code tab is blank — type every line.',
+        '── Line 1 ──   module door_chime (',
+        '── Line 2 ──   input  logic button,      ← comma',
+        '── Line 3 ──   input  logic muted,        ← comma',
+        '── Line 4 ──   output logic chime         ← NO comma (last port)',
+        '── Line 5 ──   );',
+        '── Blank line ──',
+        '── Line 7 ──     always_comb begin',
+        '── Line 8 ──       chime = button & ~muted;     ← & = AND, ~ = NOT',
+        '── Line 9 ──     end',
+        '── Blank line ──',
+        '── Line 11 ──  endmodule',
+        'Hit Run — all four PASS lines should print',
       ],
       hint:
 `module door_chime (
@@ -257,17 +254,17 @@ endmodule</pre>
 
 endmodule`,
       design:
-`// Write your door_chime module here.
-// Follow the tasks in the left panel — one line at a time.
+`// Type the door_chime module here.
+// Read the Theory tab first — it has the reference card.
 //
-// Port spec:
-//   input  logic button    — 1 when doorbell button is pressed
-//   input  logic muted     — 1 when sound is disabled
-//   output logic chime     — 1 when the chime should ring
+// Ports:
+//   input  logic button  — 1 = button pressed
+//   input  logic muted   — 1 = sound disabled
+//   output logic chime   — 1 = ring the chime
 //
-// Logic: chime = button AND (NOT muted)
+// Logic: chime = button & ~muted
 //
-// Start typing below this comment block:
+// Delete this and start typing:
 `,
       testbench:
 `\`timescale 1ns/1ps
@@ -293,10 +290,10 @@ module tb;
 
   initial begin
     $display("=== Door Chime Test ===");
-    check(0, 0,  0);   // no press, not muted  — silent
-    check(1, 0,  1);   // pressed, not muted   — chime!
-    check(1, 1,  0);   // pressed but muted    — silent
-    check(0, 1,  0);   // no press and muted   — silent
+    check(0, 0,  0);
+    check(1, 0,  1);
+    check(1, 1,  0);
+    check(0, 1,  0);
     $display("Door chime works!");
     $finish;
   end
@@ -310,77 +307,72 @@ endmodule`,
     },
 
     // ─────────────────────────────────────────────────────────────────────
-    // L3 — Three inputs, one output. No scaffold. User writes everything.
-    // Introduces OR operator and parentheses in expressions.
+    // L3 — Fan controller: three inputs, OR operator, parentheses
     // ─────────────────────────────────────────────────────────────────────
     {
       id: 'msv1l3',
       title: 'L3 — Three Inputs & Compound Logic',
       theory: `
-<h2>More inputs, richer logic</h2>
-<p>Real hardware rarely has just two inputs. This lesson you build a module
-with <strong>three inputs</strong> and learn how to combine AND, OR, and NOT in one expression.</p>
+<h2>Three inputs, richer logic</h2>
+<p>Real circuits rarely have just two inputs. This lesson adds a third input and introduces the <strong>OR operator</strong> and grouping with parentheses.</p>
 
-<h2>Combining operators</h2>
-<p>Operators in SystemVerilog follow standard precedence rules (NOT binds tighter than AND, AND binds tighter than OR), but <strong>parentheses always win</strong> and make intent crystal clear:</p>
-<pre class="code-block">// Without parentheses — relies on precedence, harder to read
+<h2>The OR operator</h2>
+<pre class="code-block">a | b   // 1 when a=1 OR b=1 (or both)</pre>
+
+<h2>Mixing operators — always use parentheses</h2>
+<p>Without parentheses you rely on hidden precedence rules. Parentheses make intent unambiguous and prevent bugs:</p>
+<pre class="code-block">// Ambiguous — what does this mean?
 out = a &amp; b | c;
 
-// With parentheses — unambiguous and self-documenting
-out = (a &amp; b) | c;    // (a AND b) OR c</pre>
+// Clear — parentheses tell the story:
+out = (a &amp; b) | c;   // (a AND b) OR c</pre>
 
-<h2>Always use parentheses for compound expressions</h2>
-<pre class="code-block">// These are all valid SystemVerilog:
-out = (a &amp; b) | ~c;          // (a AND b) OR (NOT c)
-out = ~a &amp; (b | c);          // (NOT a) AND (b OR c)
-out = (a | b) &amp; (b | c);     // (a OR b) AND (b OR c)</pre>
-
-<h2>What you are building: a fan controller</h2>
-<p>A smart fan that turns on when the room is <em>hot</em>, <em>or</em> when it's <em>humid and occupied</em>:</p>
-<pre class="code-block">fan_on = hot | (humid &amp; occupied);
-//       ─┬─   ──────────┬───────
-//        │              └── humidity sensor AND motion sensor
-//        └── temperature sensor alone is enough to trigger</pre>
+<h2>What you are building — a smart fan controller</h2>
+<p>Turn the fan on when the room is <em>hot</em> OR when it is <em>humid and occupied</em>:</p>
+<pre class="code-block">fan_on = hot | (humid &amp; occupied);</pre>
 
 <table class="truth-table">
   <tr><th>hot</th><th>humid</th><th>occupied</th><th>fan_on</th><th>Reason</th></tr>
   <tr><td>0</td><td>0</td><td>0</td><td>0</td><td>All normal — fan off</td></tr>
-  <tr><td>1</td><td>0</td><td>0</td><td>1</td><td>Hot room — fan on regardless</td></tr>
-  <tr><td>0</td><td>1</td><td>1</td><td>1</td><td>Humid AND someone is in the room</td></tr>
-  <tr><td>0</td><td>1</td><td>0</td><td>0</td><td>Humid but empty room — save power</td></tr>
-  <tr><td>1</td><td>1</td><td>1</td><td>1</td><td>Hot AND humid AND occupied — definitely on!</td></tr>
+  <tr><td>1</td><td>0</td><td>0</td><td>1</td><td>Hot alone — fan on</td></tr>
+  <tr><td>0</td><td>1</td><td>0</td><td>0</td><td>Humid, empty room — save power</td></tr>
+  <tr><td>0</td><td>0</td><td>1</td><td>0</td><td>Occupied, dry — fan stays off</td></tr>
+  <tr><td>0</td><td>1</td><td>1</td><td>1</td><td>Humid AND someone here</td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td>1</td><td>All conditions met</td></tr>
 </table>
 
-<h2>Port spec for this lesson</h2>
+<h2>Complete reference card</h2>
 <pre class="code-block">module fan_ctrl (
-  input  logic hot,        // temperature sensor: 1 = room is hot
-  input  logic humid,      // humidity sensor:    1 = room is humid
-  input  logic occupied,   // motion sensor:      1 = someone is in the room
-  output logic fan_on      // 1 = turn the fan on
+  input  logic hot,       // line 2: temp sensor, comma
+  input  logic humid,     // line 3: humidity sensor, comma
+  input  logic occupied,  // line 4: motion sensor, comma
+  output logic fan_on     // line 5: output, NO comma
 );
-  // Logic:
-  //   fan_on = hot | (humid &amp; occupied);
+
+  always_comb begin
+    fan_on = hot | (humid &amp; occupied);  // | is OR
+  end
+
 endmodule</pre>
 
-<h2>Your turn — write the whole module in the design tab</h2>
-<p>No scaffold this time. Open the design tab, clear the starter comment, and type the complete module from <code>module</code> to <code>endmodule</code>. The testbench is ready and waiting.</p>
+<p><strong>Switch to Code tab &rarr;</strong> no scaffold — write the complete module yourself.</p>
       `,
       tasks: [
-        'Clear the design tab (select all, delete) — you are starting from nothing',
-        'Line 1:  module fan_ctrl (',
-        'Line 2:  input  logic hot,          ← comma — more ports follow',
-        'Line 3:  input  logic humid,         ← comma',
-        'Line 4:  input  logic occupied,      ← comma',
-        'Line 5:  output logic fan_on         ← NO comma — last port',
-        'Line 6:  );                          ← closes port list',
-        'Blank line',
-        'Line 8:    always_comb begin',
-        'Line 9:      fan_on = hot | (humid & occupied);   ← OR and AND with parens',
-        'Line 10:   end',
-        'Blank line',
-        'Line 12:  endmodule',
+        'Code tab is blank — write everything from scratch.',
+        '── Line 1 ──   module fan_ctrl (',
+        '── Line 2 ──   input  logic hot,          ← comma',
+        '── Line 3 ──   input  logic humid,          ← comma',
+        '── Line 4 ──   input  logic occupied,       ← comma',
+        '── Line 5 ──   output logic fan_on          ← NO comma (last port)',
+        '── Line 6 ──   );',
+        '── Blank line ──',
+        '── Line 8 ──     always_comb begin',
+        '── Line 9 ──       fan_on = hot | (humid & occupied);   ← | is OR, parens around (humid & occupied)',
+        '── Line 10 ──    end',
+        '── Blank line ──',
+        '── Line 12 ──   endmodule',
         'Hit Run — all 6 test cases must print PASS',
-        'If any FAIL: check your operator — | is OR, & is AND, use (humid & occupied) with parens'
+        'If FAIL: check | is OR, & is AND, and you have (humid & occupied) with parens',
       ],
       hint:
 `module fan_ctrl (
@@ -396,16 +388,18 @@ endmodule</pre>
 
 endmodule`,
       design:
-`// Write the fan_ctrl module from scratch.
-// Port spec:
-//   input  logic hot        — 1 = room is hot
-//   input  logic humid      — 1 = room is humid
-//   input  logic occupied   — 1 = someone is in the room
-//   output logic fan_on     — 1 = turn the fan on
+`// Type the fan_ctrl module here.
+// Read the Theory tab first — it has the reference card.
 //
-// Logic:  fan_on = hot | (humid & occupied)
+// Ports:
+//   input  logic hot       — 1 = room is hot
+//   input  logic humid     — 1 = room is humid
+//   input  logic occupied  — 1 = room is occupied
+//   output logic fan_on    — 1 = turn the fan on
 //
-// Clear this comment and start typing:
+// Logic: fan_on = hot | (humid & occupied)
+//
+// Delete this and start typing:
 `,
       testbench:
 `\`timescale 1ns/1ps
@@ -432,12 +426,12 @@ module tb;
 
   initial begin
     $display("=== Fan Controller Test ===");
-    check(0, 0, 0,  0);   // all off         — fan off
-    check(1, 0, 0,  1);   // hot only        — fan on
-    check(0, 1, 0,  0);   // humid, empty    — fan off
-    check(0, 0, 1,  0);   // occupied, dry   — fan off
-    check(0, 1, 1,  1);   // humid + person  — fan on
-    check(1, 1, 1,  1);   // all on          — fan on
+    check(0, 0, 0,  0);
+    check(1, 0, 0,  1);
+    check(0, 1, 0,  0);
+    check(0, 0, 1,  0);
+    check(0, 1, 1,  1);
+    check(1, 1, 1,  1);
     $display("Fan controller works!");
     $finish;
   end
