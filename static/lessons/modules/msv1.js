@@ -19,7 +19,7 @@
 <p>SystemVerilog describes <strong>hardware</strong> — not programs that run step by step, but circuits that exist physically and react to signals instantly. Everything you write becomes gates and wires on a real chip.</p>
 
 <h2>The module — your basic building block</h2>
-<p>Every circuit is a <strong>module</strong>. Think of it like a chip you’d buy from an electronics store: it has <em>input pins</em>, <em>output pins</em>, and logic inside connecting them.</p>
+<p>Every circuit is a <strong>module</strong>. Think of it like a chip you'd buy from an electronics store: it has <em>input pins</em>, <em>output pins</em>, and logic inside connecting them.</p>
 
 <pre class="code-block">module  NAME  ( port_list );
 
@@ -75,20 +75,7 @@ endmodule</pre>
   <tr><td>1</td><td>1</td><td>1</td><td>Rain + open window = ALERT!</td></tr>
 </table>
 
-<h2>Complete reference — every line you will type</h2>
-<pre class="code-block">module rain_alarm (          // line 1: keyword + module name
-  input  logic raining,      // line 2: first input, comma
-  input  logic window_open,  // line 3: second input, comma
-  output logic alert         // line 4: output, NO comma
-);                           // line 5: ); closes the port list
-
-  always_comb begin          // line 7: opens logic block
-    alert = raining &amp; window_open;  // line 8: AND the two inputs
-  end                        // line 9: closes the block
-
-endmodule                    // line 11: closes the module</pre>
-
-<p><strong>Now switch to the Code tab</strong> and type every line following the tasks below.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and type every line from memory. Stuck? Tap 💡 Show Hint — it has a fully annotated reference.</p>
       `,
       tasks: [
         'Switch to the Code tab — the editor is blank. You type every character.',
@@ -110,23 +97,24 @@ endmodule                    // line 11: closes the module</pre>
         '  end',
         '── Blank line, then close the module ──',
         'endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all four PASS lines should appear in the Output tab',
       ],
       hint:
-`module rain_alarm (
-  input  logic raining,
-  input  logic window_open,
-  output logic alert
-);
+`module rain_alarm (          // line 1: keyword + module name
+  input  logic raining,      // line 2: first input, comma
+  input  logic window_open,  // line 3: second input, comma
+  output logic alert         // line 4: output, NO comma
+);                           // line 5: ); closes the port list
 
-  always_comb begin
-    alert = raining & window_open;
-  end
+  always_comb begin          // line 7: opens logic block
+    alert = raining & window_open;  // line 8: & = AND gate
+  end                        // line 9: closes the block
 
-endmodule`,
+endmodule                    // line 11: closes the module`,
       design:
 `// Type the rain_alarm module here.
-// Read the Theory tab first — it has a full annotated reference card.
+// Read the Theory tab first — it explains every keyword.
 //
 // Ports to declare:
 //   input  logic raining      — 1 = rain detected
@@ -211,20 +199,7 @@ endmodule`,
   <li><code>endmodule</code> on its own line at the very bottom</li>
 </ul>
 
-<h2>Complete reference card</h2>
-<pre class="code-block">module door_chime (
-  input  logic button,    // line 2: 1 = button pressed, comma
-  input  logic muted,     // line 3: 1 = sound off, comma
-  output logic chime      // line 4: 1 = ring, NO comma
-);
-
-  always_comb begin
-    chime = button &amp; ~muted;  // AND with NOT
-  end
-
-endmodule</pre>
-
-<p><strong>Switch to Code tab &rarr;</strong> type the full module following the tasks.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and type the full module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
       `,
       tasks: [
         'Code tab is blank — type every line.',
@@ -239,23 +214,24 @@ endmodule</pre>
         '── Line 9 ──     end',
         '── Blank line ──',
         '── Line 11 ──  endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all four PASS lines should print',
       ],
       hint:
 `module door_chime (
-  input  logic button,
-  input  logic muted,
-  output logic chime
+  input  logic button,    // line 2: 1 = button pressed, comma
+  input  logic muted,     // line 3: 1 = sound off, comma
+  output logic chime      // line 4: 1 = ring, NO comma
 );
 
   always_comb begin
-    chime = button & ~muted;
+    chime = button & ~muted;  // & = AND,  ~ = NOT
   end
 
 endmodule`,
       design:
 `// Type the door_chime module here.
-// Read the Theory tab first — it has the reference card.
+// Read the Theory tab first — it explains the ~ (NOT) operator.
 //
 // Ports:
 //   input  logic button  — 1 = button pressed
@@ -341,21 +317,7 @@ out = (a &amp; b) | c;   // (a AND b) OR c</pre>
   <tr><td>1</td><td>1</td><td>1</td><td>1</td><td>All conditions met</td></tr>
 </table>
 
-<h2>Complete reference card</h2>
-<pre class="code-block">module fan_ctrl (
-  input  logic hot,       // line 2: temp sensor, comma
-  input  logic humid,     // line 3: humidity sensor, comma
-  input  logic occupied,  // line 4: motion sensor, comma
-  output logic fan_on     // line 5: output, NO comma
-);
-
-  always_comb begin
-    fan_on = hot | (humid &amp; occupied);  // | is OR
-  end
-
-endmodule</pre>
-
-<p><strong>Switch to Code tab &rarr;</strong> no scaffold — write the complete module yourself.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and write the complete module yourself. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
       `,
       tasks: [
         'Code tab is blank — write everything from scratch.',
@@ -371,25 +333,26 @@ endmodule</pre>
         '── Line 10 ──    end',
         '── Blank line ──',
         '── Line 12 ──   endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 6 test cases must print PASS',
         'If FAIL: check | is OR, & is AND, and you have (humid & occupied) with parens',
       ],
       hint:
 `module fan_ctrl (
-  input  logic hot,
-  input  logic humid,
-  input  logic occupied,
-  output logic fan_on
+  input  logic hot,       // line 2: temp sensor, comma
+  input  logic humid,     // line 3: humidity sensor, comma
+  input  logic occupied,  // line 4: motion sensor, comma
+  output logic fan_on     // line 5: output, NO comma
 );
 
   always_comb begin
-    fan_on = hot | (humid & occupied);
+    fan_on = hot | (humid & occupied);  // | = OR,  & = AND
   end
 
 endmodule`,
       design:
 `// Type the fan_ctrl module here.
-// Read the Theory tab first — it has the reference card.
+// Read the Theory tab first — it explains | (OR) and parentheses.
 //
 // Ports:
 //   input  logic hot       — 1 = room is hot
