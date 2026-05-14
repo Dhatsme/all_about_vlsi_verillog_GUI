@@ -188,6 +188,18 @@ function renderTheory(lesson) {
   `;
   $('theory-content').appendChild(hintWrap);
   STATE.hintVisible = false;
+
+  // On mobile: inject a "💻 Code →" shortcut into the theory pane header
+  if (window.innerWidth <= 768) {
+    const hdr = document.querySelector('.theory-pane .pane-header');
+    if (hdr && !hdr.querySelector('.mob-code-shortcut')) {
+      const codeBtn = document.createElement('button');
+      codeBtn.className = 'mob-code-shortcut';
+      codeBtn.textContent = '💻 Code →';
+      codeBtn.onclick = () => mobTab('code');
+      hdr.appendChild(codeBtn);
+    }
+  }
 }
 
 function toggleHint() {
@@ -491,8 +503,14 @@ function toggleWaveExpand() {
 // ── SIM SELECT ───────────────────────────────────────────────────────────────
 function onSimSelectChange() {
   const isVeri = $('sim-select').value === 'verilator';
-  $('veri-opts-btn').style.display = isVeri ? 'inline-flex' : 'none';
-  if (!isVeri) closeVerilatorPanel();
+  const btn = $('veri-opts-btn');
+  if (isVeri) {
+    btn.textContent = window.innerWidth <= 768 ? '⚙' : '⚙ Options';
+    btn.style.display = 'inline-flex';
+  } else {
+    btn.style.display = 'none';
+    closeVerilatorPanel();
+  }
 }
 
 // ── VERILATOR OPTIONS PANEL ───────────────────────────────────────────────────

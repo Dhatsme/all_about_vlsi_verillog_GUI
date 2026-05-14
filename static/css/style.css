@@ -1525,6 +1525,7 @@ textarea.code-editor {
 .mob-tab:hover  { color: var(--dim); }
 .mob-tab.active { color: var(--accent); background: rgba(0,212,170,0.06); }
 .mob-tab-icon   { font-size: 1.2rem; line-height: 1; }
+.mob-code-shortcut { display: none; }
 
 /* ── MOBILE (≤768px) ── */
 @media (max-width: 768px) {
@@ -1552,13 +1553,29 @@ textarea.code-editor {
   .modules-section { padding: 28px 16px; }
   .modules-grid { grid-template-columns: 1fr; }
 
-  /* Lesson nav — keep sim-select visible but compact */
+  /* Lesson nav — keep sim-select and veri-opts visible but compact */
   .lesson-nav { padding: 0 8px; gap: 5px; overflow: hidden; }
   .lesson-nav-center { display: none; }
   .nav-prev-next { display: none; }
   .lesson-nav-title { max-width: 80px; font-size: 0.72rem; }
   .sim-select { font-size: 0.58rem; padding: 3px 4px; }
-  .veri-opts-btn { display: none !important; }
+  .run-btn { flex-shrink: 0; }
+  .veri-opts-btn { font-size: 0.6rem; padding: 3px 6px; }
+  .mob-code-shortcut {
+    display: inline-flex;
+    align-items: center;
+    margin-left: auto;
+    font-family: var(--mono);
+    font-size: 0.65rem;
+    padding: 4px 10px;
+    background: rgba(0,212,170,0.1);
+    border: 1px solid rgba(0,212,170,0.3);
+    color: var(--accent);
+    border-radius: 5px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
 
   /* Lesson body: stack panes, show only active */
   .lesson-body { position: relative; overflow: hidden; }
