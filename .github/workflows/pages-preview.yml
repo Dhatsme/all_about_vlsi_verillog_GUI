@@ -1,0 +1,31 @@
+name: Preview → GitHub Pages
+
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:   # allows manual trigger from GitHub Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare static files for GitHub Pages
+        run: |
+          mkdir deploy
+          cp -r static/. deploy/
+          # GitHub Pages serves under /repo-name/ subdirectory.
+          # The app uses absolute paths like /css/style.css which break there.
+          # This rewrites them to relative paths (./css/style.css) so they resolve correctly.
+          sed -i 's|="/|="./|g' deploy/index.html
+
+      - name: Deploy to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy
+          commit_message: "preview: ${{ github.sha }}"
