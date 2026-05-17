@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>All About VLSI — Zero to Hero Verilog</title>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════
+     LANDING PAGE
+     ═══════════════════════════════════════════════════════ -->
+<div id="landing-page" style="display:flex; flex-direction:column; height:100vh; overflow-y:auto;">
+
+  <!-- Nav -->
+  <nav class="landing-nav">
+    <div class="logo">
+      <div class="logo-chip">⬡</div>
+      All About <em>&nbsp;VLSI</em>
+    </div>
+    <div class="landing-nav-right">
+      <span id="server-status" style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);">&#9679; connecting…</span>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">Free · Open · Interactive</div>
+    <h1 class="hero-title">
+      Master Verilog &amp;<br>
+      <span class="hl">VLSI Design</span>
+    </h1>
+    <p class="hero-sub">
+      From logic gates to SPI controllers — learn hardware description language
+      with real iverilog simulation, interactive waveforms, and hands-on challenges.
+    </p>
+    <div class="hero-actions">
+      <button class="btn-primary" onclick="openModule('msv1')">
+        ▶ Start Learning Free
+      </button>
+      <button class="btn-secondary" onclick="openModule('m4')">
+        Jump to Advanced
+      </button>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-num" id="stat-lessons">0</div>
+      <div class="stat-label">Lessons</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">6</div>
+      <div class="stat-label">Modules</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">3</div>
+      <div class="stat-label">Levels</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">Real</div>
+      <div class="stat-label">iverilog Sim</div>
+    </div>
+  </div>
+
+  <!-- Modules -->
+  <div class="modules-section">
+    <div class="section-title">Curriculum</div>
+    <div class="section-sub">Pick a module to begin. Progress is saved automatically.</div>
+    <div class="modules-grid" id="modules-grid"></div>
+  </div>
+
+  <div style="height:60px;"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     LESSON PAGE
+     ═══════════════════════════════════════════════════════ -->
+<div id="lesson-page" style="display:none; height:100vh; flex-direction:column;">
+
+  <!-- Lesson Nav -->
+  <nav class="lesson-nav">
+    <button class="back-btn" onclick="goHome()">&#8592; Home</button>
+    <span class="lesson-nav-title" id="lesson-nav-title">Lesson</span>
+
+    <div class="lesson-nav-center">
+      <div class="progress-dots" id="progress-dots"></div>
+    </div>
+
+    <div class="nav-prev-next">
+      <button id="btn-prev" onclick="navPrev()" title="Previous lesson">‹ Prev</button>
+      <button id="btn-next" onclick="navNext()" title="Next lesson">Next ›</button>
+    </div>
+
+    <select class="sim-select" id="sim-select" title="Simulator" onchange="onSimSelectChange()">
+      <option value="iverilog">iverilog</option>
+      <option value="verilator">verilator</option>
+    </select>
+    <button class="veri-opts-btn" id="veri-opts-btn" onclick="toggleVerilatorPanel()"
+            title="Verilator compiler options" style="display:none;">
+      &#9881; Options
+    </button>
+
+    <button class="run-btn" id="run-btn" onclick="runSimulation()">
+      <svg viewBox="0 0 10 10"><polygon points="1,0 10,5 1,10"/></svg>
+      Run
+    </button>
+  </nav>
+
+  <!-- Lesson Body -->
+  <div class="lesson-body">
+
+    <!-- Sidebar -->
+    <aside class="lesson-sidebar">
+      <div class="sidebar-module-header">
+        <div class="sidebar-mod-title" id="sidebar-mod-title">Module</div>
+      </div>
+      <div class="sidebar-lessons" id="sidebar-lessons"></div>
+      <div class="sidebar-footer">
+        <div class="sidebar-progress-label">
+          <span id="sidebar-prog-label">0/0 lessons</span>
+          <span id="sidebar-prog-pct">0%</span>
+        </div>
+        <div class="sidebar-prog-track">
+          <div class="sidebar-prog-fill" id="sidebar-prog-fill" style="width:0%"></div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Theory Pane -->
+    <div class="theory-pane">
+      <div class="pane-header">
+        <span class="pane-label">&#128218; Theory</span>
+      </div>
+      <div class="theory-content" id="theory-content"></div>
+    </div>
+
+    <!-- Editor Pane -->
+    <div class="editor-pane">
+      <div class="editor-header">
+        <button class="file-tab active" id="tab-design" onclick="switchEditorTab('design')">design.sv</button>
+        <button class="file-tab"        id="tab-tb"     onclick="switchEditorTab('tb')">testbench.sv</button>
+      </div>
+      <div class="editor-wrap">
+        <!-- Design editor -->
+        <div class="line-nums" id="lnum-design"></div>
+        <textarea class="code-editor" id="editor-design"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">
+        </textarea>
+        <!-- Testbench editor -->
+        <div class="line-nums" id="lnum-tb" style="display:none;"></div>
+        <textarea class="code-editor" id="editor-tb"
+          spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+          style="display:none;">
+        </textarea>
+      </div>
+    </div>
+
+    <!-- Output + Waveform Pane -->
+    <div class="output-pane" id="output-pane">
+
+      <!-- Console -->
+      <div class="output-header">
+        <span class="pane-label">Console</span>
+        <button onclick="clearConsole()" style="font-family:var(--mono);font-size:0.6rem;background:none;border:none;color:var(--muted);cursor:pointer;margin-left:4px;" title="Clear">clear</button>
+        <span class="status-pill" id="status-pill">idle</span>
+      </div>
+      <div id="console-output"></div>
+      <div class="result-banner" id="result-banner"></div>
+
+      <!-- Next Lesson -->
+      <div class="next-lesson-wrap">
+        <button class="next-lesson-btn" id="btn-next-lesson" onclick="navNext()">
+          Next Lesson →
+        </button>
+      </div>
+
+      <!-- Waveform -->
+      <div class="wave-pane" id="wave-pane">
+        <div class="wave-header">
+          <span class="pane-label">&#9201; Waveform</span>
+          <span id="wave-info" style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);"></span>
+          <div style="margin-left:auto;display:flex;gap:4px;">
+            <button onclick="waveZoomOut()" title="Zoom out" style="font-family:var(--mono);font-size:0.65rem;background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:2px 7px;border-radius:4px;cursor:pointer;">−</button>
+            <button onclick="waveZoomIn()"  title="Zoom in"  style="font-family:var(--mono);font-size:0.65rem;background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:2px 7px;border-radius:4px;cursor:pointer;">+</button>
+            <button onclick="waveFit()"     title="Fit"      style="font-family:var(--mono);font-size:0.65rem;background:var(--panel);border:1px solid var(--border);color:var(--dim);padding:2px 7px;border-radius:4px;cursor:pointer;">fit</button>
+            <button class="wave-expand-btn" id="wave-expand-btn" onclick="toggleWaveExpand()">⟩ expand</button>
+          </div>
+        </div>
+        <div class="wave-scroll-area" id="wave-scroll">
+          <canvas id="wave-canvas"></canvas>
+        </div>
+        <div style="padding:3px 10px;font-family:var(--mono);font-size:0.58rem;color:var(--muted);border-top:1px solid var(--border);">
+          Scroll to zoom · Hover to inspect signals
+        </div>
+      </div>
+
+    </div><!-- /output-pane -->
+
+    <!-- Mobile bottom tab bar -->
+    <div class="mob-tab-bar" id="mob-tab-bar">
+      <button class="mob-tab" id="mob-tab-lessons" onclick="mobTab('lessons')">
+        <span class="mob-tab-icon">&#9776;</span><span>Lessons</span>
+      </button>
+      <button class="mob-tab" id="mob-tab-theory" onclick="mobTab('theory')">
+        <span class="mob-tab-icon">&#128218;</span><span>Theory</span>
+      </button>
+      <button class="mob-tab active" id="mob-tab-code" onclick="mobTab('code')">
+        <span class="mob-tab-icon">&#128187;</span><span>Code</span>
+      </button>
+      <button class="mob-tab" id="mob-tab-output" onclick="mobTab('output')">
+        <span class="mob-tab-icon">&#9654;</span><span>Output</span>
+      </button>
+    </div>
+
+  </div><!-- /lesson-body -->
+</div><!-- /lesson-page -->
+
+<!-- ═══════════════════════════════════════════════════════
+     VERILATOR OPTIONS PANEL
+     ═══════════════════════════════════════════════════════ -->
+<div id="veri-panel" class="veri-panel" style="display:none;">
+  <div class="veri-panel-header">
+    <span class="veri-panel-title">&#9881; Verilator Options</span>
+    <span id="veri-ver-badge" class="veri-ver-badge"></span>
+    <button class="veri-panel-close" onclick="toggleVerilatorPanel()">&#10005;</button>
+  </div>
+
+  <div class="veri-panel-body">
+
+    <!-- ── Timing ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Timing Mode</div>
+      <label class="veri-radio-label">
+        <input type="radio" name="veri-timing" id="vf-no-timing" value="--no-timing" checked>
+        <span class="veri-radio-text">
+          <strong>--no-timing</strong>
+          <em>Ignore #delays — safe for combinational logic &amp; most designs</em>
+        </span>
+      </label>
+      <label class="veri-radio-label">
+        <input type="radio" name="veri-timing" id="vf-timing" value="--timing">
+        <span class="veri-radio-text">
+          <strong>--timing</strong>
+          <em>Real #delay simulation — requires Verilator 5.x</em>
+        </span>
+      </label>
+    </div>
+
+    <!-- ── Warnings ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Warnings</div>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-Wall">
+        <span><code>--Wall</code> — enable all warnings</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-Wnofatal">
+        <span><code>--Wno-fatal</code> — warnings are non-fatal</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoWIDTH">
+        <span><code>--Wno-WIDTH</code> — suppress bit-width mismatch</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoUNUSED">
+        <span><code>--Wno-UNUSED</code> — suppress unused signal warnings</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoUNDRIVEN">
+        <span><code>--Wno-UNDRIVEN</code> — suppress undriven signal warnings</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoCASE">
+        <span><code>--Wno-CASEINCOMPLETE</code> — suppress incomplete case</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-WnoUNSIGNED">
+        <span><code>--Wno-UNSIGNED</code> — suppress unsigned comparison</span>
+      </label>
+    </div>
+
+    <!-- ── Optimization ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Optimization</div>
+      <div class="veri-select-row">
+        <label for="vf-opt">Level:</label>
+        <select id="vf-opt" class="veri-select">
+          <option value="">default</option>
+          <option value="-O0">-O0 &nbsp;(no optimization)</option>
+          <option value="-O1">-O1 &nbsp;(light)</option>
+          <option value="-O2">-O2 &nbsp;(medium)</option>
+          <option value="-O3">-O3 &nbsp;(full — slower compile)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ── Features ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Language &amp; Features</div>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-assert">
+        <span><code>--assert</code> — enable SystemVerilog assertions (SVA)</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-coverage">
+        <span><code>--coverage</code> — enable code coverage</span>
+      </label>
+      <label class="veri-check-label">
+        <input type="checkbox" id="vf-lint-only">
+        <span><code>--lint-only</code> — lint only, skip simulation</span>
+      </label>
+    </div>
+
+    <!-- ── UVM ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">UVM — Universal Verification Methodology</div>
+      <div id="uvm-unavail-msg" class="uvm-unavail" style="display:none;">
+        &#9888; UVM library not detected on this server
+      </div>
+      <label class="veri-check-label" id="uvm-toggle-row">
+        <input type="checkbox" id="vf-uvm" onchange="onUvmToggle()">
+        <span>Enable UVM &nbsp;<em style="color:var(--muted);font-style:normal;font-size:0.66rem;">(forces --timing, requires Verilator 5.x)</em></span>
+      </label>
+
+      <!-- UVM sub-options — shown only when checkbox is ticked -->
+      <div id="uvm-subopts" class="uvm-subopts" style="display:none;">
+        <div class="uvm-row">
+          <label class="uvm-label" for="vf-uvm-test">Test name</label>
+          <input type="text" id="vf-uvm-test" class="veri-extra-input"
+                 placeholder="e.g. my_test  (maps to +UVM_TESTNAME)">
+        </div>
+        <div class="uvm-row">
+          <label class="uvm-label" for="vf-uvm-verb">Verbosity</label>
+          <select id="vf-uvm-verb" class="veri-select">
+            <option value="UVM_NONE">UVM_NONE</option>
+            <option value="UVM_LOW">UVM_LOW</option>
+            <option value="UVM_MEDIUM" selected>UVM_MEDIUM</option>
+            <option value="UVM_HIGH">UVM_HIGH</option>
+            <option value="UVM_FULL">UVM_FULL</option>
+            <option value="UVM_DEBUG">UVM_DEBUG</option>
+          </select>
+        </div>
+        <div class="uvm-hint">
+          Your testbench must <code>import uvm_pkg::*;</code> and
+          <code>`include "uvm_macros.svh"</code>.
+          Use <code>run_test();</code> to launch the test.
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Extra Flags ── -->
+    <div class="veri-section">
+      <div class="veri-section-title">Extra Flags <span style="font-weight:400;color:var(--muted)">(advanced)</span></div>
+      <input type="text" id="vf-extra"
+             class="veri-extra-input"
+             placeholder="e.g. --pins-bv 2 +define+SIM">
+    </div>
+
+    <!-- ── Active flags preview ── -->
+    <div class="veri-flags-preview" id="veri-flags-preview"></div>
+
+    <!-- ── Actions ── -->
+    <div class="veri-panel-actions">
+      <button class="veri-reset-btn" onclick="resetVerilatorOptions()">&#8634; Reset defaults</button>
+    </div>
+
+  </div><!-- /veri-panel-body -->
+</div><!-- /veri-panel -->
+<!-- Panel backdrop -->
+<div id="veri-backdrop" style="display:none;" onclick="closeVerilatorPanel()"></div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- ── FEEDBACK FAB ── -->
+<button class="feedback-fab" id="feedback-fab" onclick="openFeedback()" title="Send feedback on this lesson">
+  &#128172; Feedback
+</button>
+
+<!-- Feedback modal -->
+<div class="feedback-overlay" id="feedback-overlay" onclick="closeFeedback()"></div>
+<div class="feedback-modal" id="feedback-modal">
+  <div class="feedback-header">
+    <span class="feedback-title">&#128221; Lesson Feedback</span>
+    <button class="feedback-close" onclick="closeFeedback()">&#10005;</button>
+  </div>
+  <div class="feedback-lesson-label" id="feedback-lesson-label"></div>
+  <div class="feedback-stars" id="feedback-stars">
+    <span data-v="1" onclick="setRating(1)">&#9733;</span>
+    <span data-v="2" onclick="setRating(2)">&#9733;</span>
+    <span data-v="3" onclick="setRating(3)">&#9733;</span>
+    <span data-v="4" onclick="setRating(4)">&#9733;</span>
+    <span data-v="5" onclick="setRating(5)">&#9733;</span>
+  </div>
+  <textarea id="feedback-comment" class="feedback-textarea"
+    placeholder="What could be improved? Any confusion? (optional)"></textarea>
+  <div class="feedback-actions">
+    <button class="feedback-btn-cancel" onclick="closeFeedback()">Cancel</button>
+    <button class="feedback-btn-send"   onclick="submitFeedback()">Send &#8599;</button>
+  </div>
+</div>
+
+<!-- ── SCRIPTS ── -->
+<!-- Curriculum modules — add new chapter: create modules/mN.js and add a line here -->
+<script src="./lessons/modules/msv1.js"></script>
+<script src="./lessons/modules/msv2.js"></script>
+<script src="./lessons/modules/m1.js"></script>
+<script src="./lessons/modules/m2.js"></script>
+<script src="./lessons/modules/m3.js"></script>
+<script src="./lessons/modules/m4.js"></script>
+<script src="./lessons/modules/m5.js"></script>
+<script src="./lessons/modules/m6.js"></script>
+<script src="./lessons/modules/m13.js"></script>
+<script src="./lessons/modules/m16.js"></script>
+<script src="./lessons/modules/m15.js"></script>
+<script src="./lessons/curriculum.js"></script>
+<script src="./js/waveform.js"></script>
+<script src="./js/app.js"></script>
+
+<script>
+  // Count total lessons for stats
+  window.addEventListener('DOMContentLoaded', () => {
+    const total = CURRICULUM.reduce((s, m) => s + m.lessons.length, 0);
+    document.getElementById('stat-lessons').textContent = total;
+  });
+</script>
+
+</body>
+</html>
