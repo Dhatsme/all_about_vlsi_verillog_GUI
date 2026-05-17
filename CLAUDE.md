@@ -10,7 +10,7 @@ Read this file completely before doing anything else.
 
 Build the next unchecked chapter in the curriculum table below.
 One chapter = one JS file + two registration edits.
-Push to `main` when done. Then mark the chapter done in this file (replace `❌` with `✅`).
+Push to `develop` when done. Then mark the chapter done in this file (replace `❌` with `✅`).
 Repeat for the next chapter.
 
 The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
@@ -27,8 +27,8 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 | # | Module ID | Title | Lessons | Status |
 |---|---|---|---|---|
 | 1 | `msv1` | Getting Started with SystemVerilog | L1 AND/OR/NOT gates, L2 Door Chime (~), L3 Fan Controller (|) | ✅ done |
-| 2 | `msv2` | Sequential Logic | L1 D Flip-Flop, L2 4-bit Register, L3 Shift Register, L4 Clock Divider | ❌ **build this next** |
-| 3 | `msv3` | Arithmetic Circuits | L1 Half Adder, L2 Full Adder, L3 4-bit Adder, L4 Subtractor, L5 ALU (portfolio) | ❌ |
+| 2 | `msv2` | Sequential Logic | L1 D Flip-Flop, L2 4-bit Register, L3 Shift Register, L4 Clock Divider | ✅ done |
+| 3 | `msv3` | Arithmetic Circuits | L1 Half Adder, L2 Full Adder, L3 4-bit Adder, L4 Subtractor, L5 ALU (portfolio) | ❌ **build this next** |
 | 4 | `msv4` | Finite State Machines | L1 Traffic Light, L2 Vending Machine, L3 Sequence Detector, L4 Combo Lock (portfolio) | ❌ |
 | 5 | `msv5` | Memory & Storage | L1 Register File, L2 Sync SRAM, L3 FIFO, L4 Stack (portfolio) | ❌ |
 | 6 | `msv6` | Serial Protocols | L1 UART TX, L2 UART RX, L3 SPI Master (portfolio), L4 I2C Controller (portfolio) | ❌ |
@@ -44,7 +44,7 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 3. Read agent.md for full schema, difficulty tiers, and testbench patterns
 4. Build the lesson file  →  static/lessons/modules/<moduleId>.js
 5. Register it            →  two edits (index.html + curriculum.js)
-6. Push all three files in one commit to main
+6. Push all three files in one commit to develop branch
 7. Edit this CLAUDE.md: change ❌ to ✅ for the chapter just built
 8. Push this file to main
 9. Stop — do not build the next chapter in the same session
@@ -57,22 +57,22 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 
 ### File location
 ```
-static/lessons/modules/msv2.js    ← sequential logic
 static/lessons/modules/msv3.js    ← arithmetic
+static/lessons/modules/msv4.js    ← FSM
 ... etc
 ```
 
 ### File skeleton
 ```javascript
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
-  id: 'msv2',
-  title: 'Sequential Logic',
-  icon: '🔄',        // pick a relevant emoji
+  id: 'msv3',
+  title: 'Arithmetic Circuits',
+  icon: '➕',        // pick a relevant emoji
   level: 'beginner',  // beginner | intermediate | advanced
   lessons: [
     {
-      id: 'msv2l1',
-      title: 'L1 — D Flip-Flop',
+      id: 'msv3l1',
+      title: 'L1 — Half Adder',
       theory: `...`,
       tasks: [...],
       hint: `...`,
@@ -86,7 +86,7 @@ static/lessons/modules/msv3.js    ← arithmetic
 ```
 
 ### Lesson id rule
-`<moduleId>l<lessonNumber>` — e.g. `msv2l1`, `msv2l2`. Must be globally unique across all modules.
+`<moduleId>l<lessonNumber>` — e.g. `msv3l1`, `msv3l2`. Must be globally unique across all modules.
 
 ---
 
@@ -375,13 +375,14 @@ expected: [
 Find the `<!-- SCRIPTS -->` block. Add the new script tag BEFORE `curriculum.js`:
 ```html
 <script src="/lessons/modules/msv1.js"></script>
-<script src="/lessons/modules/msv2.js"></script>   ← add here
+<script src="/lessons/modules/msv2.js"></script>
+<script src="/lessons/modules/msv3.js"></script>   ← add here
 <script src="/lessons/curriculum.js"></script>
 ```
 
 ### Edit 2: `static/lessons/curriculum.js`
 
-Fetch this file first. Add the new module id into the CURRICULUM array in the correct position (after msv1, before msv3 etc). The array controls display order on the landing page.
+Fetch this file first. Add the new module id into the CURRICULUM array in the correct position (after msv2, before msv4 etc). The array controls display order on the landing page.
 
 ---
 
@@ -390,12 +391,12 @@ Fetch this file first. Add the new module id into the CURRICULUM array in the co
 Use `mcp__github__push_files` with ALL changed files in one commit:
 ```
 files: [
-  { path: 'static/lessons/modules/msv2.js',  content: '...' },
+  { path: 'static/lessons/modules/msv3.js',  content: '...' },
   { path: 'static/index.html',               content: '...' },
   { path: 'static/lessons/curriculum.js',    content: '...' },
 ]
-message: 'feat(msv2): sequential logic chapter — 4 lessons'
-branch: 'main'
+message: 'feat(msv3): arithmetic circuits chapter — 5 lessons'
+branch: 'develop'
 ```
 
 ---
@@ -404,81 +405,56 @@ branch: 'main'
 
 After the push, fetch this CLAUDE.md, change `❌ **build this next**` to `✅ done` for the chapter just built, and set `❌ **build this next**` on the next row. Push in a separate commit:
 ```
-message: 'chore: mark msv2 done, advance curriculum cursor'
+message: 'chore: mark msv3 done, advance curriculum cursor'
+branch: 'main'
 ```
 
 ---
 
 ## Chapter content guide — what to build
 
-### msv2 — Sequential Logic
-**Level:** beginner  **Icon:** 🔄
-
-**L1 — D Flip-Flop** (Tier 1)
-- New concept: `always_ff`, `posedge clk`, synchronous reset with `if (!rst)`
-- Circuit: 1-bit D flip-flop with active-low synchronous reset
-- Truth table: rst=0→q=0, rst=1→q follows d on clock edge
-- Theory: explain the difference between combinational (instant) and sequential (clocked) logic
-- Analogy: "a flip-flop is memory — it remembers one bit between clock ticks"
-- Ports: `clk, rst, d, q`
-- Logic: `always_ff @(posedge clk) if (!rst) q <= 0; else q <= d;`
-- Note: use `<=` (non-blocking) in always_ff, explain WHY (avoids race conditions)
-- Testbench: clocked pattern, test reset then normal operation
-
-**L2 — 4-bit Register** (Tier 2)
-- New concept: `logic [3:0]` bus signals, vector assignment
-- Circuit: 4-bit D register (4 flip-flops in parallel)
-- Explain: `[3:0]` means bit 3 is MSB, bit 0 is LSB
-- Ports: `clk, rst, d[3:0], q[3:0]`
-- Logic: same always_ff pattern but with buses
-- Testbench: load 4'b1010, load 4'b0101, reset
-
-**L3 — Shift Register** (Tier 3)
-- New concept: `<<` and `>>` shift operators, serial-in parallel-out
-- Circuit: 4-bit SIPO shift register
-- Theory: explain shift as each bit moving one position per clock
-- Ports: `clk, rst, sin, q[3:0]`
-- Logic: `q <= {q[2:0], sin};` — concatenation to shift
-- Testbench: shift in 1,0,1,1 — verify q becomes 4'b1011
-
-**L4 — Clock Divider** (Tier 3)
-- New concept: counter, modulo rollover
-- Circuit: divides clock by N (produce 1 pulse every N cycles)
-- Ports: `clk, rst, clk_div` (output)
-- Logic: counter counts to N-1 then resets, clk_div toggles
-- Testbench: simulate 20 cycles, verify clk_div toggles at correct rate
-- Certification note: completing msv1+msv2 unlocks "VLSI Foundations" certificate
-  - Add to last task: `'🎓 You\'ve earned the VLSI Foundations certificate — complete msv1 + msv2 to unlock it'`
-
----
-
 ### msv3 — Arithmetic Circuits
 **Level:** beginner  **Icon:** ➕
 
 **L1 — Half Adder** (Tier 2)
-- New: `^` XOR, multiple outputs, `{cout, sum}` notation
+- New: `^` XOR operator, multiple outputs
+- Circuit: adds two 1-bit numbers → sum + carry-out
+- Truth table: 00→sum=0 cout=0, 01→sum=1 cout=0, 10→sum=1 cout=0, 11→sum=0 cout=1
+- Analogy: "like counting on one hand: 1+1 overflows into the next column"
 - Ports: `a, b, sum, cout`
-- Logic: `sum = a ^ b; cout = a & b;`
+- Logic: `assign sum = a ^ b; assign cout = a & b;`
+- Testbench: combinational pattern, all 4 input combinations
 
 **L2 — Full Adder** (Tier 3)
-- New: carry-in, 3-input logic
+- New: carry-in, 3-input logic, why ripple carry works
+- Circuit: adds two 1-bit numbers + carry-in → sum + carry-out
 - Ports: `a, b, cin, sum, cout`
-- Logic: `sum = a ^ b ^ cin; cout = (a & b) | (cin & (a ^ b));`
+- Logic: `assign sum = a ^ b ^ cin; assign cout = (a & b) | (cin & (a ^ b));`
+- Testbench: all 8 input combinations (3 inputs)
 
-**L3 — 4-bit Ripple Adder** (Tier 3)
-- New: module instantiation, connecting carry chain
-- Instantiate 4 full adders, chain carry
-- Show `wire` is not needed — use `logic` for internal signals too
+**L3 — 4-bit Ripple Carry Adder** (Tier 3)
+- New: module instantiation, connecting internal signals with `logic`
+- Circuit: chain 4 full adders, carry ripples from LSB to MSB
+- Ports: `a[3:0], b[3:0], cin, sum[3:0], cout`
+- Internal: `logic [2:0] carry;` — connect between adder instances
+- Show `logic` (not `wire`) for internal signals — Verilator 5 requires this
+- Testbench: test 0+0, 5+3 (should be 8), 15+1 (overflow case)
 
 **L4 — 2s Complement Subtractor** (Tier 4)
-- New: `~` on a bus, `+ 1`, signed subtraction
-- `diff = a + (~b) + 1;`
-- Explain 2s complement visually
+- New: `~` on a bus, bitwise NOT, 2s complement subtraction
+- Circuit: a - b using the identity a - b = a + (~b) + 1
+- Ports: `a[3:0], b[3:0], diff[3:0], borrow`
+- Logic: `assign {borrow, diff} = a + (~b) + 4'b0001;`
+- Theory: explain 2s complement visually — draw the number circle
+- Testbench: 5-3=2, 3-5=underflow (borrow=1), 7-7=0
 
 **L5 — Portfolio: 8-bit ALU** (Tier 5)
-- Spec: 4 operations selected by `op[1:0]`: ADD, SUB, AND, OR
-- Output: `result[7:0]`, `zero` flag (result === 0), `overflow` flag
-- This is a real interview question — say so explicitly in theory
+- Spec: 4 operations selected by `op[1:0]`: ADD(00), SUB(01), AND(10), OR(11)
+- Ports: `a[7:0], b[7:0], op[1:0], result[7:0], zero, overflow`
+- `zero` flag: result === 8'h00
+- `overflow` flag: signed overflow occurred
+- This is a real CPU interview question — say so explicitly in theory
+- Certification: add at the end of tasks: `'🎓 Portfolio piece — push this to your GitHub when complete'`
 
 ---
 
@@ -502,7 +478,7 @@ message: 'chore: mark msv2 done, advance curriculum cursor'
 
 **L3 — Sequence Detector** (Tier 4)
 - Detect pattern 1011 in serial input stream
-- Overlapping detection (after match, don’t reset fully)
+- Overlapping detection (after match, don't reset fully)
 - Harder than it looks — acknowledge this in theory
 
 **L4 — Portfolio: Combination Lock** (Tier 5)
@@ -511,6 +487,7 @@ message: 'chore: mark msv2 done, advance curriculum cursor'
 - Outputs: unlocked, error_led
 - Must have: wrong-entry penalty state (locked for 10 cycles)
 - Real-world application — say so
+- Certification: `'🎓 Digital Design certificate unlocked — complete msv3 + msv4 to claim it'`
 
 ---
 
@@ -559,6 +536,7 @@ message: 'chore: mark msv2 done, advance curriculum cursor'
 **L4 — Portfolio: I2C Controller** (Tier 5)
 - START/STOP conditions, ACK/NACK, 7-bit addressing
 - This is hard — hint should have a very detailed state diagram
+- Certification: `'🎓 Systems Engineer certificate unlocked — complete msv5 + msv6 to claim it'`
 
 ---
 
@@ -584,8 +562,7 @@ message: 'chore: mark msv2 done, advance curriculum cursor'
 - Support: R-type, I-type, load/store, branch instructions
 - Theory: explain the pipeline stages conceptually with a diagram
 - Hint: block diagram with module names (IF, ID, EX, MEM, WB)
-- Completing msv7 unlocks the “VLSI Architect” certificate
-- Add to last task: `'🎓 VLSI Architect certificate unlocked — you built a CPU from scratch'`
+- Certification: `'🎓 VLSI Architect certificate unlocked — you built a CPU from scratch'`
 
 ---
 
@@ -631,7 +608,7 @@ Add these as the final task in the last lesson of the trigger chapter:
 - Never use the words "easy", "simple", "trivial", "just", "obviously"
 - When a concept is genuinely hard, say so: "This one takes a few tries — that's completely normal"
 - Portfolio lessons feel like real work: "This is a real interview question at hardware companies"
-- Every chapter ends with forward momentum: "In the next chapter, you’ll use this to build X"
+- Every chapter ends with forward momentum: "In the next chapter, you'll use this to build X"
 
 ---
 
