@@ -2,7 +2,7 @@
 // app.js — All About VLSI Main Application
 // ═══════════════════════════════════════════════════════
 
-// ── STATE ────────────────────────────────────────────────────────────────────
+// ── STATE ────────────────────────────────────────────────────────────────────────────
 const STATE = {
   page:           'landing',   // 'landing' | 'lesson'
   currentModule:  null,
@@ -13,7 +13,7 @@ const STATE = {
   hintVisible:    false,
 };
 
-// ── LOCAL STORAGE HELPERS ────────────────────────────────────────────────────
+// ── LOCAL STORAGE HELPERS ────────────────────────────────────────────────────────────────────────
 const LS_CODE = 'aavlsi_code_';   // prefix for saved editor content
 
 function lsGet(key) {
@@ -23,16 +23,20 @@ function lsSet(key, val) {
   try { localStorage.setItem(LS_CODE + key, val); } catch(e) { /* storage full */ }
 }
 
-// ── DOM REFS ─────────────────────────────────────────────────────────────────
+// ── DOM REFS ──────────────────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 
-// ── INIT ─────────────────────────────────────────────────────────────────────
+// ── COURSE HELPERS ────────────────────────────────────────────────────────────────────────────
+function getCourseForModule(modId) {
+  return (window.COURSES || []).find(c => c.modules.includes(modId));
+}
+
+// ── INIT ────────────────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   buildLandingPage();
   Waveform.init($('wave-canvas'), $('wave-scroll'));
   Waveform.clear();
 
-  // editor events
   $('editor-design').addEventListener('input', () => onEditorInput('design'));
   $('editor-tb').addEventListener('input',     () => onEditorInput('tb'));
   $('editor-design').addEventListener('keydown', tabKey);
@@ -43,15 +47,75 @@ window.addEventListener('DOMContentLoaded', () => {
   fetchUvmInfo();
 });
 
-// ── LANDING PAGE ─────────────────────────────────────────────────────────────
+// ── LANDING PAGE ────────────────────────────────────────────────────────────────────────────
 function buildLandingPage() {
   const grid = $('modules-grid');
   grid.innerHTML = '';
 
-  CURRICULUM.forEach(mod => {
-    const done   = mod.lessons.filter(l => STATE.completed.has(l.id)).length;
-    const total  = mod.lessons.length;
-    const pct    = total ? Math.round((done / total) * 100) : 0;
+  const courses = window.COURSES || [];
+  const courseModuleIds = new Set(courses.flatMap(c => c.modules));
+
+  // Render master courses first (full-width cards)
+  courses.forEach(course => {
+    const courseModules = course.modules
+      .map(id => CURRICULUM.find(m => m.id === id))
+      .filter(Boolean);
+
+    const totalLessons = courseModules.reduce((s, m) => s + m.lessons.length, 0);
+    const doneLessons  = courseModules.reduce((s, m) =>
+      s + m.lessons.filter(l => STATE.completed.has(l.id)).length, 0);
+    const pct = totalLessons ? Math.round((doneLessons / totalLessons) * 100) : 0;
+
+    const card = document.createElement('div');
+    card.className = 'course-card';
+    card.innerHTML = `
+      <div class="course-header">
+        <div class="course-icon">${course.icon}</div>
+        <div class="course-info">
+          <div class="course-title">${course.title}</div>
+          <div class="course-desc">${course.description}</div>
+          <div class="course-meta">
+            <span>${totalLessons} lessons</span>
+            <span class="meta-dot">·</span>
+            <span>${courseModules.length} chapters</span>
+            <span class="meta-dot">·</span>
+            <span class="${pct > 0 ? 'meta-progress' : ''}">${pct > 0 ? pct + '% complete' : 'Not started'}</span>
+          </div>
+        </div>
+      </div>
+      <div class="course-progress-bar">
+        <div class="course-progress-fill" style="width:${pct}%"></div>
+      </div>
+      <div class="course-chapters">
+        ${courseModules.map((mod, i) => {
+          const done  = mod.lessons.filter(l => STATE.completed.has(l.id)).length;
+          const total = mod.lessons.length;
+          return `<button class="chapter-chip ${mod.level}" onclick="openModule('${mod.id}')">
+            <span class="chapter-num">${String(i + 1).padStart(2, '0')}</span>
+            <span class="chapter-icon">${mod.icon}</span>
+            <span class="chapter-name">${mod.title}</span>
+            <span class="chapter-count">${done}/${total}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    `;
+    grid.appendChild(card);
+  });
+
+  // Render standalone modules (not part of any course)
+  const standaloneModules = CURRICULUM.filter(m => !courseModuleIds.has(m.id));
+
+  if (standaloneModules.length && courses.length) {
+    const divider = document.createElement('div');
+    divider.className = 'section-divider';
+    divider.textContent = 'Advanced Modules';
+    grid.appendChild(divider);
+  }
+
+  standaloneModules.forEach(mod => {
+    const done  = mod.lessons.filter(l => STATE.completed.has(l.id)).length;
+    const total = mod.lessons.length;
+    const pct   = total ? Math.round((done / total) * 100) : 0;
 
     const card = document.createElement('div');
     card.className = `module-card ${mod.level}`;
@@ -65,19 +129,18 @@ function buildLandingPage() {
       <div class="card-progress">
         <div class="card-progress-fill" style="width:${pct}%"></div>
       </div>
-      <div class="card-start-hint">${done}/${total} complete${pct>0?' · '+pct+'%':''}</div>
+      <div class="card-start-hint">${done}/${total} complete${pct > 0 ? ' · ' + pct + '%' : ''}</div>
     `;
     card.addEventListener('click', () => openModule(mod.id));
     grid.appendChild(card);
   });
 }
 
-// ── PAGE NAVIGATION ───────────────────────────────────────────────────────────
+// ── PAGE NAVIGATION ───────────────────────────────────────────────────────────────────────────
 function openModule(modId) {
   const mod = CURRICULUM.find(m => m.id === modId);
   if (!mod) return;
-  const firstLesson = mod.lessons[0];
-  openLesson(modId, firstLesson.id);
+  openLesson(modId, mod.lessons[0].id);
 }
 
 function openLesson(modId, lessonId) {
@@ -104,17 +167,16 @@ function openLesson(modId, lessonId) {
   $('result-banner').className = 'result-banner';
   $('result-banner').textContent = '';
 
-  // On mobile: show Theory first so user reads the explanation before coding
   if (window.innerWidth <= 768) mobTab('theory');
 }
 
 function goHome() {
   $('lesson-page').style.display  = 'none';
   $('landing-page').style.display = 'flex';
-  buildLandingPage(); // refresh progress
+  buildLandingPage();
 }
 
-// ── MOBILE TAB SWITCHING ──────────────────────────────────────────────────────
+// ── MOBILE TAB SWITCHING ──────────────────────────────────────────────────────────────────────────
 function mobTab(tab) {
   if (window.innerWidth > 768) return;
   ['lesson-sidebar', 'theory-pane', 'editor-pane', 'output-pane'].forEach(cls => {
@@ -133,9 +195,26 @@ function mobTab(tab) {
   }
 }
 
-// ── SIDEBAR ───────────────────────────────────────────────────────────────────
+// ── SIDEBAR ───────────────────────────────────────────────────────────────────────────────────
 function renderSidebar(mod, activeLessonId) {
-  $('sidebar-mod-title').textContent = `${mod.icon} ${mod.title}`;
+  const course = getCourseForModule(mod.id);
+
+  if (course) {
+    const chapterIdx = course.modules.indexOf(mod.id) + 1;
+    $('sidebar-mod-title').textContent = `${course.icon} ${course.title}`;
+    let chEl = $('sidebar-chapter-info');
+    if (!chEl) {
+      chEl = document.createElement('div');
+      chEl.id = 'sidebar-chapter-info';
+      chEl.className = 'sidebar-chapter-info';
+      $('sidebar-module-header').appendChild(chEl);
+    }
+    chEl.textContent = `Ch ${chapterIdx}/${course.modules.length} · ${mod.icon} ${mod.title}`;
+  } else {
+    $('sidebar-mod-title').textContent = `${mod.icon} ${mod.title}`;
+    const chEl = $('sidebar-chapter-info');
+    if (chEl) chEl.remove();
+  }
 
   const list = $('sidebar-lessons');
   list.innerHTML = '';
@@ -154,7 +233,7 @@ function renderSidebar(mod, activeLessonId) {
     list.appendChild(item);
   });
 
-  // progress footer
+  // Progress footer
   const done  = mod.lessons.filter(l => STATE.completed.has(l.id)).length;
   const total = mod.lessons.length;
   const pct   = total ? Math.round((done / total) * 100) : 0;
@@ -163,11 +242,10 @@ function renderSidebar(mod, activeLessonId) {
   $('sidebar-prog-fill').style.width  = pct + '%';
 }
 
-// ── THEORY PANE ───────────────────────────────────────────────────────────────
+// ── THEORY PANE ────────────────────────────────────────────────────────────────────────────────
 function renderTheory(lesson) {
   $('theory-content').innerHTML = lesson.theory;
 
-  // tasks
   const tasksEl = document.createElement('div');
   tasksEl.className = 'tasks-box';
   tasksEl.innerHTML = `<div class="tasks-title">✏ Your Tasks</div>` +
@@ -178,7 +256,6 @@ function renderTheory(lesson) {
       </div>`).join('');
   $('theory-content').appendChild(tasksEl);
 
-  // hint — HTML-escape code content and wrap in <pre> to preserve whitespace
   const escapedHint = lesson.hint
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const hintWrap = document.createElement('div');
@@ -189,7 +266,6 @@ function renderTheory(lesson) {
   $('theory-content').appendChild(hintWrap);
   STATE.hintVisible = false;
 
-  // On mobile: inject a "💻 Code →" shortcut into the theory pane header
   if (window.innerWidth <= 768) {
     const hdr = document.querySelector('.theory-pane .pane-header');
     if (hdr && !hdr.querySelector('.mob-code-shortcut')) {
@@ -208,12 +284,11 @@ function toggleHint() {
   if (box) box.classList.toggle('show', STATE.hintVisible);
 }
 
-// ── EDITORS ───────────────────────────────────────────────────────────────────
+// ── EDITORS ───────────────────────────────────────────────────────────────────────────────────
 function loadEditors(modId, lesson) {
   const designKey = `${modId}-${lesson.id}-design`;
   const tbKey     = `${modId}-${lesson.id}-tb`;
 
-  // Priority: localStorage (persists across reloads) → in-memory cache → lesson default
   STATE.editorCache[designKey] = lsGet(designKey) || STATE.editorCache[designKey] || lesson.design;
   STATE.editorCache[tbKey]     = lsGet(tbKey)     || STATE.editorCache[tbKey]     || lesson.testbench;
 
@@ -223,7 +298,6 @@ function loadEditors(modId, lesson) {
   syncLineNums('design');
   syncLineNums('tb');
 
-  // show design tab by default
   switchEditorTab('design');
 }
 
@@ -243,7 +317,7 @@ function onEditorInput(tab) {
   if (!lesson) return;
   const key = `${STATE.currentModule}-${STATE.currentLesson}-${tab}`;
   STATE.editorCache[key] = $(`editor-${tab}`).value;
-  lsSet(key, STATE.editorCache[key]);   // persist across reloads
+  lsSet(key, STATE.editorCache[key]);
   syncLineNums(tab);
 }
 
@@ -252,8 +326,6 @@ function syncLineNums(tab) {
   const ln  = $(`lnum-${tab}`);
   const n   = ta.value.split('\n').length;
   ln.innerHTML = Array.from({length: n}, (_, i) => `<span>${i+1}</span>`).join('');
-
-  // sync scroll
   ta.addEventListener('scroll', () => { ln.scrollTop = ta.scrollTop; }, { once: false });
 }
 
@@ -267,7 +339,7 @@ function tabKey(e) {
   onEditorInput(ta.id === 'editor-design' ? 'design' : 'tb');
 }
 
-// ── NAVIGATION ───────────────────────────────────────────────────────────────
+// ── NAVIGATION ───────────────────────────────────────────────────────────────────────────
 function renderProgressDots(mod, activeLessonId) {
   const dots = $('progress-dots');
   dots.innerHTML = '';
@@ -282,31 +354,69 @@ function renderProgressDots(mod, activeLessonId) {
 }
 
 function updateNavButtons() {
-  const mod     = CURRICULUM.find(m => m.id === STATE.currentModule);
+  const mod = CURRICULUM.find(m => m.id === STATE.currentModule);
   if (!mod) return;
-  const lessons = mod.lessons;
-  const idx     = lessons.findIndex(l => l.id === STATE.currentLesson);
+  const idx = mod.lessons.findIndex(l => l.id === STATE.currentLesson);
 
-  $('btn-prev').disabled = idx <= 0;
-  $('btn-next').disabled = idx >= lessons.length - 1;
-  $('btn-next-lesson').disabled = idx >= lessons.length - 1;
+  let hasNext = idx < mod.lessons.length - 1;
+  let hasPrev = idx > 0;
+
+  // Cross-chapter navigation within a course
+  const course = getCourseForModule(mod.id);
+  if (course) {
+    const modIdx = course.modules.indexOf(mod.id);
+    if (!hasNext) hasNext = modIdx < course.modules.length - 1;
+    if (!hasPrev) hasPrev = modIdx > 0;
+  }
+
+  $('btn-prev').disabled = !hasPrev;
+  $('btn-next').disabled = !hasNext;
+  $('btn-next-lesson').disabled = !hasNext;
 }
 
 function navPrev() {
-  const mod     = CURRICULUM.find(m => m.id === STATE.currentModule);
+  const mod = CURRICULUM.find(m => m.id === STATE.currentModule);
   if (!mod) return;
-  const idx     = mod.lessons.findIndex(l => l.id === STATE.currentLesson);
-  if (idx > 0) openLesson(mod.id, mod.lessons[idx - 1].id);
+  const idx = mod.lessons.findIndex(l => l.id === STATE.currentLesson);
+
+  if (idx > 0) {
+    openLesson(mod.id, mod.lessons[idx - 1].id);
+    return;
+  }
+
+  // First lesson in this chapter — go to last lesson of previous chapter in course
+  const course = getCourseForModule(mod.id);
+  if (course) {
+    const modIdx = course.modules.indexOf(mod.id);
+    if (modIdx > 0) {
+      const prevMod = CURRICULUM.find(m => m.id === course.modules[modIdx - 1]);
+      if (prevMod) openLesson(prevMod.id, prevMod.lessons[prevMod.lessons.length - 1].id);
+    }
+  }
 }
 
 function navNext() {
-  const mod     = CURRICULUM.find(m => m.id === STATE.currentModule);
+  const mod = CURRICULUM.find(m => m.id === STATE.currentModule);
   if (!mod) return;
-  const idx     = mod.lessons.findIndex(l => l.id === STATE.currentLesson);
-  if (idx < mod.lessons.length - 1) openLesson(mod.id, mod.lessons[idx + 1].id);
+  const idx = mod.lessons.findIndex(l => l.id === STATE.currentLesson);
+
+  if (idx < mod.lessons.length - 1) {
+    openLesson(mod.id, mod.lessons[idx + 1].id);
+    return;
+  }
+
+  // Last lesson in this chapter — go to first lesson of next chapter in course
+  const course = getCourseForModule(mod.id);
+  if (course) {
+    const modIdx = course.modules.indexOf(mod.id);
+    if (modIdx < course.modules.length - 1) {
+      const nextMod = CURRICULUM.find(m => m.id === course.modules[modIdx + 1]);
+      if (nextMod) openLesson(nextMod.id, nextMod.lessons[0].id);
+    }
+  }
 }
 
-// ── SIMULATION ────────────────────────────────────────────────────────────────
+// ── SIMULATION ────────────────────────────────────────────────────────────────────────────
 async function runSimulation() {
   const mod    = CURRICULUM.find(m => m.id === STATE.currentModule);
   const lesson = mod?.lessons.find(l => l.id === STATE.currentLesson);
@@ -319,14 +429,12 @@ async function runSimulation() {
   const designCode = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-design`] || lesson.design;
   const tbCode     = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-tb`]     || lesson.testbench;
 
-  // collect verilator flags from GUI panel (or empty for iverilog)
   const extraFlags = (tool === 'verilator') ? getVerilatorFlags() : [];
 
   const useUvm  = tool === 'verilator' && $('vf-uvm') && $('vf-uvm').checked;
   const uvmTest = useUvm ? ($('vf-uvm-test').value.trim()) : '';
   const uvmVerb = useUvm ? ($('vf-uvm-verb').value || 'UVM_MEDIUM') : 'UVM_MEDIUM';
 
-  // UI: running state
   const runLabel = useUvm ? '⏳ Compiling UVM…' : 'Running...';
   btn.disabled = true;
   btn.innerHTML = `<svg viewBox="0 0 10 10" style="fill:var(--bg)"><polygon points="1,0 10,5 1,10"/></svg> ${runLabel}`;
@@ -369,7 +477,6 @@ async function runSimulation() {
       addConsoleLine('Compilation error:', 'o-err');
       data.output.split('\n').forEach(l => {
         if (!l.trim()) return;
-        // distinguish warnings vs errors for Verilator output
         const cls = (l.includes('%Warning') && !l.includes('%Error')) ? 'o-dim' : 'o-err';
         addConsoleLine(l, cls);
       });
@@ -399,7 +506,6 @@ async function runSimulation() {
       pill.textContent = 'passed';
       markTask(1, true);
 
-      // check expected outputs
       const allPass = lesson.expected.every(ex => data.output.includes(ex));
       if (allPass) {
         markTask(2, true);
@@ -411,10 +517,8 @@ async function runSimulation() {
         showToast('✓ Simulation complete', 'info');
       }
 
-      // auto-switch to output on mobile
       if (window.innerWidth <= 768) mobTab('output');
 
-      // render waveform
       if (data.vcd && data.vcd.trim()) {
         const parsed = Waveform.parseVCD(data.vcd);
         Waveform.render(parsed);
@@ -436,7 +540,7 @@ async function runSimulation() {
   btn.innerHTML = `<svg viewBox="0 0 10 10" style="fill:var(--bg)"><polygon points="1,0 10,5 1,10"/></svg> Run`;
 }
 
-// ── CONSOLE ───────────────────────────────────────────────────────────────────
+// ── CONSOLE ───────────────────────────────────────────────────────────────────────────────────
 function clearConsole() {
   const out = $('console-output');
   out.innerHTML = '';
@@ -453,7 +557,7 @@ function addConsoleLine(text, cls) {
   out.appendChild(document.createTextNode('\n'));
 }
 
-// ── TASKS & COMPLETION ────────────────────────────────────────────────────────
+// ── TASKS & COMPLETION ──────────────────────────────────────────────────────────────────────────
 function markTask(idx, done) {
   const el  = document.getElementById(`task-${idx}`);
   if (!el) return;
@@ -465,7 +569,6 @@ function markTask(idx, done) {
 function markComplete(lessonId) {
   STATE.completed.add(lessonId);
   localStorage.setItem('aavlsi_done', JSON.stringify([...STATE.completed]));
-  // refresh sidebar dots
   const mod = CURRICULUM.find(m => m.id === STATE.currentModule);
   if (mod) {
     renderSidebar(mod, STATE.currentLesson);
@@ -473,7 +576,7 @@ function markComplete(lessonId) {
   }
 }
 
-// ── BANNER / TOAST ────────────────────────────────────────────────────────────
+// ── BANNER / TOAST ──────────────────────────────────────────────────────────────────────────────
 function showBanner(type, msg) {
   const b = $('result-banner');
   b.className   = `result-banner ${type}`;
@@ -488,7 +591,7 @@ function showToast(msg, type = 'pass') {
   t._timer = setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// ── WAVEFORM CONTROLS ─────────────────────────────────────────────────────────
+// ── WAVEFORM CONTROLS ───────────────────────────────────────────────────────────────────────────
 function waveZoomIn()  { Waveform.zoomIn(); }
 function waveZoomOut() { Waveform.zoomOut(); }
 function waveFit()     { Waveform.zoomFit(); }
@@ -500,7 +603,7 @@ function toggleWaveExpand() {
   Waveform.draw();
 }
 
-// ── SIM SELECT ───────────────────────────────────────────────────────────────
+// ── SIM SELECT ──────────────────────────────────────────────────────────────────────────────
 function onSimSelectChange() {
   const isVeri = $('sim-select').value === 'verilator';
   const btn = $('veri-opts-btn');
@@ -513,7 +616,7 @@ function onSimSelectChange() {
   }
 }
 
-// ── VERILATOR OPTIONS PANEL ───────────────────────────────────────────────────
+// ── VERILATOR OPTIONS PANEL ─────────────────────────────────────────────────────────────────────────
 let _veriPanelOpen = false;
 
 function toggleVerilatorPanel() {
@@ -526,7 +629,7 @@ function openVerilatorPanel() {
   $('veri-backdrop').style.display = 'block';
   $('veri-opts-btn').classList.add('active');
   updateFlagsPreview();
-  fetchUvmInfo();   // refresh UVM availability every time the panel opens
+  fetchUvmInfo();
 }
 
 function closeVerilatorPanel() {
@@ -537,35 +640,27 @@ function closeVerilatorPanel() {
 }
 
 function resetVerilatorOptions() {
-  // Timing: back to --no-timing
   $('vf-no-timing').checked = true;
   $('vf-timing').checked    = false;
-  // Warnings: all off
   ['vf-Wall','vf-Wnofatal','vf-WnoWIDTH','vf-WnoUNUSED',
    'vf-WnoUNDRIVEN','vf-WnoCASE','vf-WnoUNSIGNED'].forEach(id => {
     $(id).checked = false;
   });
-  // Optimization: default
   $('vf-opt').value = '';
-  // Features: all off
   $('vf-assert').checked    = false;
   $('vf-coverage').checked  = false;
   $('vf-lint-only').checked = false;
-  // UVM: off
   $('vf-uvm').checked         = false;
   $('vf-uvm-test').value      = '';
   $('vf-uvm-verb').value      = 'UVM_MEDIUM';
   $('uvm-subopts').style.display = 'none';
-  // Extra: clear
   $('vf-extra').value = '';
   updateFlagsPreview();
 }
 
-// ── UVM TOGGLE ────────────────────────────────────────────────────────────────
 function onUvmToggle() {
   const on = $('vf-uvm').checked;
   $('uvm-subopts').style.display = on ? 'flex' : 'none';
-  // UVM requires --timing; lock the radio when UVM is on
   if (on) {
     $('vf-timing').checked    = true;
     $('vf-no-timing').checked = false;
@@ -578,15 +673,11 @@ function onUvmToggle() {
   updateFlagsPreview();
 }
 
-/** Read all panel controls and return an array of Verilator flag strings. */
 function getVerilatorFlags() {
   const flags = [];
-
-  // Timing
   const timingEl = document.querySelector('input[name="veri-timing"]:checked');
   if (timingEl) flags.push(timingEl.value);
 
-  // Warnings
   const warnMap = {
     'vf-Wall':       '--Wall',
     'vf-Wnofatal':   '--Wno-fatal',
@@ -600,28 +691,23 @@ function getVerilatorFlags() {
     if ($(id) && $(id).checked) flags.push(flag);
   }
 
-  // Optimization
   const opt = $('vf-opt') && $('vf-opt').value;
   if (opt) flags.push(opt);
 
-  // Features
   if ($('vf-assert')   && $('vf-assert').checked)   flags.push('--assert');
   if ($('vf-coverage') && $('vf-coverage').checked) flags.push('--coverage');
   if ($('vf-lint-only')&& $('vf-lint-only').checked)flags.push('--lint-only');
 
-  // Extra free-form flags
   const extra = $('vf-extra') ? $('vf-extra').value.trim() : '';
   if (extra) flags.push(...extra.split(/\s+/).filter(f => f.startsWith('-')));
 
   return flags;
 }
 
-/** Live-update the flags preview bar inside the panel. */
 function updateFlagsPreview() {
   const preview = $('veri-flags-preview');
   if (!preview) return;
   const flags = getVerilatorFlags();
-  // Always show the fixed backend flags too for full transparency
   const allFlags = ['--cc','--exe','--build','--sv','--trace', ...flags];
   if (allFlags.length > 3) {
     preview.textContent = 'verilator ' + allFlags.join(' ');
@@ -632,7 +718,6 @@ function updateFlagsPreview() {
   }
 }
 
-// Wire up live preview updates whenever any option changes
 document.addEventListener('DOMContentLoaded', () => {
   const panelInputs = [
     'vf-no-timing','vf-timing','vf-Wall','vf-Wnofatal',
@@ -648,7 +733,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ── VERILATOR VERSION BADGE ───────────────────────────────────────────────────
+// ── VERILATOR VERSION BADGE ─────────────────────────────────────────────────────────────────────────
 async function fetchVerilatorInfo() {
   try {
     const r = await fetch('/verilator-info');
@@ -671,7 +756,7 @@ async function fetchVerilatorInfo() {
   } catch (_) { /* ignore */ }
 }
 
-// ── UVM AVAILABILITY CHECK ────────────────────────────────────────────────────
+// ── UVM AVAILABILITY CHECK ────────────────────────────────────────────────────────────────────────
 async function fetchUvmInfo() {
   try {
     const r = await fetch('/uvm-info');
@@ -682,7 +767,6 @@ async function fetchUvmInfo() {
     const uvmCheckbox = $('vf-uvm');
     if (!unavailMsg) return;
     if (!info.available) {
-      // UVM library not on server — show warning, disable checkbox
       unavailMsg.style.display = 'block';
       unavailMsg.textContent   = `⚠ UVM library not found — ${info.reason}`;
       if (uvmCheckbox)  uvmCheckbox.disabled = true;
@@ -692,14 +776,13 @@ async function fetchUvmInfo() {
       if (uvmCheckbox) uvmCheckbox.disabled = false;
       if (toggleRow)   toggleRow.style.opacity = '';
     }
-  } catch (_) { /* ignore — server may not have the endpoint yet */ }
+  } catch (_) { /* ignore */ }
 }
 
-// ── FEEDBACK ─────────────────────────────────────────────────────────────────
+// ── FEEDBACK ─────────────────────────────────────────────────────────────────────────────────
 let _fbRating = 0;
 
 function openFeedback() {
-  // label which lesson the feedback is about
   const mod    = CURRICULUM.find(m => m.id === STATE.currentModule);
   const lesson = mod?.lessons.find(l => l.id === STATE.currentLesson);
   const label  = lesson ? `${mod.title} › ${lesson.title}` : '';
@@ -750,7 +833,7 @@ async function submitFeedback() {
   closeFeedback();
 }
 
-// ── SERVER PING ───────────────────────────────────────────────────────────────
+// ── SERVER PING ─────────────────────────────────────────────────────────────────────────────────
 async function pingServer() {
   try {
     const r = await fetch('/simulate', {
