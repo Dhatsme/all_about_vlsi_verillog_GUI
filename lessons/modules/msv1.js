@@ -4,22 +4,30 @@
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
   id: 'msv1',
   title: 'Getting Started with SystemVerilog',
-  icon: '🚦',
+  icon: '🚆',
   level: 'beginner',
   lessons: [
 
-    // ─────────────────────────────────────────────────────────────────────
-    // L1 — User types rain_alarm from scratch
-    // ─────────────────────────────────────────────────────────────────────
+    // ─── L1 — rain_alarm ──────────────────────────────────────────────────────────
     {
       id: 'msv1l1',
       title: 'L1 — Your First Module',
       theory: `
 <h2>What is SystemVerilog?</h2>
-<p>SystemVerilog describes <strong>hardware</strong> — not programs that run step by step, but circuits that exist physically and react to signals instantly. Everything you write becomes gates and wires on a real chip.</p>
+<p>SystemVerilog describes <strong>hardware</strong> — not programs that run step by step, but circuits that exist physically and react to signals instantly. Everything you write becomes gates and wires on a real chip. When you press Run, Verilator compiles your description into a C++ simulation of those gates.</p>
 
-<h2>The module — your basic building block</h2>
-<p>Every circuit is a <strong>module</strong>. Think of it like a chip you'd buy from an electronics store: it has <em>input pins</em>, <em>output pins</em>, and logic inside connecting them.</p>
+<div class="flow-diagram">
+  <div class="flow-step">SystemVerilog<small>your description</small></div>
+  <span class="flow-arrow">→</span>
+  <div class="flow-step">Synthesis tool<small>maps to gates</small></div>
+  <span class="flow-arrow">→</span>
+  <div class="flow-step">Silicon<small>actual chip</small></div>
+</div>
+
+<p>This is fundamentally different from Python or C. In software, line 2 runs after line 1. In hardware, <em>all gates operate simultaneously</em> — every gate sees its input and produces its output at the same time, continuously.</p>
+
+<h2>The module — Your Basic Building Block</h2>
+<p>Every circuit is a <strong>module</strong>. Think of it like a chip you'd buy from an electronics store: it has <em>input pins</em>, <em>output pins</em>, and logic inside connecting them. On a real chip, the module boundary becomes the die boundary or a well-defined functional block.</p>
 
 <pre class="code-block">module  NAME  ( port_list );
 
@@ -28,45 +36,47 @@
 endmodule</pre>
 
 <table class="truth-table">
-  <tr><th>Keyword</th><th>What it does</th></tr>
-  <tr><td><code>module</code></td><td>Opens a new circuit block</td></tr>
-  <tr><td><code>NAME</code></td><td>You choose — should describe what the circuit does</td></tr>
-  <tr><td><code>( port_list );</code></td><td>All the pins — inputs and outputs listed here</td></tr>
-  <tr><td><code>endmodule</code></td><td>Closes the block — every module must have this</td></tr>
+  <tr><th>Keyword</th><th>What it does</th><th>Analogy</th></tr>
+  <tr><td><code>module</code></td><td>Opens a new circuit block</td><td>"Start of chip design"</td></tr>
+  <tr><td><code>NAME</code></td><td>You choose — describes what the circuit does</td><td>Part number on a chip</td></tr>
+  <tr><td><code>( port_list );</code></td><td>All the pins listed here</td><td>Pin diagram on a datasheet</td></tr>
+  <tr><td><code>endmodule</code></td><td>Closes the block — every module must have this</td><td>End of chip boundary</td></tr>
 </table>
 
-<h2>Declaring ports (pins)</h2>
-<p>Each port needs three words: <strong>direction</strong> &rarr; <strong>type</strong> &rarr; <strong>name</strong></p>
+<h2>Declaring Ports (Pins)</h2>
+<p>Each port needs three things: <strong>direction</strong> &rarr; <strong>type</strong> &rarr; <strong>name</strong></p>
 <pre class="code-block">  input  logic raining,     // ← comma: more ports follow
   input  logic window_open, // ← comma
   output logic alert        // ← NO comma: this is the LAST port</pre>
 
 <table class="truth-table">
-  <tr><th>Word</th><th>Meaning</th></tr>
-  <tr><td><code>input</code></td><td>Signal comes INTO this module from outside</td></tr>
-  <tr><td><code>output</code></td><td>Signal goes OUT of this module</td></tr>
-  <tr><td><code>logic</code></td><td>Universal signal type in SystemVerilog — use it for every signal</td></tr>
+  <tr><th>Word</th><th>Meaning</th><th>Real-world analogy</th></tr>
+  <tr><td><code>input</code></td><td>Signal comes INTO this module</td><td>Sensor connected to chip pin</td></tr>
+  <tr><td><code>output</code></td><td>Signal goes OUT of this module</td><td>LED or buzzer driven by chip</td></tr>
+  <tr><td><code>logic</code></td><td>Universal signal type in SystemVerilog</td><td>A wire that carries 0 or 1</td></tr>
 </table>
 
-<p><strong>Comma rule:</strong> every port gets a comma <em>except the very last one</em>. After all ports, write <code>);</code> to close the port list.</p>
+<p><strong>Comma rule:</strong> every port gets a comma <em>except the very last one</em>. After all ports, write <code>);</code> to close the port list. This is the most common syntax error for beginners — a missing or extra comma.</p>
 
-<h2>always_comb — combinational logic</h2>
-<p>A block that describes logic with no clock. Every time an input changes, the output re-evaluates instantly — just like real gates.</p>
+<h2>always_comb — Combinational Logic</h2>
+<p>A block that describes logic with no clock or memory. Every time an input changes, the output re-evaluates instantly — just like real gates. The simulator reruns this block whenever any input signal changes.</p>
 <pre class="code-block">  always_comb begin
     alert = raining &amp; window_open;  // &amp; = AND gate
   end</pre>
 
+<p>You can also use <code>assign</code> for single-line combinational expressions: <code>assign alert = raining &amp; window_open;</code> — both are equivalent for simple logic.</p>
+
 <h2>Operators</h2>
 <table class="truth-table">
-  <tr><th>Symbol</th><th>Gate</th><th>Meaning</th></tr>
-  <tr><td><code>&amp;</code></td><td>AND</td><td>1 only when BOTH inputs are 1</td></tr>
-  <tr><td><code>|</code></td><td>OR</td><td>1 when AT LEAST ONE input is 1</td></tr>
-  <tr><td><code>~</code></td><td>NOT</td><td>Inverts the bit: 0&rarr;1, 1&rarr;0</td></tr>
-  <tr><td><code>^</code></td><td>XOR</td><td>1 when inputs are DIFFERENT</td></tr>
+  <tr><th>Symbol</th><th>Gate</th><th>Meaning</th><th>Example</th></tr>
+  <tr><td><code>&amp;</code></td><td>AND</td><td>1 only when BOTH inputs are 1</td><td>Lock requires card AND PIN</td></tr>
+  <tr><td><code>|</code></td><td>OR</td><td>1 when AT LEAST ONE input is 1</td><td>Alarm if door OR window opens</td></tr>
+  <tr><td><code>~</code></td><td>NOT</td><td>Inverts: 0&rarr;1, 1&rarr;0</td><td>Active when button NOT pressed</td></tr>
+  <tr><td><code>^</code></td><td>XOR</td><td>1 when inputs are DIFFERENT</td><td>Parity bit, sum in adder</td></tr>
 </table>
 
-<h2>What you are building — a rain alarm</h2>
-<p>Alert fires only when it is raining <strong>AND</strong> the window is open:</p>
+<h2>What You Are Building — A Rain Alarm</h2>
+<p>Alert fires only when it is raining <strong>AND</strong> the window is open. This is a real IoT circuit — connect two moisture/reed sensors and a buzzer:</p>
 <table class="truth-table">
   <tr><th>raining</th><th>window_open</th><th>alert</th><th>Reason</th></tr>
   <tr><td>0</td><td>0</td><td>0</td><td>All clear</td></tr>
@@ -74,6 +84,15 @@ endmodule</pre>
   <tr><td>0</td><td>1</td><td>0</td><td>Window open, dry — no problem</td></tr>
   <tr><td>1</td><td>1</td><td>1</td><td>Rain + open window = ALERT!</td></tr>
 </table>
+
+<h2>Common Mistakes to Avoid</h2>
+<ul>
+  <li><strong>Missing comma</strong> after a non-last port — syntax error</li>
+  <li><strong>Extra comma</strong> after the last port — syntax error</li>
+  <li><strong>Missing semicolon</strong> after <code>);</code> or <code>begin</code> lines</li>
+  <li><strong>Forgetting endmodule</strong> — the compiler will report a mysterious error at end-of-file</li>
+  <li><strong>Using = instead of &lt;= in always_ff</strong> (not relevant here, but remember for Module 2)</li>
+</ul>
 
 <p><strong>Ready?</strong> Switch to the Code tab and type every line from memory. Stuck? Tap 💡 Show Hint — it has a fully annotated reference.</p>
       `,
@@ -164,25 +183,32 @@ endmodule`,
       ]
     },
 
-    // ─────────────────────────────────────────────────────────────────────
-    // L2 — Door chime: introduces ~ (NOT operator)
-    // ─────────────────────────────────────────────────────────────────────
+    // ─── L2 — Door Chime ──────────────────────────────────────────────────────
     {
       id: 'msv1l2',
       title: 'L2 — Door Chime',
       theory: `
-<h2>New operator: ~ (NOT)</h2>
-<p>NOT flips a single bit. Put <code>~</code> directly in front of a signal name — no space needed:</p>
-<pre class="code-block">~muted   // muted=0 &rarr; ~muted=1 (sound ON)
-         // muted=1 &rarr; ~muted=0 (sound OFF)</pre>
+<h2>New Operator: ~ (NOT / Inverter)</h2>
+<p>NOT is the simplest gate — one input, one output. It flips the bit: 0 becomes 1, 1 becomes 0. Put <code>~</code> directly in front of a signal name — no space needed:</p>
+<pre class="code-block">~muted   // muted=0 → ~muted=1 (sound CAN play)
+         // muted=1 → ~muted=0 (sound is OFF)</pre>
 
-<h2>Combining AND and NOT in one expression</h2>
+<h2>Reading NOT in English</h2>
+<p>When you see <code>~muted</code>, say aloud: <em>"not muted"</em>. This is how hardware engineers think about inverted signals. Active-low signals in real chips use this convention — a signal named <code>n_reset</code> or <code>reset_n</code> is active when LOW (0), meaning the device resets when the signal is 0.</p>
+
+<h2>Combining AND and NOT</h2>
 <pre class="code-block">chime = button &amp; ~muted;
-//             &uarr;    &uarr;
-//             AND  NOT muted</pre>
-<p>Read it as: &ldquo;chime is 1 when button is pressed AND the sound is not muted.&rdquo;</p>
+//             ↑    ↑
+//             AND  NOT muted
+// Read: "chime rings when button pressed AND sound is not muted"</pre>
 
-<h2>What you are building — a smart doorbell</h2>
+<h2>De Morgan’s Theorem — A Sneak Preview</h2>
+<p>De Morgan's theorem is the most important identity in logic design. It says:</p>
+<pre class="code-block">~(a &amp; b)  =  (~a) | (~b)   // NOT of AND = OR of NOTs
+~(a | b)  =  (~a) &amp; (~b)   // NOT of OR  = AND of NOTs</pre>
+<p>This means every gate can be implemented using only NAND or only NOR — which is how real chip foundries work. You won't use De Morgan's directly today, but recognise it when you see inverted outputs.</p>
+
+<h2>What You Are Building — A Smart Doorbell</h2>
 <table class="truth-table">
   <tr><th>button</th><th>muted</th><th>chime</th><th>Reason</th></tr>
   <tr><td>0</td><td>0</td><td>0</td><td>Nobody pressed</td></tr>
@@ -191,12 +217,13 @@ endmodule`,
   <tr><td>0</td><td>1</td><td>0</td><td>Muted, no press — silence</td></tr>
 </table>
 
-<h2>Port list rules (recap)</h2>
+<h2>Port List Rules (Recap)</h2>
 <ul>
   <li>Every port except the last gets a <strong>comma</strong></li>
   <li>After all ports write <code>);</code> — semicolon closes the header</li>
   <li>Logic goes inside <code>always_comb begin&hellip;end</code></li>
   <li><code>endmodule</code> on its own line at the very bottom</li>
+  <li>Module name must match between the <code>module</code> line and the testbench instantiation</li>
 </ul>
 
 <p><strong>Ready?</strong> Switch to the Code tab and type the full module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
@@ -282,29 +309,46 @@ endmodule`,
       ]
     },
 
-    // ─────────────────────────────────────────────────────────────────────
-    // L3 — Fan controller: three inputs, OR operator, parentheses
-    // ─────────────────────────────────────────────────────────────────────
+    // ─── L3 — Fan Controller ────────────────────────────────────────────────────
     {
       id: 'msv1l3',
       title: 'L3 — Three Inputs & Compound Logic',
       theory: `
-<h2>Three inputs, richer logic</h2>
-<p>Real circuits rarely have just two inputs. This lesson adds a third input and introduces the <strong>OR operator</strong> and grouping with parentheses.</p>
+<h2>Three Inputs, Richer Logic</h2>
+<p>Real circuits rarely have just two inputs. This lesson adds a third input and introduces the <strong>OR operator</strong> and grouping with parentheses. You also see how to express a real engineering specification as a Boolean equation.</p>
 
-<h2>The OR operator</h2>
-<pre class="code-block">a | b   // 1 when a=1 OR b=1 (or both)</pre>
+<h2>The OR Operator</h2>
+<pre class="code-block">a | b   // 1 when a=1 OR b=1 (or both)  —  the inclusive-OR gate</pre>
 
-<h2>Mixing operators — always use parentheses</h2>
-<p>Without parentheses you rely on hidden precedence rules. Parentheses make intent unambiguous and prevent bugs:</p>
+<table class="truth-table">
+  <tr><th>a</th><th>b</th><th>a | b</th><th>Meaning</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td>Neither input is 1</td></tr>
+  <tr><td>0</td><td>1</td><td>1</td><td>b is 1</td></tr>
+  <tr><td>1</td><td>0</td><td>1</td><td>a is 1</td></tr>
+  <tr><td>1</td><td>1</td><td>1</td><td>Both are 1 — still 1 (inclusive-OR)</td></tr>
+</table>
+
+<h2>Mixing Operators — Always Use Parentheses</h2>
+<p>Without parentheses you rely on operator precedence rules that differ between languages. In SystemVerilog, <code>&amp;</code> has higher precedence than <code>|</code>, just like <code>*</code> is higher than <code>+</code> in algebra. But <strong>always use parentheses</strong> to make intent unambiguous and prevent bugs:</p>
 <pre class="code-block">// Ambiguous — what does this mean?
 out = a &amp; b | c;
 
 // Clear — parentheses tell the story:
-out = (a &amp; b) | c;   // (a AND b) OR c</pre>
+out = (a &amp; b) | c;   // (a AND b) OR c
+out = a &amp; (b | c);   // a AND (b OR c)  — completely different circuit!</pre>
 
-<h2>What you are building — a smart fan controller</h2>
-<p>Turn the fan on when the room is <em>hot</em> OR when it is <em>humid and occupied</em>:</p>
+<h2>Operator Precedence (high to low)</h2>
+<table class="truth-table">
+  <tr><th>Precedence</th><th>Operator</th><th>Name</th></tr>
+  <tr><td>Highest</td><td><code>~</code></td><td>NOT (unary)</td></tr>
+  <tr><td>↓</td><td><code>&amp;</code></td><td>AND</td></tr>
+  <tr><td>↓</td><td><code>^</code></td><td>XOR</td></tr>
+  <tr><td>Lowest</td><td><code>|</code></td><td>OR</td></tr>
+</table>
+<p><em>But use parentheses anyway — they make your intent clear to future readers (and to you next week).</em></p>
+
+<h2>What You Are Building — A Smart Fan Controller</h2>
+<p>Turn the fan on when the room is <em>hot</em> OR when it is <em>humid and occupied</em> (no point wasting power if the room is empty):</p>
 <pre class="code-block">fan_on = hot | (humid &amp; occupied);</pre>
 
 <table class="truth-table">
@@ -316,6 +360,9 @@ out = (a &amp; b) | c;   // (a AND b) OR c</pre>
   <tr><td>0</td><td>1</td><td>1</td><td>1</td><td>Humid AND someone here</td></tr>
   <tr><td>1</td><td>1</td><td>1</td><td>1</td><td>All conditions met</td></tr>
 </table>
+
+<h2>Real-World Context</h2>
+<p>This exact logic runs in HVAC (heating, ventilation, air conditioning) controllers. A simple microcontroller or FPGA reads temperature and humidity sensors and drives a relay using combinational logic like this. The same pattern — OR of multiple AND conditions — is called a <strong>Sum of Products (SOP)</strong> expression and is the standard form for any combinational specification.</p>
 
 <p><strong>Ready?</strong> Switch to the Code tab and write the complete module yourself. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
       `,

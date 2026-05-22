@@ -54,7 +54,7 @@ end</pre>
 <pre class="code-block">if (!rst) q &lt;= 0;   // rst=0 → clear Q to zero (reset is ON)
 else      q &lt;= d;   // rst=1 → normal operation</pre>
 
-<p><strong>Why active-low?</strong> In real chips, reset lines are often held high by pull-up resistors. Pulling the line low (asserting reset) requires active drive — this is safer because a floating wire stays in the non-reset state.</p>
+<p><strong>Why active-low?</strong> In real chips, reset lines are often held high by pull-up resistors. Pulling the line low requires active drive — this is safer because a floating wire stays in the non-reset state.</p>
 
 <h2>What You Are Building — A D Flip-Flop</h2>
 <p>The D (Data) flip-flop is the most fundamental memory element in all of digital design. Every CPU register, pipeline stage, state machine, and counter is built from D flip-flops. There are billions of them inside a modern processor.</p>
@@ -174,10 +174,9 @@ endmodule`,
 <p>A flip-flop stores one bit. A <strong>register</strong> stores multiple bits simultaneously — it is simply several flip-flops sharing the same clock and reset, working in parallel. Registers are the most common memory structure inside every processor. A 32-bit ARM core has 16 registers; a RISC-V core has 32.</p>
 
 <h2>Bus Signals — logic [N:0]</h2>
-<p>To carry multiple bits at once, SystemVerilog uses a <strong>bus</strong>. The notation <code>[3:0]</code> means 4 bits, numbered bit 3 (MSB = most significant) down to bit 0 (LSB = least significant):</p>
+<p>To carry multiple bits at once, SystemVerilog uses a <strong>bus</strong>. The notation <code>[3:0]</code> means 4 bits, numbered bit 3 (MSB) down to bit 0 (LSB):</p>
 <pre class="code-block">logic [3:0] d;   // 4-bit bus: d[3] d[2] d[1] d[0]
-//   [3:0]         MSB=bit3          LSB=bit0
-//              ← most significant   least significant →</pre>
+//   [3:0]         MSB=bit3          LSB=bit0</pre>
 
 <table class="truth-table">
   <tr><th>Notation</th><th>Bits</th><th>Max value</th><th>Real world</th></tr>
@@ -188,22 +187,16 @@ endmodule`,
 </table>
 
 <h2>Binary Literals</h2>
-<p>To assign a specific bit pattern, use a binary literal: <code>4'b1010</code></p>
 <pre class="code-block">4'b1010   // 4-bit binary: 1010 = decimal 10
-//↑ bit width  ↑b=binary  ↑ the bit pattern (MSB first)
-
 4'b0000   // all zeros  (used for reset value)
 4'hA      // hex A = 1010 (same as 4'b1010)</pre>
 
 <h2>The Register: Same always_ff, Different Port Types</h2>
-<p>The logic is identical to L1 — only the port types change from 1-bit <code>logic</code> to 4-bit <code>logic [3:0]</code>. The assignment <code>q &lt;= d</code> transfers all 4 bits simultaneously in one clock:</p>
+<p>The logic is identical to L1 — only the port types change from 1-bit <code>logic</code> to 4-bit <code>logic [3:0]</code>:</p>
 <pre class="code-block">always_ff @(posedge clk) begin
   if (!rst) q &lt;= 4'b0000;   // reset: clear all 4 bits
   else      q &lt;= d;          // capture all 4 bits at once
 end</pre>
-
-<h2>Why Registers Matter in Real Chips</h2>
-<p>In a CPU pipeline, registers separate stages so each stage can work independently. A 5-stage pipeline has 4 sets of pipeline registers between stages — each set captures the current instruction's data at the end of the clock so the next stage sees a stable snapshot.</p>
 
 <p><strong>Ready?</strong> Switch to the Code tab. Pattern is identical to L1 — only the port types change. Stuck? Tap 💡 Show Hint.</p>
       `,
@@ -306,19 +299,11 @@ endmodule`,
   <tr><td>SISO</td><td>Serial</td><td>Serial</td><td>Delay line, pipeline buffer</td></tr>
   <tr><td>PIPO</td><td>Parallel</td><td>Parallel</td><td>Standard register (already built in L2)</td></tr>
 </table>
-<p>You will build a <strong>SIPO</strong> (Serial In Parallel Out) — the type used inside a UART receiver or SPI slave.</p>
 
 <h2>Concatenation — the {} Operator</h2>
-<p>Curly braces glue signals together into a new bus. This is how shifting works:</p>
 <pre class="code-block">q &lt;= {q[2:0], sin};
-// {q[2:0], sin} means: take bits 2,1,0 of q, append sin as new bit 0
-// result is 4 bits: [old_q2, old_q1, old_q0, sin]
-//
 // Before: q = 1 0 1 0   sin = 1
 // After:  q = 0 1 0 1  ← sin entered at bit 0, bit 3 dropped</pre>
-
-<h2>SPI Connection</h2>
-<p>In SPI protocol, the slave controller is literally a shift register. Each SPI clock (SCLK) pulse shifts one bit from MISO into the hardware shift register. After 8 clocks, the full byte is available on the parallel output — your CPU reads it in one operation.</p>
 
 <p><strong>Ready?</strong> The structure is familiar from L1 and L2 — only the shift line is new. Stuck? Tap 💡 Show Hint.</p>
       `,
@@ -327,7 +312,7 @@ endmodule`,
         'Declare module shift_reg with ports: clk, rst, sin (1-bit serial input), q[3:0] (parallel output)',
         'Open the always_ff @(posedge clk) block',
         "Reset case: if (!rst) q <= 4'b0000;",
-        'Shift case: else q <= {q[2:0], sin};    ← {} concatenates: drop MSB, shift left, insert sin at bit 0',
+        'Shift case: else q <= {q[2:0], sin};',
         'Close with end, then endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         "Hit Run — after shifting in 1,0,1,1 the output should read q=1011",
@@ -336,28 +321,17 @@ endmodule`,
 `module shift_reg (
   input  logic       clk,
   input  logic       rst,
-  input  logic       sin,   // serial input — one bit per clock
-  output logic [3:0] q      // parallel output — all 4 bits at once
+  input  logic       sin,
+  output logic [3:0] q
 );
-
   always_ff @(posedge clk) begin
     if (!rst) q <= 4'b0000;
-    else      q <= {q[2:0], sin};  // shift: drop q[3], move q[2:0] up, insert sin at bit 0
+    else      q <= {q[2:0], sin};
   end
-
 endmodule`,
       design:
 `// Type the shift_reg module here.
-// Read the Theory tab — it explains {} concatenation and how shifting works.
-//
-// Ports:
-//   input  logic       clk  — clock
-//   input  logic       rst  — active-low reset
-//   input  logic       sin  — serial input (1 bit per clock)
-//   output logic [3:0] q    — parallel output (all 4 bits)
-//
 // Key line: q <= {q[2:0], sin};
-//
 // Delete this and start typing:
 `,
       testbench:
@@ -365,29 +339,20 @@ endmodule`,
 module tb;
   logic clk = 0;
   always #5 clk = ~clk;
-
   logic rst, sin;
   logic [3:0] q;
   shift_reg dut (.clk(clk), .rst(rst), .sin(sin), .q(q));
-
   task automatic shift_in(input logic b);
-    sin = b;
-    @(posedge clk); #1;
+    sin = b; @(posedge clk); #1;
   endtask
-
   initial begin
     $display("=== Shift Register Test ===");
     rst = 0; @(posedge clk); #1; rst = 1;
-    // shift in 1, 0, 1, 1  —  q should become 4'b1011
-    shift_in(1);
-    shift_in(0);
-    shift_in(1);
-    shift_in(1);
+    shift_in(1); shift_in(0); shift_in(1); shift_in(1);
     if (q === 4'b1011)
       $display("PASS  shifted 1,0,1,1 -> q=%04b", q);
     else
       $display("FAIL  shifted 1,0,1,1 -> q=%04b (expected 1011)", q);
-    // shift in 0,0,0,0  —  q should clear to 0000
     shift_in(0); shift_in(0); shift_in(0); shift_in(0);
     if (q === 4'b0000)
       $display("PASS  shifted zeros -> q=%04b", q);
@@ -413,43 +378,36 @@ endmodule`,
 <p>A system clock might run at 100 MHz, but a peripheral (LED blink, UART, LCD) needs a much slower signal. A <strong>clock divider</strong> takes a fast clock and produces a slower pulse — one output tick every N input ticks. It is in virtually every digital chip ever made.</p>
 
 <h2>The Counter Pattern</h2>
-<p>Count up to N−1, then reset to 0 and fire one output pulse:</p>
 <pre class="code-block">count: 0 → 1 → 2 → 3 → 0 → 1 → 2 → 3 → ...   (N=4)
                        ↑
-                  clk_div=1 here (one-cycle pulse), then back to 0</pre>
-
-<p>The output pulse has the same clock rate as the input but only fires once every N cycles — a divide-by-N operation.</p>
+                  clk_div=1 here (one-cycle pulse)</pre>
 
 <h2>Internal Signals</h2>
-<p>You need a counter that lives <em>inside</em> the module. Declare it between the port list and always_ff:</p>
-<pre class="code-block">logic [1:0] count;   // 2 bits — enough to count 0,1,2,3</pre>
+<pre class="code-block">logic [1:0] count;   // 2 bits — counts 0,1,2,3</pre>
 
 <h2>Three-Way if in always_ff</h2>
 <pre class="code-block">always_ff @(posedge clk) begin
   if (!rst) begin
-    count   &lt;= 2'b00;    // reset: clear counter
-    clk_div &lt;= 1'b0;     // reset: clear output
-  end else if (count == 2'd3) begin  // reached N-1: fire pulse
     count   &lt;= 2'b00;
-    clk_div &lt;= 1'b1;     // one-cycle pulse
+    clk_div &lt;= 1'b0;
+  end else if (count == 2'd3) begin
+    count   &lt;= 2'b00;
+    clk_div &lt;= 1'b1;
   end else begin
-    count   &lt;= count + 2'b01;  // keep counting
+    count   &lt;= count + 2'b01;
     clk_div &lt;= 1'b0;
   end
 end</pre>
 
-<h2>Real-World Context</h2>
-<p>UART baud rate generators, SPI clock dividers, PWM period generators, watchdog timer prescalers — all are clock dividers. In FPGAs, a global clock of 100 MHz is divided down to generate UART baud clocks (115,200 Hz needs dividing by ~868) and SPI clocks (1–25 MHz).</p>
-
-<p>This is the hardest lesson in this chapter — three branches and two internal signals. Take it slowly. Stuck? The hint has the full solution.</p>
+<p><strong>Ready?</strong> Switch to Code. Stuck? Tap 💡 Show Hint.</p>
       `,
       tasks: [
         'Code tab is blank — write the full module.',
         'Declare module clk_divider with ports: clk (in), rst (in), clk_div (out)',
-        'Inside the module (after the port list, before always_ff): declare logic [1:0] count;',
+        'Declare internal signal: logic [1:0] count;',
         'Open always_ff @(posedge clk) begin',
-        'Branch 1 — reset:         if (!rst) begin  count <= 0;  clk_div <= 0;  end',
-        "Branch 2 — pulse:         else if (count == 2'd3) begin  count <= 0;  clk_div <= 1;  end",
+        "Branch 1 — reset: if (!rst) begin  count <= 0;  clk_div <= 0;  end",
+        "Branch 2 — pulse: else if (count == 2'd3) begin  count <= 0;  clk_div <= 1;  end",
         'Branch 3 — keep counting: else begin  count <= count + 1;  clk_div <= 0;  end',
         'Close with end, then endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
@@ -461,33 +419,23 @@ end</pre>
   input  logic rst,
   output logic clk_div
 );
-  logic [1:0] count;  // internal counter: 2 bits counts 0..3
-
+  logic [1:0] count;
   always_ff @(posedge clk) begin
-    if (!rst) begin              // reset: clear both signals
+    if (!rst) begin
       count   <= 2'b00;
       clk_div <= 1'b0;
-    end else if (count == 2'd3) begin  // reached N-1: fire pulse
+    end else if (count == 2'd3) begin
       count   <= 2'b00;
       clk_div <= 1'b1;
-    end else begin               // still counting
+    end else begin
       count   <= count + 2'b01;
       clk_div <= 1'b0;
     end
   end
-
 endmodule`,
       design:
 `// Type the clk_divider module here.
-// Read the Theory tab — it explains the counter pattern and three-way if.
-//
-// Ports:
-//   input  logic clk      — fast input clock
-//   input  logic rst      — active-low reset
-//   output logic clk_div  — pulse goes HIGH for 1 cycle every 4 cycles
-//
-// You also need an internal signal: logic [1:0] count;
-//
+// Internal signal: logic [1:0] count;
 // Delete this and start typing:
 `,
       testbench:
@@ -495,12 +443,9 @@ endmodule`,
 module tb;
   logic clk = 0;
   always #5 clk = ~clk;
-
   logic rst, clk_div;
   clk_divider dut (.clk(clk), .rst(rst), .clk_div(clk_div));
-
   int pulse_count = 0;
-
   initial begin
     $display("=== Clock Divider Test ===");
     rst = 0; repeat(2) @(posedge clk); #1; rst = 1;
@@ -539,21 +484,17 @@ endmodule`,
 </table>
 
 <h2>The Forbidden State</h2>
-<p>S=1 and R=1 simultaneously is <strong>undefined</strong>. In a NOR-gate latch, it produces Q=Q_n=0 — which violates the rule that Q and Q_n are always complements. In clocked implementations, the behavior on S=R=1 depends on the design. Here, we hold Q unchanged in simulation to be safe — but <strong>you must never apply S=R=1 in real hardware</strong>.</p>
+<p>S=1 and R=1 simultaneously is <strong>undefined</strong>. In a NOR-gate latch it produces Q=Q_n=0, violating the rule that Q and Q_n are always complements. Here we hold Q unchanged in simulation — but <strong>never apply S=R=1 in real hardware</strong>.</p>
 
 <h2>SR vs D Flip-Flop</h2>
 <table class="truth-table">
-  <tr><th>Feature</th><th>D Flip-Flop</th><th>SR Flip-Flop</th></tr>
+  <tr><th>Feature</th><th>D FF</th><th>SR FF</th></tr>
   <tr><td>Inputs</td><td>1 (data)</td><td>2 (set, reset)</td></tr>
-  <tr><td>Always defined?</td><td>Yes</td><td>No (S=R=1 forbidden)</td></tr>
-  <tr><td>Common use</td><td>Registers, pipelines</td><td>Control logic, flag bits</td></tr>
-  <tr><td>Modern usage</td><td>Dominant in digital design</td><td>Rare — D FF is preferred</td></tr>
+  <tr><td>Forbidden state?</td><td>No</td><td>Yes (S=R=1)</td></tr>
+  <tr><td>Modern usage</td><td>Dominant</td><td>Rare — D FF preferred</td></tr>
 </table>
 
-<p>The D flip-flop was invented specifically to fix the SR FF's forbidden state: tie S = D and R = ~D, and S=R=1 is impossible by construction.</p>
-
-<h2>What You Are Building</h2>
-<p>A synchronous SR flip-flop (clocked version — cleaner for simulation). It also outputs <code>q_n</code>, the complement of <code>q</code>.</p>
+<p>The D FF was invented to fix the SR FF: tie S=D and R=~D, so S=R=1 is impossible by construction.</p>
 
 <p><strong>Ready?</strong> Switch to Code. Stuck? Tap 💡 Show Hint.</p>
       `,
@@ -561,49 +502,33 @@ endmodule`,
         'Code tab is blank — type every line.',
         'Declare module sr_ff with ports: clk, rst (active-low), s, r (inputs), q, q_n (outputs)',
         'Open always_ff @(posedge clk) begin',
-        'First: if (!rst) q <= 0;   ← reset has highest priority',
-        'Then: else if (s && !r) q <= 1;   ← S=1,R=0 → Set',
-        'Then: else if (!s && r) q <= 0;   ← S=0,R=1 → Reset',
-        '(else: hold — no assignment needed in always_ff)',
-        'After always_ff: assign q_n = ~q;   ← complement output is combinational',
+        'if (!rst) q <= 0;',
+        'else if (s && !r) q <= 1;   ← Set',
+        'else if (!s && r) q <= 0;   ← Reset',
+        '(else: implicit hold when s==r==0 or s==r==1)',
+        'After always_ff: assign q_n = ~q;',
         'Close with endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all PASS lines should appear',
       ],
       hint:
 `module sr_ff (
-  input  logic clk,
-  input  logic rst,    // active-low reset
-  input  logic s,      // Set:   S=1,R=0 → Q becomes 1
-  input  logic r,      // Reset: S=0,R=1 → Q becomes 0
-  output logic q,
-  output logic q_n     // complement: always ~q
+  input  logic clk, rst,
+  input  logic s, r,
+  output logic q, q_n
 );
-
   always_ff @(posedge clk) begin
-    if (!rst)       q <= 1'b0;  // reset overrides everything
+    if (!rst)         q <= 1'b0;
     else if (s && !r) q <= 1'b1;  // Set
     else if (!s && r) q <= 1'b0;  // Reset
-    // s==r==0: hold (no assignment = implicit hold in always_ff)
-    // s==r==1: hold in simulation (forbidden in real hardware!)
+    // s==r==0: hold  |  s==r==1: hold (forbidden in real HW)
   end
-
-  assign q_n = ~q;  // complement is always the inverse of q
-
+  assign q_n = ~q;
 endmodule`,
       design:
 `// Type the sr_ff module here.
-// Read the Theory tab — it explains Set/Reset behaviour and the forbidden state.
-//
-// Ports:
-//   input  logic clk, rst   — clock and active-low reset
-//   input  logic s          — Set:   S=1 forces Q=1
-//   input  logic r          — Reset: R=1 forces Q=0
-//   output logic q          — stored output
-//   output logic q_n        — complement of q
-//
-// Important: assign q_n = ~q;  (outside the always_ff block)
-//
+// Ports: clk, rst (active-low), s (Set), r (Reset), q, q_n
+// Key: assign q_n = ~q; (outside always_ff)
 // Delete this and start typing:
 `,
       testbench:
@@ -611,10 +536,8 @@ endmodule`,
 module tb;
   logic clk = 0;
   always #5 clk = ~clk;
-
   logic rst, s, r, q, q_n;
   sr_ff dut (.clk(clk), .rst(rst), .s(s), .r(r), .q(q), .q_n(q_n));
-
   task automatic apply(input logic si, ri, exp_q);
     s = si; r = ri;
     @(posedge clk); #1;
@@ -623,16 +546,15 @@ module tb;
     else
       $display("FAIL  S=%0b R=%0b -> Q=%0b Q_n=%0b (expected Q=%0b)", si, ri, q, q_n, exp_q);
   endtask
-
   initial begin
     $display("=== SR Flip-Flop Test ===");
     rst = 0; repeat(2) @(posedge clk); #1; rst = 1;
-    apply(0, 0, 0);   // hold (Q starts at 0 after reset)
-    apply(1, 0, 1);   // Set
-    apply(0, 0, 1);   // hold (Q stays 1)
-    apply(0, 1, 0);   // Reset
-    apply(0, 0, 0);   // hold (Q stays 0)
-    apply(1, 0, 1);   // Set again
+    apply(0, 0, 0);
+    apply(1, 0, 1);
+    apply(0, 0, 1);
+    apply(0, 1, 0);
+    apply(0, 0, 0);
+    apply(1, 0, 1);
     $display("SR flip-flop works!");
     $finish;
   end
@@ -650,68 +572,45 @@ endmodule`,
       title: 'L6 — [Bonus] JK Flip-Flop',
       theory: `
 <h2>The JK Flip-Flop — Fixing the Forbidden State</h2>
-<p>The SR flip-flop has a forbidden state when S=R=1. The <strong>JK flip-flop</strong> solves this elegantly: when J=K=1, instead of undefined behaviour, the output <strong>toggles</strong> — it flips from its current value to the opposite. This makes J=K=1 perfectly valid and useful.</p>
+<p>The SR flip-flop has a forbidden state when S=R=1. The <strong>JK flip-flop</strong> solves this: when J=K=1, instead of undefined behaviour, the output <strong>toggles</strong> — it flips to the opposite value. J=K=1 is perfectly valid and useful.</p>
 
 <table class="truth-table">
   <tr><th>J</th><th>K</th><th>Q next</th><th>Meaning</th></tr>
-  <tr><td>0</td><td>0</td><td>Q (hold)</td><td>No change — memory</td></tr>
-  <tr><td>1</td><td>0</td><td>1</td><td>Set: force Q high (like SR S=1)</td></tr>
-  <tr><td>0</td><td>1</td><td>0</td><td>Reset: force Q low (like SR R=1)</td></tr>
-  <tr><td>1</td><td>1</td><td>~Q (toggle)</td><td>Toggle: flip Q — no forbidden state!</td></tr>
+  <tr><td>0</td><td>0</td><td>Q (hold)</td><td>No change</td></tr>
+  <tr><td>1</td><td>0</td><td>1</td><td>Set</td></tr>
+  <tr><td>0</td><td>1</td><td>0</td><td>Reset</td></tr>
+  <tr><td>1</td><td>1</td><td>~Q (toggle)</td><td>Flip! No forbidden state.</td></tr>
 </table>
 
-<h2>How Toggle Works</h2>
-<pre class="code-block">Before: Q = 0    J=1 K=1    After: Q = 1
-Before: Q = 1    J=1 K=1    After: Q = 0
-Before: Q = 0    J=1 K=1    After: Q = 1  (again)
-...</pre>
-<p>With J=K=1 and a steady clock, Q alternates every clock cycle — dividing the clock frequency by 2. This is how binary ripple counters were built before synchronous counters became standard.</p>
+<h2>Toggle = Frequency Divide by 2</h2>
+<p>With J=K=1 permanently, Q alternates every clock — dividing clock frequency by 2. Chain 4 JK FFs: 100 MHz → 50 → 25 → 12.5 → 6.25 MHz.</p>
 
-<h2>JK vs SR vs D</h2>
-<table class="truth-table">
-  <tr><th>FF Type</th><th>Forbidden state?</th><th>Toggle mode?</th><th>Modern use</th></tr>
-  <tr><td>SR</td><td>Yes (S=R=1)</td><td>No</td><td>Rare</td></tr>
-  <tr><td>JK</td><td>No</td><td>Yes (J=K=1)</td><td>Ripple counters, older designs</td></tr>
-  <tr><td>D</td><td>No</td><td>No (need T FF)</td><td>Universal — used everywhere</td></tr>
-  <tr><td>T</td><td>No</td><td>Always (T=1)</td><td>Counters, frequency dividers</td></tr>
-</table>
-
-<h2>Implementation with unique case</h2>
+<h2>Implementation</h2>
 <pre class="code-block">unique case ({j, k})
   2'b00: q &lt;= q;    // hold
-  2'b01: q &lt;= 1'b0; // reset
-  2'b10: q &lt;= 1'b1; // set
+  2'b01: q &lt;= 0;    // reset
+  2'b10: q &lt;= 1;    // set
   2'b11: q &lt;= ~q;   // toggle!
 endcase</pre>
 
-<p><strong>Ready?</strong> Switch to Code. This is almost identical to the SR FF — the toggle case in <code>unique case</code> is the only new line. Stuck? Tap 💡 Show Hint.</p>
+<p><strong>Ready?</strong> Switch to Code. Stuck? Tap 💡 Show Hint.</p>
       `,
       tasks: [
-        'Code tab is blank — type every line.',
-        'Declare module jk_ff with ports: clk, rst (active-low), j, k (inputs), q, q_n (outputs)',
-        'Open always_ff @(posedge clk) begin',
-        'First: if (!rst) q <= 0;',
-        'Then: else begin  unique case ({j, k})',
-        '  2b00: q <= q;     ← hold',
-        '  2b01: q <= 0;     ← reset',
-        '  2b10: q <= 1;     ← set',
-        '  2b11: q <= ~q;    ← TOGGLE (the new behaviour!)',
+        'Declare module jk_ff: clk, rst (active-low), j, k (inputs), q, q_n (outputs)',
+        'Open always_ff @(posedge clk)',
+        'if (!rst) q <= 0;',
+        'else begin  unique case ({j, k})',
+        "  2'b00: q <= q;  2'b01: q <= 0;  2'b10: q <= 1;  2'b11: q <= ~q;",
         'endcase  end',
-        'After always_ff: assign q_n = ~q;',
-        'Close with endmodule',
+        'assign q_n = ~q;',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
-        'Hit Run — verify toggle behaviour fires on J=K=1',
+        'Hit Run — verify toggle fires on J=K=1',
       ],
       hint:
 `module jk_ff (
-  input  logic clk,
-  input  logic rst,
-  input  logic j,      // Set (or Toggle with K)
-  input  logic k,      // Reset (or Toggle with J)
-  output logic q,
-  output logic q_n
+  input  logic clk, rst, j, k,
+  output logic q, q_n
 );
-
   always_ff @(posedge clk) begin
     if (!rst) q <= 1'b0;
     else begin
@@ -719,28 +618,15 @@ endcase</pre>
         2'b00: q <= q;      // Hold
         2'b01: q <= 1'b0;   // Reset
         2'b10: q <= 1'b1;   // Set
-        2'b11: q <= ~q;     // Toggle — the key feature of JK FF!
+        2'b11: q <= ~q;     // Toggle!
       endcase
     end
   end
-
   assign q_n = ~q;
-
 endmodule`,
       design:
 `// Type the jk_ff module here.
-// Read the Theory tab — it explains the toggle behaviour when J=K=1.
-//
-// Ports:
-//   input  logic clk, rst   — clock and active-low reset
-//   input  logic j          — Set (J=1,K=0) or part of Toggle (J=K=1)
-//   input  logic k          — Reset (J=0,K=1) or part of Toggle (J=K=1)
-//   output logic q          — stored output
-//   output logic q_n        — complement
-//
-// Key: use unique case ({j, k}) with 4 cases
-// The toggle case: 2'b11: q <= ~q;
-//
+// Key: unique case ({j, k}) with 4 cases. Toggle: 2'b11: q <= ~q;
 // Delete this and start typing:
 `,
       testbench:
@@ -748,49 +634,27 @@ endmodule`,
 module tb;
   logic clk = 0;
   always #5 clk = ~clk;
-
   logic rst, j, k, q, q_n;
   jk_ff dut (.clk(clk), .rst(rst), .j(j), .k(k), .q(q), .q_n(q_n));
-
   initial begin
     $display("=== JK Flip-Flop Test ===");
     rst = 0; repeat(2) @(posedge clk); #1; rst = 1;
-
-    // Set: J=1 K=0 -> Q should become 1
     j = 1; k = 0; @(posedge clk); #1;
-    if (q === 1'b1)
-      $display("PASS  J=1 K=0: Q=%0b (Set)", q);
-    else
-      $display("FAIL  J=1 K=0: Q=%0b (expected 1)", q);
-
-    // Reset: J=0 K=1 -> Q should become 0
+    if (q === 1'b1) $display("PASS  J=1 K=0: Q=%0b (Set)", q);
+    else $display("FAIL  J=1 K=0: Q=%0b (expected 1)", q);
     j = 0; k = 1; @(posedge clk); #1;
-    if (q === 1'b0)
-      $display("PASS  J=0 K=1: Q=%0b (Reset)", q);
-    else
-      $display("FAIL  J=0 K=1: Q=%0b (expected 0)", q);
-
-    // Toggle: J=1 K=1 -> Q flips each clock
+    if (q === 1'b0) $display("PASS  J=0 K=1: Q=%0b (Reset)", q);
+    else $display("FAIL  J=0 K=1: Q=%0b (expected 0)", q);
     j = 1; k = 1;
     @(posedge clk); #1;
-    if (q === 1'b1)
-      $display("PASS  J=1 K=1: Q=%0b (Toggle 0->1)", q);
-    else
-      $display("FAIL  Toggle 1st: Q=%0b (expected 1)", q);
-
+    if (q === 1'b1) $display("PASS  J=1 K=1: Q=%0b (Toggle 0->1)", q);
+    else $display("FAIL  Toggle 1st: Q=%0b (expected 1)", q);
     @(posedge clk); #1;
-    if (q === 1'b0)
-      $display("PASS  J=1 K=1: Q=%0b (Toggle 1->0)", q);
-    else
-      $display("FAIL  Toggle 2nd: Q=%0b (expected 0)", q);
-
-    // Hold: J=0 K=0 -> Q stays 0
+    if (q === 1'b0) $display("PASS  J=1 K=1: Q=%0b (Toggle 1->0)", q);
+    else $display("FAIL  Toggle 2nd: Q=%0b (expected 0)", q);
     j = 0; k = 0; @(posedge clk); #1;
-    if (q === 1'b0)
-      $display("PASS  J=0 K=0: Q=%0b (Hold)", q);
-    else
-      $display("FAIL  Hold: Q=%0b (expected 0)", q);
-
+    if (q === 1'b0) $display("PASS  J=0 K=0: Q=%0b (Hold)", q);
+    else $display("FAIL  Hold: Q=%0b (expected 0)", q);
     $display("JK flip-flop works!");
     $finish;
   end
@@ -808,90 +672,53 @@ endmodule`,
       title: 'L7 — [Bonus] T Flip-Flop',
       theory: `
 <h2>The T Flip-Flop — Toggle on Demand</h2>
-<p>The <strong>T (Toggle) flip-flop</strong> is the simplest sequential element after the D FF. It has a single control input: when <code>T=1</code>, the output toggles on every rising clock edge. When <code>T=0</code>, it holds. It is directly derived from the JK FF by connecting J=K=T.</p>
+<p>The <strong>T (Toggle) flip-flop</strong> has a single control input: T=1 toggles the output each clock, T=0 holds. It is derived directly from the JK FF by connecting J=K=T.</p>
 
 <table class="truth-table">
   <tr><th>T</th><th>Q next</th><th>Meaning</th></tr>
-  <tr><td>0</td><td>Q (hold)</td><td>No change — freeze the output</td></tr>
-  <tr><td>1</td><td>~Q (toggle)</td><td>Flip Q on every rising clock edge</td></tr>
+  <tr><td>0</td><td>Q (hold)</td><td>No change</td></tr>
+  <tr><td>1</td><td>~Q (toggle)</td><td>Flip Q each rising edge</td></tr>
 </table>
 
-<h2>T FF as a Frequency Divider</h2>
-<p>With T=1 permanently, the output toggles every clock cycle — dividing the frequency by 2:</p>
-<pre class="code-block">clk: ‾_‾_‾_‾_‾_‾_‾_‾_‾_  (100 MHz)
- T=1 means toggle every edge:
-   q: ‾‾__‾‾__‾‾__‾‾__‾‾  (50 MHz — frequency halved)
+<h2>T FF as Frequency Divider</h2>
+<pre class="code-block">clk: ‾_‾_‾_‾_‾_‾_‾_  (100 MHz)
+T=1 means toggle every edge:
+  q: ‾‾__‾‾__‾‾__         (50 MHz — frequency halved!)
 
-Chain 4 T FFs: 100 MHz → 50 → 25 → 12.5 → 6.25 MHz</pre>
-
-<p>This is how ripple counters and clock dividers are built from flip-flops. The clock divider you built in L4 is functionally equivalent to a T FF with T=1.</p>
-
-<h2>Building a Counter from T FFs</h2>
-<p>A binary counter can be built by chaining T FFs. Each FF's output drives the clock of the next — each stage halves the frequency again, producing a natural binary count:</p>
-<pre class="code-block">       T FF 0           T FF 1           T FF 2
-clk → [T=1]→q0 → [T=1]→q1 → [T=1]→q2
-
-q2 q1 q0
- 0  0  0   (reset)
- 0  0  1
- 0  1  0
- 0  1  1
- 1  0  0
- ...  (natural binary count)</pre>
+Chain 4: 100MHz → 50 → 25 → 12.5 → 6.25 MHz</pre>
 
 <h2>Implementation</h2>
 <pre class="code-block">always_ff @(posedge clk) begin
-  if (!rst) q &lt;= 1'b0;
-  else if (t) q &lt;= ~q;   // toggle!
-  // else: implicit hold (no assignment)
+  if (!rst) q &lt;= 0;
+  else if (t) q &lt;= ~q;  // toggle!
+  // T=0: implicit hold
 end</pre>
 
-<p><strong>Ready?</strong> This is the simplest flip-flop of all. Switch to Code. Stuck? Tap 💡 Show Hint.</p>
+<p><strong>Ready?</strong> Switch to Code. Stuck? Tap 💡 Show Hint.</p>
       `,
       tasks: [
-        'Code tab is blank — type every line.',
-        'Declare module t_ff with ports: clk, rst (active-low), t (input), q, q_n (outputs)',
-        'Open always_ff @(posedge clk) begin',
-        'if (!rst) q <= 0;',
-        'else if (t) q <= ~q;   ← the entire toggle logic in one line',
-        '(no else needed — implicit hold when t=0)',
-        'After always_ff: assign q_n = ~q;',
+        'Declare module t_ff: clk, rst (active-low), t (inputs), q, q_n (outputs)',
+        'always_ff: if (!rst) q <= 0; else if (t) q <= ~q;',
+        'assign q_n = ~q;',
         'Close with endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
-        'Hit Run — with T=1, Q should alternate 0,1,0,1,...',
+        'Hit Run — T=1 should make Q alternate 0,1,0,1,...',
       ],
       hint:
 `module t_ff (
-  input  logic clk,
-  input  logic rst,   // active-low reset
-  input  logic t,     // 1 = toggle, 0 = hold
-  output logic q,
-  output logic q_n
+  input  logic clk, rst, t,
+  output logic q, q_n
 );
-
   always_ff @(posedge clk) begin
-    if (!rst) q <= 1'b0;  // reset
+    if (!rst) q <= 1'b0;
     else if (t) q <= ~q;  // toggle when T=1
-    // T=0: implicit hold (no else branch needed)
+    // T=0: implicit hold
   end
-
   assign q_n = ~q;
-
 endmodule`,
       design:
 `// Type the t_ff module here.
-// Read the Theory tab — it explains the toggle behaviour and frequency division.
-//
-// Ports:
-//   input  logic clk, rst   — clock and active-low reset
-//   input  logic t          — 1=toggle Q every clock, 0=hold
-//   output logic q          — output
-//   output logic q_n        — complement
-//
-// Core logic (2 lines inside always_ff):
-//   if (!rst) q <= 0;
-//   else if (t) q <= ~q;
-//
+// Core: if (!rst) q <= 0; else if (t) q <= ~q;
 // Delete this and start typing:
 `,
       testbench:
@@ -899,46 +726,25 @@ endmodule`,
 module tb;
   logic clk = 0;
   always #5 clk = ~clk;
-
   logic rst, t, q, q_n;
   t_ff dut (.clk(clk), .rst(rst), .t(t), .q(q), .q_n(q_n));
-
   initial begin
     $display("=== T Flip-Flop Test ===");
     rst = 0; repeat(2) @(posedge clk); #1; rst = 1;
-
-    // Hold: T=0 — Q should stay 0
     t = 0; repeat(3) @(posedge clk); #1;
-    if (q === 1'b0)
-      $display("PASS  T=0: Q=%0b (hold, no change)", q);
-    else
-      $display("FAIL  T=0 hold: Q=%0b (expected 0)", q);
-
-    // Toggle: T=1 — Q should flip each clock
+    if (q === 1'b0) $display("PASS  T=0: Q=%0b (hold, no change)", q);
+    else $display("FAIL  T=0 hold: Q=%0b (expected 0)", q);
     t = 1; @(posedge clk); #1;
-    if (q === 1'b1)
-      $display("PASS  T=1 tick 1: Q=%0b (toggled 0->1)", q);
-    else
-      $display("FAIL  T=1 tick 1: Q=%0b (expected 1)", q);
-
+    if (q === 1'b1) $display("PASS  T=1 tick 1: Q=%0b (toggled 0->1)", q);
+    else $display("FAIL  T=1 tick 1: Q=%0b (expected 1)", q);
     @(posedge clk); #1;
-    if (q === 1'b0)
-      $display("PASS  T=1 tick 2: Q=%0b (toggled 1->0)", q);
-    else
-      $display("FAIL  T=1 tick 2: Q=%0b (expected 0)", q);
-
+    if (q === 1'b0) $display("PASS  T=1 tick 2: Q=%0b (toggled 1->0)", q);
+    else $display("FAIL  T=1 tick 2: Q=%0b (expected 0)", q);
     @(posedge clk); #1;
-    if (q === 1'b1)
-      $display("PASS  T=1 tick 3: Q=%0b (toggled 0->1)", q);
-    else
-      $display("FAIL  T=1 tick 3: Q=%0b (expected 1)", q);
-
-    // Verify q_n is always complement
-    if (q_n === ~q)
-      $display("PASS  q_n = ~q verified");
-    else
-      $display("FAIL  q_n=%0b should be ~q=%0b", q_n, ~q);
-
+    if (q === 1'b1) $display("PASS  T=1 tick 3: Q=%0b (toggled 0->1)", q);
+    else $display("FAIL  T=1 tick 3: Q=%0b (expected 1)", q);
+    if (q_n === ~q) $display("PASS  q_n = ~q verified");
+    else $display("FAIL  q_n=%0b should be ~q=%0b", q_n, ~q);
     $display("T flip-flop works!");
     $finish;
   end
@@ -950,109 +756,74 @@ endmodule`,
       ]
     },
 
-    // ─── L8 [Bonus] — 4-bit Synchronous Up/Down Counter ──────────────────
+    // ─── L8 [Bonus] — 4-bit Up/Down Counter ────────────────────────────────────
     {
       id: 'msv2l8',
       title: 'L8 — [Bonus] Up/Down Counter',
       theory: `
 <h2>The Up/Down Counter — Practice Project</h2>
-<p>You have now built D, SR, JK, and T flip-flops. This bonus lesson combines what you know about registers and counters into a practical circuit used in motor controllers, rotary encoders, and address generators: the <strong>synchronous up/down counter</strong>.</p>
+<p>You have now built D, SR, JK, and T flip-flops. This lesson combines registers and counters into a practical circuit: the <strong>synchronous up/down counter</strong>, used in motor controllers, rotary encoders, and address generators.</p>
 
 <h2>How It Works</h2>
 <ul>
-  <li><code>en=0</code>: counter is frozen (no change, even if dir changes)</li>
-  <li><code>en=1, dir=1</code>: count increments each clock (0→1→2→…→15→0)</li>
-  <li><code>en=1, dir=0</code>: count decrements each clock (15→14→…→1→0→15)</li>
-  <li><code>overflow</code>: asserted for 1 cycle when count wraps 15→0 while counting up</li>
-  <li><code>underflow</code>: asserted for 1 cycle when count wraps 0→15 while counting down</li>
+  <li><code>en=0</code>: counter is frozen</li>
+  <li><code>en=1, dir=1</code>: count increments each clock (0→1→…→15→0)</li>
+  <li><code>en=1, dir=0</code>: count decrements each clock (15→14→…→0→15)</li>
+  <li><code>overflow</code>: 1-cycle pulse when 15→0 while counting up</li>
+  <li><code>underflow</code>: 1-cycle pulse when 0→15 while counting down</li>
 </ul>
 
-<pre class="code-block">  Count up (dir=1):    0→1→2→3→…→14→15→0→1→…
-                                       ↑
-                               overflow=1 here (one cycle)
-
-  Count down (dir=0):  15→14→…→1→0→15→14→…
-                                  ↑
-                          underflow=1 here (one cycle)</pre>
-
-<h2>Detecting Overflow/Underflow Before the Transition</h2>
-<p>The flags must be set <em>when the wrap happens</em>, not one cycle later. Detect the condition in the same always_ff block, on the same clock edge as the count update:</p>
+<h2>Detecting Flags Before the Transition</h2>
 <pre class="code-block">if (en) begin
   if (dir) begin
     count    &lt;= count + 4'b1;
-    overflow &lt;= (count == 4'hF);  // count IS 15 → NEXT will be 0
+    overflow &lt;= (count == 4'hF);  // IS 15 now → NEXT will be 0
   end else begin
     count     &lt;= count - 4'b1;
-    underflow &lt;= (count == 4'h0); // count IS 0 → NEXT will be 15
+    underflow &lt;= (count == 4'h0); // IS 0 now → NEXT will be 15
   end
 end</pre>
-
-<h2>Real-World Use</h2>
-<p>Quadrature encoder counters (used in robot wheels and CNC machines) are up/down counters where direction is determined by which of two sensor signals arrives first. Audio volume knobs on digital mixers are often hardware up/down counters.</p>
 
 <p><strong>Ready?</strong> Switch to Code. You have all the tools — always_ff, buses, if/else. Stuck? Tap 💡 Show Hint.</p>
       `,
       tasks: [
-        'Code tab is blank — type every line.',
         'Module up_down_counter: inputs clk, rst (active-low), en, dir — outputs count[3:0], overflow, underflow',
-        'Open always_ff @(posedge clk) begin',
-        'Reset branch: if (!rst) clear count, overflow, underflow to 0',
-        'Else branch: always clear overflow and underflow to 0 first',
-        'Then: if (en) check dir — if dir=1 increment, if dir=0 decrement',
-        'Set overflow=1 when count==15 and dir=1 (before increment wraps)',
-        'Set underflow=1 when count==0 and dir=0 (before decrement wraps)',
-        'Close with end, then endmodule',
+        'Reset: clear count, overflow, underflow to 0',
+        'Else: always clear overflow and underflow to 0 first',
+        'Then if (en): if dir=1 increment + detect overflow; if dir=0 decrement + detect underflow',
+        'overflow <= (count == 4hF) when counting up (BEFORE the add)',
+        'underflow <= (count == 4h0) when counting down (BEFORE the subtract)',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
-        'Hit Run — verify count up to 15, overflow flag, count down to 0, underflow flag',
+        'Hit Run — verify count up, overflow, count down, underflow',
       ],
       hint:
 `module up_down_counter (
-  input  logic       clk,
-  input  logic       rst,        // active-low reset
-  input  logic       en,         // enable: 1 = count, 0 = freeze
-  input  logic       dir,        // direction: 1 = up, 0 = down
+  input  logic       clk, rst, en, dir,
   output logic [3:0] count,
-  output logic       overflow,   // 1-cycle pulse: wrapped 15->0
-  output logic       underflow   // 1-cycle pulse: wrapped 0->15
+  output logic       overflow, underflow
 );
-
   always_ff @(posedge clk) begin
     if (!rst) begin
-      count     <= 4'b0;
-      overflow  <= 1'b0;
-      underflow <= 1'b0;
+      count <= 4'b0; overflow <= 0; underflow <= 0;
     end else begin
-      overflow  <= 1'b0;   // clear flags every cycle
+      overflow  <= 1'b0;
       underflow <= 1'b0;
       if (en) begin
         if (dir) begin
           count    <= count + 4'b1;
-          overflow <= (count == 4'hF);  // detect before wrap
+          overflow <= (count == 4'hF);
         end else begin
           count     <= count - 4'b1;
-          underflow <= (count == 4'h0); // detect before wrap
+          underflow <= (count == 4'h0);
         end
       end
     end
   end
-
 endmodule`,
       design:
 `// Type the up_down_counter module here.
-// Read the Theory tab — it explains direction control and overflow/underflow detection.
-//
-// Ports:
-//   input  logic       clk, rst   — clock and active-low reset
-//   input  logic       en         — 1=count, 0=freeze
-//   input  logic       dir        — 1=count up, 0=count down
-//   output logic [3:0] count      — current count value
-//   output logic       overflow   — 1-cycle pulse when 15->0 wrap occurs
-//   output logic       underflow  — 1-cycle pulse when 0->15 wrap occurs
-//
-// Key: detect overflow/underflow BEFORE the add/subtract:
-//   overflow  <= (count == 4'hF) when dir=1
-//   underflow <= (count == 4'h0) when dir=0
-//
+// Ports: clk, rst (active-low), en, dir, count[3:0], overflow, underflow
+// Key: detect overflow/underflow BEFORE the add/subtract.
 // Delete this and start typing:
 `,
       testbench:
@@ -1060,50 +831,44 @@ endmodule`,
 module tb;
   logic clk = 0;
   always #5 clk = ~clk;
-
   logic rst, en, dir, overflow, underflow;
   logic [3:0] count;
+  logic [3:0] saved_count;
   up_down_counter dut (.clk(clk), .rst(rst), .en(en), .dir(dir),
                        .count(count), .overflow(overflow), .underflow(underflow));
-
   initial begin
     $display("=== Up/Down Counter Test ===");
     rst = 0; en = 0; dir = 1;
     @(posedge clk); #1; rst = 1;
-
-    // Count up from 0 to 3
+    // Count up 3 steps
     en = 1; dir = 1;
     repeat(3) @(posedge clk); #1;
     if (count === 4'd3)
       $display("PASS  Count up to 3: count=%0d", count);
     else
       $display("FAIL  Count up: count=%0d (expected 3)", count);
-
     // Count to 15 and check overflow
-    repeat(12) @(posedge clk); #1;  // count is now 15
-    @(posedge clk); #1;             // wraps: count=0, overflow=1
+    repeat(12) @(posedge clk); #1;
+    @(posedge clk); #1;
     if (overflow === 1'b1)
       $display("PASS  Overflow detected at wrap: count=%0d", count);
     else
       $display("FAIL  Overflow: expected 1, got %0b", overflow);
-
-    // Count down from 0 and check underflow
+    // Count down from 0 -> underflow
     dir = 0;
-    @(posedge clk); #1;  // wraps: count=15, underflow=1
+    @(posedge clk); #1;
     if (underflow === 1'b1)
       $display("PASS  Underflow detected at wrap: count=%0d", count);
     else
       $display("FAIL  Underflow: expected 1, got %0b", underflow);
-
-    // Freeze: en=0 should stop counting
-    en = 0; logic [3:0] frozen_count;
-    frozen_count = count;
+    // Freeze test
+    en = 0;
+    saved_count = count;
     repeat(3) @(posedge clk); #1;
-    if (count === frozen_count)
+    if (count === saved_count)
       $display("PASS  Freeze: count held at %0d", count);
     else
       $display("FAIL  Freeze: count changed to %0d", count);
-
     $display("Up/Down counter works!");
     $finish;
   end
