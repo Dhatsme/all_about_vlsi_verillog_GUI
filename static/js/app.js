@@ -31,6 +31,32 @@ function getCourseForModule(modId) {
   return (window.COURSES || []).find(c => c.modules.includes(modId));
 }
 
+function openCourse(courseId) {
+  const course = (window.COURSES || []).find(c => c.id === courseId);
+  if (!course) return;
+  const courseModules = course.modules.map(id => CURRICULUM.find(m => m.id === id)).filter(Boolean);
+  if (!courseModules.length) return;
+
+  const total = courseModules.reduce((s, m) => s + m.lessons.length, 0);
+  const done  = courseModules.reduce((s, m) => s + m.lessons.filter(l => STATE.completed.has(l.id)).length, 0);
+
+  if (done >= total && total > 0) {
+    showCertificate(course, courseModules);
+    return;
+  }
+
+  // Find first incomplete lesson
+  for (const mod of courseModules) {
+    for (const lesson of mod.lessons) {
+      if (!STATE.completed.has(lesson.id)) {
+        openLesson(mod.id, lesson.id);
+        return;
+      }
+    }
+  }
+  openLesson(courseModules[0].id, courseModules[0].lessons[0].id);
+}
+
 // ── INIT ────────────────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   buildLandingPage();
@@ -65,11 +91,15 @@ function buildLandingPage() {
     const doneLessons  = courseModules.reduce((s, m) =>
       s + m.lessons.filter(l => STATE.completed.has(l.id)).length, 0);
     const pct = totalLessons ? Math.round((doneLessons / totalLessons) * 100) : 0;
+    const estHours = Math.ceil(totalLessons * 20 / 60);
+
+    const isComplete = pct === 100 && totalLessons > 0;
+    const startLabel = isComplete ? '🏆 View Certificate' : pct > 0 ? '▶ Continue' : '▶ Start Course';
 
     const card = document.createElement('div');
     card.className = 'course-card';
     card.innerHTML = `
-      <div class="course-header">
+      <div class="course-header" onclick="openCourse('${course.id}')">
         <div class="course-icon">${course.icon}</div>
         <div class="course-info">
           <div class="course-title">${course.title}</div>
@@ -79,24 +109,30 @@ function buildLandingPage() {
             <span class="meta-dot">·</span>
             <span>${courseModules.length} chapters</span>
             <span class="meta-dot">·</span>
+            <span>~${estHours} hrs</span>
+            <span class="meta-dot">·</span>
             <span class="${pct > 0 ? 'meta-progress' : ''}">${pct > 0 ? pct + '% complete' : 'Not started'}</span>
           </div>
         </div>
+        <button class="course-start-btn" onclick="event.stopPropagation(); openCourse('${course.id}')">${startLabel}</button>
       </div>
       <div class="course-progress-bar">
         <div class="course-progress-fill" style="width:${pct}%"></div>
       </div>
       <div class="course-chapters">
-        ${courseModules.map((mod, i) => {
-          const done  = mod.lessons.filter(l => STATE.completed.has(l.id)).length;
-          const total = mod.lessons.length;
-          return `<button class="chapter-chip ${mod.level}" onclick="openModule('${mod.id}')">
-            <span class="chapter-num">${String(i + 1).padStart(2, '0')}</span>
-            <span class="chapter-icon">${mod.icon}</span>
-            <span class="chapter-name">${mod.title}</span>
-            <span class="chapter-count">${done}/${total}</span>
-          </button>`;
-        }).join('')}
+        ${courseModules.length === 0
+          ? '<div style="color:var(--muted);font-size:0.8rem;padding:8px 0;">Chapters loading… refresh if this persists.</div>'
+          : courseModules.map((mod, i) => {
+              const done  = mod.lessons.filter(l => STATE.completed.has(l.id)).length;
+              const total = mod.lessons.length;
+              return `<button class="chapter-chip ${mod.level || 'beginner'}" onclick="openModule('${mod.id}')">
+                <span class="chapter-num">${String(i + 1).padStart(2, '0')}</span>
+                <span class="chapter-icon">${mod.icon || '📘'}</span>
+                <span class="chapter-name">${mod.title || 'Chapter ' + (i + 1)}</span>
+                <span class="chapter-count">${done}/${total}</span>
+              </button>`;
+            }).join('')
+        }
       </div>
     `;
     grid.appendChild(card);
@@ -574,6 +610,83 @@ function markComplete(lessonId) {
     renderSidebar(mod, STATE.currentLesson);
     renderProgressDots(mod, STATE.currentLesson);
   }
+  checkCourseCompletion();
+}
+
+// ── COURSE COMPLETION & CERTIFICATE ─────────────────────────────────────────────────────────────
+function checkCourseCompletion() {
+  const mod = CURRICULUM.find(m => m.id === STATE.currentModule);
+  if (!mod) return;
+  const course = getCourseForModule(mod.id);
+  if (!course) return;
+
+  const courseModules = course.modules.map(id => CURRICULUM.find(m => m.id === id)).filter(Boolean);
+  const total = courseModules.reduce((s, m) => s + m.lessons.length, 0);
+  const done  = courseModules.reduce((s, m) => s + m.lessons.filter(l => STATE.completed.has(l.id)).length, 0);
+
+  if (done >= total && total > 0) {
+    setTimeout(() => showCertificate(course, courseModules), 1200);
+  }
+}
+
+function showCertificate(course, courseModules) {
+  const total = courseModules.reduce((s, m) => s + m.lessons.length, 0);
+  const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  const existing = document.getElementById('cert-modal');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'cert-modal';
+  modal.innerHTML = `
+    <div class="cert-overlay" onclick="closeCertificate()"></div>
+    <div class="cert-container">
+      <button class="cert-close" onclick="closeCertificate()">✕</button>
+      <div class="cert-paper" id="cert-paper">
+        <div class="cert-logo-row">
+          <div class="cert-logo-chip">⬡</div>
+          <span class="cert-logo-text">All About VLSI</span>
+        </div>
+        <div class="cert-stamp">Certificate of Completion</div>
+        <div class="cert-divider"></div>
+        <div class="cert-awarded">This certifies that</div>
+        <input class="cert-name-input" id="cert-name" placeholder="Type your name here" maxlength="60" />
+        <div class="cert-body">has successfully completed all <strong>${total} lessons</strong> across <strong>${courseModules.length} chapters</strong> of</div>
+        <div class="cert-course-name">${course.icon} ${course.title}</div>
+        <div class="cert-subtitle">SystemVerilog Hardware Description Language Curriculum</div>
+        <div class="cert-chapters-row">${courseModules.map(m => `<span class="cert-chip">${m.icon} ${m.title}</span>`).join('')}</div>
+        <div class="cert-date-row">
+          <div class="cert-date-label">Date Issued</div>
+          <div class="cert-date">${today}</div>
+        </div>
+        <div class="cert-footer">
+          <div class="cert-sig">All About VLSI</div>
+          <div class="cert-sig-label">allaboutvlsi.com</div>
+        </div>
+      </div>
+      <div class="cert-actions">
+        <div class="cert-name-hint">Type your name above, then download</div>
+        <button class="cert-download-btn" onclick="downloadCertificate()">⬇ Download as PDF</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  showToast('🎓 Course Complete! Certificate ready.', 'pass');
+}
+
+function closeCertificate() {
+  const modal = document.getElementById('cert-modal');
+  if (modal) modal.remove();
+}
+
+function downloadCertificate() {
+  const nameEl = document.getElementById('cert-name');
+  if (!nameEl || !nameEl.value.trim()) {
+    nameEl && nameEl.focus();
+    showToast('Enter your name first', 'info');
+    return;
+  }
+  window.print();
 }
 
 // ── BANNER / TOAST ──────────────────────────────────────────────────────────────────────────────
