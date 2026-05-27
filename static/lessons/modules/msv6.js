@@ -508,7 +508,7 @@ STOP:  SDA rises while SCL is HIGH</pre>
         'Module: i2c_master',
         'Inputs: clk, rst, start_xfer, addr[6:0], wdata[7:0]',
         'Outputs: scl, sda (open-drain), busy, ack_err',
-        'Model open-drain: assign sda = sda_oe ? 1\'b0 : 1\'bz',
+        "Model open-drain: assign sda = sda_oe ? 1'b0 : 1'bz",
         'START: pull SDA low while SCL high',
         'Send 7-bit address + write bit (0), MSB first',
         'After each byte: release SDA (sda_oe=0) to receive ACK/NACK from slave',
@@ -520,6 +520,7 @@ STOP:  SDA rises while SCL is HIGH</pre>
         'Hit Run and verify START/data/STOP sequence is correct',
         '🎓 Systems Engineer certificate project — push to your GitHub when complete',
         'Congratulations — you have completed the Serial Protocols module!',
+        '🎓 Systems Engineer certificate unlocked — complete msv5 + msv6 to claim it',
       ],
       hint: `No hint for certificate projects. I2C implementation roadmap:
 
