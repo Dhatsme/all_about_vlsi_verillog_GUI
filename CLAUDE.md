@@ -29,8 +29,8 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 | 1 | `msv1` | Getting Started with SystemVerilog | L1 AND/OR/NOT gates, L2 Door Chime (~), L3 Fan Controller (|) | ✅ done |
 | 2 | `msv2` | Sequential Logic | L1 D Flip-Flop, L2 4-bit Register, L3 Shift Register, L4 Clock Divider | ✅ done |
 | 3 | `msv3` | Arithmetic Circuits | L1 Half Adder, L2 Full Adder, L3 4-bit Adder, L4 Subtractor, L5 ALU (portfolio) | ✅ done |
-| 4 | `msv4` | Finite State Machines | L1 Traffic Light, L2 Vending Machine, L3 Sequence Detector, L4 Combo Lock (portfolio) | ❌ **build this next** |
-| 5 | `msv5` | Memory & Storage | L1 Register File, L2 Sync SRAM, L3 FIFO, L4 Stack (portfolio) | ❌ |
+| 4 | `msv4` | Finite State Machines | L1 Traffic Light, L2 Vending Machine, L3 Sequence Detector, L4 Combo Lock (portfolio) | ✅ done |
+| 5 | `msv5` | Memory & Storage | L1 Register File, L2 Sync SRAM, L3 FIFO, L4 Stack (portfolio) | ❌ **build this next** |
 | 6 | `msv6` | Serial Protocols | L1 UART TX, L2 UART RX, L3 SPI Master (portfolio), L4 I2C Controller (portfolio) | ❌ |
 | 7 | `msv7` | Capstone Projects | L1 PWM, L2 VGA Sync, L3 Calculator, L4 RISC-V RV32I Core | ✅ done |
 
