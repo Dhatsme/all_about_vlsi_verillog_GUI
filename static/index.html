@@ -6,6 +6,7 @@
 <title>All About VLSI — Zero to Hero Verilog</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/css/style.css">
+<link rel="stylesheet" href="/css/course-cert.css">
 </head>
 <body>
 
@@ -17,7 +18,7 @@
   <!-- Nav -->
   <nav class="landing-nav">
     <div class="logo">
-      <div class="logo-chip">⭡</div>
+      <div class="logo-chip">⬡</div>
       All About <em>&nbsp;VLSI</em>
     </div>
     <div class="landing-nav-right">
@@ -29,7 +30,7 @@
   <div class="hero">
     <div class="hero-badge">Free · Open · Interactive</div>
     <h1 class="hero-title">
-      Master Verilog &<br>
+      Master Verilog &amp;<br>
       <span class="hl">VLSI Design</span>
     </h1>
     <p class="hero-sub">
@@ -37,8 +38,8 @@
       with real iverilog simulation, interactive waveforms, and hands-on challenges.
     </p>
     <div class="hero-actions">
-      <button class="btn-primary" onclick="openModule('m1')">
-        &#9654; Start Learning Free
+      <button class="btn-primary" onclick="openModule('msv1')">
+        ▶ Start Learning Free
       </button>
       <button class="btn-secondary" onclick="openModule('m4')">
         Jump to Advanced
@@ -53,7 +54,7 @@
       <div class="stat-label">Lessons</div>
     </div>
     <div class="stat">
-      <div class="stat-num" id="stat-modules">0</div>
+      <div class="stat-num">6</div>
       <div class="stat-label">Modules</div>
     </div>
     <div class="stat">
@@ -115,7 +116,7 @@
 
     <!-- Sidebar -->
     <aside class="lesson-sidebar">
-      <div class="sidebar-module-header">
+      <div id="sidebar-module-header" class="sidebar-module-header">
         <div class="sidebar-mod-title" id="sidebar-mod-title">Module</div>
       </div>
       <div class="sidebar-lessons" id="sidebar-lessons"></div>
@@ -141,8 +142,8 @@
     <!-- Editor Pane -->
     <div class="editor-pane">
       <div class="editor-header">
-        <button class="file-tab active" id="tab-design" onclick="switchEditorTab('design')">design.v</button>
-        <button class="file-tab"        id="tab-tb"     onclick="switchEditorTab('tb')">testbench.v</button>
+        <button class="file-tab active" id="tab-design" onclick="switchEditorTab('design')">design.sv</button>
+        <button class="file-tab"        id="tab-tb"     onclick="switchEditorTab('tb')">testbench.sv</button>
       </div>
       <div class="editor-wrap">
         <!-- Design editor -->
@@ -174,7 +175,7 @@
       <!-- Next Lesson -->
       <div class="next-lesson-wrap">
         <button class="next-lesson-btn" id="btn-next-lesson" onclick="navNext()">
-          Next Lesson &#8594;
+          Next Lesson →
         </button>
       </div>
 
@@ -194,11 +195,27 @@
           <canvas id="wave-canvas"></canvas>
         </div>
         <div style="padding:3px 10px;font-family:var(--mono);font-size:0.58rem;color:var(--muted);border-top:1px solid var(--border);">
-          Scroll to zoom &middot; Hover to inspect signals
+          Scroll to zoom · Hover to inspect signals
         </div>
       </div>
 
     </div><!-- /output-pane -->
+
+    <!-- Mobile bottom tab bar -->
+    <div class="mob-tab-bar" id="mob-tab-bar">
+      <button class="mob-tab" id="mob-tab-lessons" onclick="mobTab('lessons')">
+        <span class="mob-tab-icon">&#9776;</span><span>Lessons</span>
+      </button>
+      <button class="mob-tab" id="mob-tab-theory" onclick="mobTab('theory')">
+        <span class="mob-tab-icon">&#128218;</span><span>Theory</span>
+      </button>
+      <button class="mob-tab active" id="mob-tab-code" onclick="mobTab('code')">
+        <span class="mob-tab-icon">&#128187;</span><span>Code</span>
+      </button>
+      <button class="mob-tab" id="mob-tab-output" onclick="mobTab('output')">
+        <span class="mob-tab-icon">&#9654;</span><span>Output</span>
+      </button>
+    </div>
 
   </div><!-- /lesson-body -->
 </div><!-- /lesson-page -->
@@ -389,7 +406,15 @@
 </div>
 
 <!-- ── SCRIPTS ── -->
-<!-- Original curriculum modules (Verilog basics) -->
+<!-- Curriculum modules — add new chapter: create modules/msvN.js and add a line here -->
+<script src="/lessons/courses.js"></script>
+<script src="/lessons/modules/msv1.js"></script>
+<script src="/lessons/modules/msv2.js"></script>
+<script src="/lessons/modules/msv3.js"></script>
+<script src="/lessons/modules/msv4.js"></script>
+<script src="/lessons/modules/msv5.js"></script>
+<script src="/lessons/modules/msv6.js"></script>
+<script src="/lessons/modules/msv7.js"></script>
 <script src="/lessons/modules/m1.js"></script>
 <script src="/lessons/modules/m2.js"></script>
 <script src="/lessons/modules/m3.js"></script>
@@ -399,21 +424,15 @@
 <script src="/lessons/modules/m13.js"></script>
 <script src="/lessons/modules/m16.js"></script>
 <script src="/lessons/modules/m15.js"></script>
-<!-- SystemVerilog curriculum (msv track) -- add new chapter: create msv N.js and add a line here -->
-<script src="/lessons/modules/msv4.js"></script>
-<script src="/lessons/modules/msv5.js"></script>
-<script src="/lessons/modules/msv6.js"></script>
-<script src="/lessons/modules/msv7.js"></script>
 <script src="/lessons/curriculum.js"></script>
 <script src="/js/waveform.js"></script>
 <script src="/js/app.js"></script>
 
 <script>
-  // Count total lessons and modules for stats bar
+  // Count total lessons for stats
   window.addEventListener('DOMContentLoaded', () => {
     const total = CURRICULUM.reduce((s, m) => s + m.lessons.length, 0);
     document.getElementById('stat-lessons').textContent = total;
-    document.getElementById('stat-modules').textContent = CURRICULUM.length;
   });
 </script>
 
