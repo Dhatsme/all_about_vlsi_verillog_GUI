@@ -22,8 +22,8 @@
 
 <pre class="code-block">// 1. State register — the only always_ff block
 always_ff @(posedge clk or posedge rst) begin
-  if (rst) state <= ST_RED;
-  else     state <= next_state;
+  if (rst) state &lt;= ST_RED;
+  else     state &lt;= next_state;
 end
 
 // 2. Output + next-state logic — combinational
@@ -47,8 +47,17 @@ end</pre>
 
 state_t state, next_state;</pre>
 
+<h3>Async vs Synchronous Reset</h3>
+<p>Notice the reset condition: <code>always_ff @(posedge clk <strong>or posedge rst</strong>)</code>. This is an <strong>asynchronous reset</strong> — it takes effect immediately when <code>rst</code> goes high, regardless of the clock.</p>
+<table class="truth-table">
+  <tr><th>Reset type</th><th>Sensitivity list</th><th>Behaviour</th><th>Use</th></tr>
+  <tr><td>Async</td><td><code>@(posedge clk or posedge rst)</code></td><td>Clears immediately on rst=1</td><td>Most FSMs, FPGAs</td></tr>
+  <tr><td>Sync</td><td><code>@(posedge clk)</code></td><td>Clears only on next clock edge</td><td>Some ASIC flows, CDC designs</td></tr>
+</table>
+<p>Both are correct; async is more common in FPGA and VLSI FSM designs because the device starts up before the first clock edge arrives.</p>
+
 <h3>Timing in this design</h3>
-<p>The testbench counts clock cycles. RED lasts 10 cycles, GREEN 8 cycles, YELLOW 2 cycles. The FSM transitions automatically — your job is only to describe each state's output and its successor.</p>
+<p>The testbench counts clock cycles. RED lasts 10 cycles, GREEN 8 cycles, YELLOW 2 cycles. The FSM transitions automatically — your job is only to describe each state’s output and its successor.</p>
 
 <h3>You will build</h3>
 <p>Module <code>traffic_light</code>: inputs <code>clk, rst</code>, outputs <code>red, green, yellow</code>. Three states, one-hot outputs, fixed timing via cycle counting.</p>
@@ -172,7 +181,7 @@ endmodule`,
       ]
     },
 
-    // ── L2 Vending Machine FSM (Tier 3) ──────────────────────────────────
+    // ── L2 Vending Machine FSM (Tier 3) ──────────────────────────────
     {
       id: 'msv4l2',
       title: 'L2 — Vending Machine FSM',
@@ -195,7 +204,7 @@ endmodule`,
 
 <h3>Key pattern: input-dependent transition</h3>
 <pre class="code-block">IDLE: next_state = coin ? FIVE : IDLE;</pre>
-<p>The ternary operator inside <code>always_comb</code> is the standard way to express "if input is asserted, move to next state, else stay."</p>
+<p>The ternary operator inside <code>always_comb</code> is the standard way to express “if input is asserted, move to next state, else stay.”</p>
 
 <h3>You will build</h3>
 <p>Module <code>vending_machine</code>: inputs <code>clk, rst, coin</code>, output <code>dispense</code>. Four states. After dispensing, automatically return to IDLE.</p>
@@ -311,7 +320,7 @@ endmodule`,
       ]
     },
 
-    // ── L3 Sequence Detector (Tier 4) ────────────────────────────────────
+    // ── L3 Sequence Detector (Tier 4) ──────────────────────────────────
     {
       id: 'msv4l3',
       title: 'L3 — 1011 Sequence Detector',
@@ -325,17 +334,17 @@ endmodule`,
 <h3>State diagram (Moore FSM)</h3>
 <pre class="code-block">
          din=0        din=0       din=1
-  S0 ----------> S0    S2 -------> S0
-  S0 --din=1-->  S1    S2 --din=1-> S3
-  S1 --din=0-->  S2    S3 --din=0-> S2
-  S1 --din=1-->  S1    S3 --din=1-> S4 (detected!)
-                       S4 --din=0-> S2
-                       S4 --din=1-> S1  (overlap: last 1 starts new match)
+  S0 ----------&gt; S0    S2 -------&gt; S0
+  S0 --din=1--&gt;  S1    S2 --din=1-&gt; S3
+  S1 --din=0--&gt;  S2    S3 --din=0-&gt; S2
+  S1 --din=1--&gt;  S1    S3 --din=1-&gt; S4 (detected!)
+                       S4 --din=0-&gt; S2
+                       S4 --din=1-&gt; S1  (overlap: last 1 starts new match)
 </pre>
-<p>S0 = reset/start, S1 = saw "1", S2 = saw "10", S3 = saw "101", S4 = saw "1011" (detected=1).</p>
+<p>S0 = reset/start, S1 = saw &ldquo;1&rdquo;, S2 = saw &ldquo;10&rdquo;, S3 = saw &ldquo;101&rdquo;, S4 = saw &ldquo;1011&rdquo; (detected=1).</p>
 
 <h3>Overlapping transition from S4</h3>
-<p>After a match, the final bit was 1. If the next bit is also 1, we already have the first 1 of a new sequence — go to S1. If the next bit is 0, we have "10" — go to S2. This is what makes the detector overlapping.</p>
+<p>After a match, the final bit was 1. If the next bit is also 1, we already have the first 1 of a new sequence — go to S1. If the next bit is 0, we have &ldquo;10&rdquo; — go to S2. This is what makes the detector overlapping.</p>
 
 <h3>You will build</h3>
 <p>Module <code>seq_det</code>: inputs <code>clk, rst, din</code>, output <code>detected</code>. Five states. <code>detected</code> is 1 only in S4.</p>
@@ -360,7 +369,7 @@ endmodule`,
 `DESIGN NOTES for seq_det (1011 overlapping Moore FSM):
 
   5 states: S0 (start) S1 (saw 1) S2 (saw 10) S3 (saw 101) S4 (detected 1011)
-  output detected = 1 ONLY in S4 — assign it in always_comb.
+  output detected = 1 ONLY in S4 -- assign it in always_comb.
 
   State transition table:
     state  din  next_state
@@ -370,7 +379,7 @@ endmodule`,
     S1      1   S1    <- repeated 1, restart
     S2      0   S0    <- 100 is not a prefix of 1011, full reset
     S2      1   S3
-    S3      0   S2    <- 1010 ends in 10, which IS a prefix prefix
+    S3      0   S2    <- 1010 ends in 10, which IS a prefix
     S3      1   S4    <- match!
     S4      0   S2    <- last bit 1, then 0 -> we have "10"
     S4      1   S1    <- overlap: last bit 1, another 1 -> S1
@@ -400,7 +409,7 @@ endmodule`,
 // Ports: clk, rst (inputs), din (1-bit serial input), detected (output)
 // Pattern: 1011 (overlapping detection)
 //
-// Hint: 5 states — S0 S1 S2 S3 S4(detected)
+// Hint: 5 states -- S0 S1 S2 S3 S4(detected)
 //
 // Delete this and start typing:
 `,
@@ -458,7 +467,7 @@ endmodule`,
       ]
     },
 
-    // ── L4 Portfolio: Combo Lock (Tier 5) ────────────────────────────────
+    // ── L4 Portfolio: Combo Lock (Tier 5) ──────────────────────────────
     {
       id: 'msv4l4',
       title: 'L4 — Portfolio: Combo Lock',
@@ -476,15 +485,15 @@ endmodule`,
 </ul>
 
 <h3>State map</h3>
-<pre class="code-block">D0 --(enter & digit==4)--> D1
-D0 --(enter & digit!=4)--> PENALTY -> D0
-D1 --(enter & digit==2)--> D2
-D1 --(enter & digit!=2)--> PENALTY -> D0
-D2 --(enter & digit==7)--> D3
-D2 --(enter & digit!=7)--> PENALTY -> D0
-D3 --(enter & digit==1)--> OPEN
-D3 --(enter & digit!=1)--> PENALTY -> D0
-OPEN --(enter)--> D0 (relock)</pre>
+<pre class="code-block">D0 --(enter &amp; digit==4)--&gt; D1
+D0 --(enter &amp; digit!=4)--&gt; PENALTY -&gt; D0
+D1 --(enter &amp; digit==2)--&gt; D2
+D1 --(enter &amp; digit!=2)--&gt; PENALTY -&gt; D0
+D2 --(enter &amp; digit==7)--&gt; D3
+D2 --(enter &amp; digit!=7)--&gt; PENALTY -&gt; D0
+D3 --(enter &amp; digit==1)--&gt; OPEN
+D3 --(enter &amp; digit!=1)--&gt; PENALTY -&gt; D0
+OPEN --(enter)--&gt; D0 (relock)</pre>
 
 <h3>Penalty state</h3>
 <p>Use a counter to stay in PENALTY for exactly 4 cycles before returning to D0. This models real combo locks that disable input after a wrong guess.</p>
@@ -501,6 +510,7 @@ OPEN --(enter)--> D0 (relock)</pre>
         'On wrong digit with enter=1: go to PENALTY state for 4 cycles, then D0',
         'In OPEN: unlocked=1 — stay until enter=1, then relock to D0',
         'In PENALTY: penalty=1 for 4 cycles (use a 2-bit counter)',
+        '🎓 Digital Design certificate unlocked — complete msv3 + msv4 to claim it',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — correct sequence should unlock, wrong digit should trigger penalty',
         '🎓 Portfolio piece — push to your GitHub as part of the Digital Design certificate',
