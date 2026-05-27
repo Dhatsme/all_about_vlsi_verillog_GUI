@@ -38,7 +38,7 @@ clk: |     |_____|     |_____|     |
   // runs ONCE per clock tick — exactly on the rising edge
 end</pre>
 
-<h2>Non-Blocking Assignment <=</h2>
+<h2>Non-Blocking Assignment &lt;=</h2>
 <p>Inside <code>always_ff</code>, you must use <code>&lt;=</code> (non-blocking) instead of <code>=</code>. This is critical: non-blocking means all assignments use the <em>old</em> values from before the clock edge, and all updates happen simultaneously. This matches how real silicon flip-flops work.</p>
 
 <table class="truth-table">
@@ -69,7 +69,7 @@ else      q &lt;= d;   // rst=1 → normal operation</pre>
 
 <h2>Common Pitfalls</h2>
 <ul>
-  <li><strong>Using = instead of <=</strong> in always_ff — causes race conditions in simulation</li>
+  <li><strong>Using = instead of &lt;=</strong> in always_ff — causes race conditions in simulation</li>
   <li><strong>Forgetting the reset</strong> — uninitialized flip-flops have unknown (X) state at power-on</li>
   <li><strong>Confusing active-low / active-high</strong> — always check: is reset ON when signal is 0 or 1?</li>
 </ul>
@@ -410,6 +410,7 @@ end</pre>
         "Branch 2 — pulse: else if (count == 2'd3) begin  count <= 0;  clk_div <= 1;  end",
         'Branch 3 — keep counting: else begin  count <= count + 1;  clk_div <= 0;  end',
         'Close with end, then endmodule',
+        '🎓 VLSI Foundations certificate unlocked — complete msv1 + msv2 to claim it',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — should see 4 pulses in 16 cycles',
       ],
