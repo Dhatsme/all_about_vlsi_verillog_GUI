@@ -32,7 +32,7 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 | 4 | `msv4` | Finite State Machines | L1 Traffic Light, L2 Vending Machine, L3 Sequence Detector, L4 Combo Lock (portfolio) | ❌ |
 | 5 | `msv5` | Memory & Storage | L1 Register File, L2 Sync SRAM, L3 FIFO, L4 Stack (portfolio) | ❌ |
 | 6 | `msv6` | Serial Protocols | L1 UART TX, L2 UART RX, L3 SPI Master (portfolio), L4 I2C Controller (portfolio) | ❌ |
-| 7 | `msv7` | Capstone Projects | L1 PWM, L2 VGA Sync, L3 Calculator, L4 RISC-V RV32I Core | ❌ |
+| 7 | `msv7` | Capstone Projects | L1 PWM, L2 VGA Sync, L3 Calculator, L4 RISC-V RV32I Core | ✅ done |
 
 ---
 
@@ -502,7 +502,7 @@ message: 'chore: mark msv2 done, advance curriculum cursor'
 
 **L3 — Sequence Detector** (Tier 4)
 - Detect pattern 1011 in serial input stream
-- Overlapping detection (after match, don’t reset fully)
+- Overlapping detection (after match, don't reset fully)
 - Harder than it looks — acknowledge this in theory
 
 **L4 — Portfolio: Combination Lock** (Tier 5)
@@ -584,7 +584,7 @@ message: 'chore: mark msv2 done, advance curriculum cursor'
 - Support: R-type, I-type, load/store, branch instructions
 - Theory: explain the pipeline stages conceptually with a diagram
 - Hint: block diagram with module names (IF, ID, EX, MEM, WB)
-- Completing msv7 unlocks the “VLSI Architect” certificate
+- Completing msv7 unlocks the "VLSI Architect" certificate
 - Add to last task: `'🎓 VLSI Architect certificate unlocked — you built a CPU from scratch'`
 
 ---
@@ -631,7 +631,7 @@ Add these as the final task in the last lesson of the trigger chapter:
 - Never use the words "easy", "simple", "trivial", "just", "obviously"
 - When a concept is genuinely hard, say so: "This one takes a few tries — that's completely normal"
 - Portfolio lessons feel like real work: "This is a real interview question at hardware companies"
-- Every chapter ends with forward momentum: "In the next chapter, you’ll use this to build X"
+- Every chapter ends with forward momentum: "In the next chapter, you'll use this to build X"
 
 ---
 
