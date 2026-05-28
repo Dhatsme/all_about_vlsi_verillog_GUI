@@ -132,8 +132,8 @@ module tb;
     rise_cnt = 0; fall_cnt = 0;
     repeat(64) begin
       @(posedge clk); #1;
-      if (sclk_rise) rise_cnt++;
-      if (sclk_fall) fall_cnt++;
+      if (sclk_rise) rise_cnt = rise_cnt + 1;
+      if (sclk_fall) fall_cnt = fall_cnt + 1;
     end
 
     if (rise_cnt === 8)
@@ -262,7 +262,7 @@ Each bit takes exactly 4 system clocks to transfer:</p>
         sclk_r   <= 0;
       end else if (busy) begin
         phase <= phase + 1;
-        case (phase)
+        unique case (phase)
           2'd0: begin                          // SCLK rising
             sclk_r   <= 1;
             rx_shift <= {rx_shift[6:0], miso}; // sample MISO
@@ -348,11 +348,7 @@ module tb;
   task automatic do_xfer(input logic [7:0] tx);
     tx_data = tx; start = 1;
     @(posedge clk); #1; start = 0;
-    for (int i = 0; i < 400; i++) begin
-      @(posedge clk); #1;
-      if (done) return;
-    end
-    $display("TIMEOUT");
+    repeat(100) @(posedge clk); #1;
   endtask
 
   initial begin
@@ -484,7 +480,7 @@ end else
         sclk_r    <= 0;
       end else if (busy) begin
         phase <= phase + 1;
-        case (phase)
+        unique case (phase)
           2'd0: begin
             sclk_r   <= 1;
             rx_shift <= {rx_shift[14:0], miso};
@@ -570,11 +566,7 @@ module tb;
   task automatic do_xfer16(input logic [15:0] tx);
     tx_word = tx; start = 1;
     @(posedge clk); #1; start = 0;
-    for (int i = 0; i < 700; i++) begin
-      @(posedge clk); #1;
-      if (done) return;
-    end
-    $display("TIMEOUT");
+    repeat(200) @(posedge clk); #1;
   endtask
 
   initial begin
@@ -730,11 +722,7 @@ module tb;
   task automatic do_xfer(input logic [7:0] tx);
     tx_data = tx; start = 1;
     @(posedge clk); #1; start = 0;
-    for (int i = 0; i < 500; i++) begin
-      @(posedge clk); #1;
-      if (done) return;
-    end
-    $display("TIMEOUT");
+    repeat(200) @(posedge clk); #1;
   endtask
 
   initial begin

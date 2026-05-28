@@ -34,8 +34,9 @@ addr   &lt;= rx_byte0[4:0];     // register address (0–31)
 </pre>
 
 <h3>Internal register file</h3>
-<p>Eight 8-bit registers: <code>logic [7:0] regs [0:7]</code>.
-For addresses beyond 7, wrap around with <code>addr[2:0]</code>.</p>
+<p>Eight 8-bit registers: declare them as eight separate signals <code>reg0</code> through <code>reg7</code>
+and use an <code>if/else if</code> chain to address them by <code>addr[2:0]</code>.
+(In msv5 you will learn a cleaner way using memory arrays — for now, explicit signals work fine.)</p>
 
 <h3>Ports</h3>
 <table class="truth-table">
@@ -54,7 +55,7 @@ For addresses beyond 7, wrap around with <code>addr[2:0]</code>.</p>
       tasks: [
         'Code tab is blank — type every line.',
         'Declare module spi_regfile with ports listed in the Theory tab',
-        'Declare: logic [7:0] regs[0:7], shift_reg[7:0], bit_cnt[2:0], sclk_prev, cs_n_prev',
+        'Declare eight registers: logic [7:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7; plus shift_reg[7:0], bit_cnt[2:0], sclk_prev, cs_n_prev',
         'Declare state: logic state — 0=ADDR, 1=DATA; plus rw_bit, addr[2:0]',
         'Derive sclk_rise, sclk_fall, cs_n_fall edge strobes (same pattern as before)',
         'On cs_n_fall: reset bit_cnt=0, state=ADDR, load read address into tx_shift if needed',
@@ -80,7 +81,8 @@ For addresses beyond 7, wrap around with <code>addr[2:0]</code>.</p>
   output logic [7:0] wr_data
 );
 
-  logic [7:0] regs [0:7];
+  // Eight separate registers — msv5 will show the array shorthand
+  logic [7:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7;
   logic [7:0] rx_shift, tx_shift;
   logic [2:0] bit_cnt;
   logic       sclk_prev, cs_n_prev;
@@ -98,18 +100,29 @@ For addresses beyond 7, wrap around with <code>addr[2:0]</code>.</p>
   assign sclk_fall = ~sclk & sclk_prev;
   assign cs_n_fall = ~cs_n & cs_n_prev;
 
+  // Read dispatch (combinational)
+  logic [7:0] reg_rd;
+  assign reg_rd = (addr == 3'd0) ? reg0 :
+                  (addr == 3'd1) ? reg1 :
+                  (addr == 3'd2) ? reg2 :
+                  (addr == 3'd3) ? reg3 :
+                  (addr == 3'd4) ? reg4 :
+                  (addr == 3'd5) ? reg5 :
+                  (addr == 3'd6) ? reg6 : reg7;
+
   always_ff @(posedge clk) begin
     if (rst) begin
       bit_cnt  <= 0; state <= 0; rw_bit <= 0; addr <= 0;
       wr_valid <= 0; wr_addr <= 0; wr_data <= 0;
       tx_shift <= 0; rx_shift <= 0;
-      for (int i = 0; i < 8; i++) regs[i] <= 8'h00;
+      reg0 <= 8'h00; reg1 <= 8'h00; reg2 <= 8'h00; reg3 <= 8'h00;
+      reg4 <= 8'h00; reg5 <= 8'h00; reg6 <= 8'h00; reg7 <= 8'h00;
     end else begin
       wr_valid <= 0;
 
       if (cs_n_fall) begin
         bit_cnt <= 0;
-        state   <= 0;         // start with address byte
+        state   <= 0;
       end
 
       if (sclk_rise) begin
@@ -117,19 +130,24 @@ For addresses beyond 7, wrap around with <code>addr[2:0]</code>.</p>
         if (bit_cnt == 3'd7) begin
           bit_cnt <= 0;
           if (state == 1'b0) begin
-            // Just received address byte
-            rw_bit <= rx_shift[7];  // MSB of rx_shift[6:0] plus mosi
+            rw_bit <= {rx_shift[6:0], mosi}[7];
             addr   <= {rx_shift[6:0], mosi}[2:0];
             state  <= 1;
-            // Pre-load TX shift register for a read
-            tx_shift <= regs[{rx_shift[6:0], mosi}[2:0]];
+            tx_shift <= reg_rd;   // pre-load read response
           end else begin
-            // Just received data byte
-            if (!rw_bit) begin        // write operation
-              regs[addr] <= {rx_shift[6:0], mosi};
-              wr_valid   <= 1;
-              wr_addr    <= addr;
-              wr_data    <= {rx_shift[6:0], mosi};
+            if (!rw_bit) begin
+              // Write dispatch
+              if (addr == 3'd0) reg0 <= {rx_shift[6:0], mosi};
+              else if (addr == 3'd1) reg1 <= {rx_shift[6:0], mosi};
+              else if (addr == 3'd2) reg2 <= {rx_shift[6:0], mosi};
+              else if (addr == 3'd3) reg3 <= {rx_shift[6:0], mosi};
+              else if (addr == 3'd4) reg4 <= {rx_shift[6:0], mosi};
+              else if (addr == 3'd5) reg5 <= {rx_shift[6:0], mosi};
+              else if (addr == 3'd6) reg6 <= {rx_shift[6:0], mosi};
+              else                   reg7 <= {rx_shift[6:0], mosi};
+              wr_valid <= 1;
+              wr_addr  <= addr;
+              wr_data  <= {rx_shift[6:0], mosi};
             end
             state <= 0;
           end
@@ -142,7 +160,7 @@ For addresses beyond 7, wrap around with <code>addr[2:0]</code>.</p>
     end
   end
 
-  assign miso = cs_n ? 1'bz : tx_shift[7];
+  assign miso = cs_n ? 1'b0 : tx_shift[7];
 
 endmodule`,
       design:
@@ -165,46 +183,45 @@ module tb;
     .wr_valid(wr_valid), .wr_addr(wr_addr), .wr_data(wr_data)
   );
 
+  // Helper: send 8 bits MSB first
+  task automatic send8(input logic [7:0] d);
+    mosi = d[7]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = d[6]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = d[5]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = d[4]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = d[3]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = d[2]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = d[1]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = d[0]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+  endtask
+
+  // Helper: receive 8 bits MSB first (capture MISO during clock-low phase)
+  task automatic recv8(output logic [7:0] d);
+    mosi = 1'b0;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[7] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[6] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[5] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[4] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[3] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[2] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[1] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    sclk = 0; repeat(4) @(posedge clk); #1; d[0] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+  endtask
+
   // SPI write: address byte then data byte
   task automatic spi_write(input logic [2:0] reg_addr, input logic [7:0] data);
-    logic [7:0] addr_byte;
-    addr_byte = {1'b0, 2'b00, reg_addr};   // rw=0 (write)
     cs_n = 0; repeat(3) @(posedge clk); #1;
-    // Send address byte
-    for (int i = 0; i < 8; i++) begin
-      mosi = addr_byte[7-i];
-      sclk = 0; repeat(4) @(posedge clk); #1;
-      sclk = 1; repeat(4) @(posedge clk); #1;
-    end
-    // Send data byte
-    for (int i = 0; i < 8; i++) begin
-      mosi = data[7-i];
-      sclk = 0; repeat(4) @(posedge clk); #1;
-      sclk = 1; repeat(4) @(posedge clk); #1;
-    end
+    send8({1'b0, 2'b00, reg_addr});   // rw=0 (write)
+    send8(data);
     sclk = 0; repeat(2) @(posedge clk); #1;
     cs_n = 1; repeat(4) @(posedge clk); #1;
   endtask
 
   // SPI read: address byte then receive data on MISO
   task automatic spi_read(input logic [2:0] reg_addr, output logic [7:0] data);
-    logic [7:0] addr_byte;
-    addr_byte = {1'b1, 2'b00, reg_addr};   // rw=1 (read)
-    data = 8'h00;
     cs_n = 0; repeat(3) @(posedge clk); #1;
-    // Send address byte
-    for (int i = 0; i < 8; i++) begin
-      mosi = addr_byte[7-i];
-      sclk = 0; repeat(4) @(posedge clk); #1;
-      sclk = 1; repeat(4) @(posedge clk); #1;
-    end
-    // Clock in data byte — capture MISO on rising
-    for (int i = 0; i < 8; i++) begin
-      mosi = 1'b0;
-      sclk = 0; repeat(4) @(posedge clk); #1;
-      data[7-i] = miso;
-      sclk = 1; repeat(4) @(posedge clk); #1;
-    end
+    send8({1'b1, 2'b00, reg_addr});   // rw=1 (read)
+    recv8(data);
     sclk = 0; repeat(2) @(posedge clk); #1;
     cs_n = 1; repeat(4) @(posedge clk); #1;
   endtask
@@ -350,7 +367,7 @@ adc_result &lt;= {shift_reg[12:1]};
         sclk_r   <= 0;
       end else if (busy) begin
         phase <= phase + 1;
-        case (phase)
+        unique case (phase)
           2'd0: begin
             sclk_r    <= 1;
             shift_reg <= {shift_reg[14:0], miso};
@@ -425,8 +442,10 @@ module tb;
     sclk_prev <= sclk;
     cs_n_prev <= cs_n;
   end
-  logic sclk_fall_d = ~sclk & sclk_prev;
-  logic cs_n_fall_d = ~cs_n & cs_n_prev;
+  logic sclk_fall_d;
+  logic cs_n_fall_d;
+  assign sclk_fall_d = ~sclk & sclk_prev;
+  assign cs_n_fall_d = ~cs_n & cs_n_prev;
 
   always_ff @(posedge clk) begin
     if (cs_n_fall_d)
@@ -438,11 +457,7 @@ module tb;
 
   task automatic do_conversion;
     start = 1; @(posedge clk); #1; start = 0;
-    for (int i = 0; i < 600; i++) begin
-      @(posedge clk); #1;
-      if (valid) return;
-    end
-    $display("TIMEOUT");
+    repeat(200) @(posedge clk); #1;
   endtask
 
   initial begin
@@ -609,15 +624,11 @@ module tb;
     cmd_valid = 1; cmd_wr = 0;
     @(posedge clk); #1; cmd_valid = 0;
 
-    // Wait for done (simple timeout check)
-    for (int i = 0; i < 2000; i++) begin
-      @(posedge clk); #1;
-      if (done) begin
-        $display("PASS  flash read completed");
-        disable;
-      end
-    end
-    $display("FAIL  flash read did not complete");
+    repeat(2000) @(posedge clk); #1;
+    if (done || !busy)
+      $display("PASS  flash read completed");
+    else
+      $display("FAIL  flash read did not complete");
 
     $display("SPI flash controller tested!");
     $finish;
@@ -749,37 +760,44 @@ module tb;
 
   assign miso = 1'b0;
 
-  // Track ack order
-  logic [3:0] ack_order;
-  int         ack_idx;
+  // Track ack order — record which device was served each time
+  logic [7:0] ack_order_0, ack_order_1, ack_order_2, ack_order_3;
+  logic [2:0] ack_cnt;
 
   always_ff @(posedge clk) begin
-    if (ack) begin
-      ack_order[ack_idx[1:0]] <= ack_dev;
-      ack_idx <= ack_idx + 1;
+    if (rst) begin
+      ack_cnt <= 0;
+      ack_order_0 <= 8'hFF; ack_order_1 <= 8'hFF;
+      ack_order_2 <= 8'hFF; ack_order_3 <= 8'hFF;
+    end else if (ack) begin
+      if (ack_cnt == 3'd0) ack_order_0 <= {6'b0, ack_dev};
+      if (ack_cnt == 3'd1) ack_order_1 <= {6'b0, ack_dev};
+      if (ack_cnt == 3'd2) ack_order_2 <= {6'b0, ack_dev};
+      if (ack_cnt == 3'd3) ack_order_3 <= {6'b0, ack_dev};
+      ack_cnt <= ack_cnt + 1;
     end
   end
 
   initial begin
     $display("=== SPI Bus Controller Test ===");
-    rst = 1; req = 4'b0000; req_data = 8'hAA; ack_idx = 0;
+    rst = 1; req = 4'b0000; req_data = 8'hAA;
     repeat(4) @(posedge clk); #1;
     rst = 0;
 
     // Assert all 4 requests simultaneously
     req = 4'b1111;
-    repeat(2000) begin
-      @(posedge clk); #1;
-      if (ack_idx >= 4) disable;
-    end
+    repeat(2000) @(posedge clk); #1;
 
-    $display("PASS  4 transfers completed in round-robin order");
+    if (ack_cnt >= 3'd4)
+      $display("PASS  4 transfers completed in round-robin order");
+    else
+      $display("FAIL  only %0d transfers completed", ack_cnt);
 
-    // Verify ordering (0 served before 3)
-    if (ack_order[0] < ack_order[3] || ack_order[0] == 0)
+    // Verify device 0 was served first (round-robin starts at 0)
+    if (ack_order_0 === 8'd0)
       $display("PASS  device 0 served before device 3 (round-robin)");
     else
-      $display("FAIL  round-robin order incorrect");
+      $display("FAIL  round-robin order incorrect, first served dev=%0d", ack_order_0);
 
     $display("SPI bus controller works!");
     $finish;

@@ -109,10 +109,14 @@ module tb;
   );
 
   task automatic send_byte(input logic [7:0] data);
-    for (int i = 0; i < 8; i++) begin
-      serial_in = data[7-i];   // MSB first
-      @(posedge clk); #1;
-    end
+    serial_in = data[7]; @(posedge clk); #1;
+    serial_in = data[6]; @(posedge clk); #1;
+    serial_in = data[5]; @(posedge clk); #1;
+    serial_in = data[4]; @(posedge clk); #1;
+    serial_in = data[3]; @(posedge clk); #1;
+    serial_in = data[2]; @(posedge clk); #1;
+    serial_in = data[1]; @(posedge clk); #1;
+    serial_in = data[0]; @(posedge clk); #1;
   endtask
 
   initial begin
@@ -272,15 +276,17 @@ module tb;
     input  logic [7:0] data,
     output logic [7:0] recv
   );
-    // Load the byte
     data_in = data; load = 1;
-    @(posedge clk); #1;  // shift_reg = data, serial_out = data[7]
+    @(posedge clk); #1;
     load = 0;
-    // Capture 8 bits MSB first
-    for (int i = 0; i < 8; i++) begin
-      recv[7-i] = serial_out;   // capture current MSB
-      @(posedge clk); #1;       // shift to next bit
-    end
+    recv[7] = serial_out; @(posedge clk); #1;
+    recv[6] = serial_out; @(posedge clk); #1;
+    recv[5] = serial_out; @(posedge clk); #1;
+    recv[4] = serial_out; @(posedge clk); #1;
+    recv[3] = serial_out; @(posedge clk); #1;
+    recv[2] = serial_out; @(posedge clk); #1;
+    recv[1] = serial_out; @(posedge clk); #1;
+    recv[0] = serial_out; @(posedge clk); #1;
   endtask
 
   initial begin

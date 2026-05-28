@@ -132,11 +132,14 @@ module tb;
   // Send one SPI byte MSB first, Mode 0
   task automatic spi_send_byte(input logic [7:0] data);
     cs_n = 0;
-    for (int i = 0; i < 8; i++) begin
-      mosi = data[7-i];
-      sclk = 0; repeat(4) @(posedge clk); #1;
-      sclk = 1; repeat(4) @(posedge clk); #1;  // rising edge — slave samples
-    end
+    mosi = data[7]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = data[6]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = data[5]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = data[4]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = data[3]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = data[2]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = data[1]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = data[0]; sclk = 0; repeat(4) @(posedge clk); #1; sclk = 1; repeat(4) @(posedge clk); #1;
     sclk = 0; repeat(2) @(posedge clk); #1;
     cs_n = 1; repeat(2) @(posedge clk); #1;
   endtask
@@ -219,7 +222,7 @@ if (cs_n_fall) tx_shift &lt;= tx_data;
 // On SCLK falling edge: shift MISO output
 else if (sclk_fall) tx_shift &lt;= {tx_shift[6:0], 1'b0};
 
-assign miso = cs_n ? 1'bz : tx_shift[7];  // tri-state when not selected
+assign miso = cs_n ? 1'b0 : tx_shift[7];  // drive 0 when not selected
 </pre>
 
 <h3>Timing across one bit period (Mode 0)</h3>
@@ -251,7 +254,7 @@ assign miso = cs_n ? 1'bz : tx_shift[7];  // tri-state when not selected
         'Derive sclk_fall = ~sclk & sclk_prev (falling edge strobe)',
         'In the main always_ff: on cs_n_fall, load tx_data into tx_shift',
         'On sclk_fall: shift tx_shift left with 1\'b0 at LSB (MSB exits on miso)',
-        'Add: assign miso = cs_n ? 1\'bz : tx_shift[7]',
+        'Add: assign miso = cs_n ? 1\'b0 : tx_shift[7]   (drive 0 when inactive — no tri-state needed)',
         'Keep all the RX logic from spi_slave_rx unchanged',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 3 PASS lines should appear in the Output tab',
@@ -312,7 +315,7 @@ assign miso = cs_n ? 1'bz : tx_shift[7];  // tri-state when not selected
     end
   end
 
-  assign miso = cs_n ? 1'bz : tx_shift[7];
+  assign miso = cs_n ? 1'b0 : tx_shift[7];
 
 endmodule`,
       design:
@@ -348,14 +351,16 @@ module tb;
     input  logic [7:0] send,
     output logic [7:0] recv_miso
   );
-    cs_n = 0; repeat(3) @(posedge clk); #1;  // let slave preload
+    cs_n = 0; repeat(3) @(posedge clk); #1;
     recv_miso = 8'h00;
-    for (int i = 0; i < 8; i++) begin
-      mosi = send[7-i];
-      sclk = 0; repeat(4) @(posedge clk); #1;
-      recv_miso[7-i] = miso;                 // capture MISO on rising
-      sclk = 1; repeat(4) @(posedge clk); #1;
-    end
+    mosi = send[7]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[7] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = send[6]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[6] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = send[5]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[5] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = send[4]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[4] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = send[3]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[3] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = send[2]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[2] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = send[1]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[1] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
+    mosi = send[0]; sclk = 0; repeat(4) @(posedge clk); #1; recv_miso[0] = miso; sclk = 1; repeat(4) @(posedge clk); #1;
     sclk = 0; repeat(2) @(posedge clk); #1;
     cs_n = 1; repeat(2) @(posedge clk); #1;
   endtask
@@ -526,11 +531,7 @@ module tb;
   );
     tx_m = master_data; tx_s = slave_response;
     start = 1; @(posedge clk); #1; start = 0;
-    for (int i = 0; i < 500; i++) begin
-      @(posedge clk); #1;
-      if (done) return;
-    end
-    $display("TIMEOUT");
+    repeat(200) @(posedge clk); #1;
   endtask
 
   initial begin
