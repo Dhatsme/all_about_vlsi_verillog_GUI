@@ -12,34 +12,71 @@
       theory: `
 <h2>The Building Block of SPI</h2>
 <p>Every SPI transaction is built on one simple idea: a <strong>shift register</strong>.
-Imagine a queue of 8 people — on each clock tick, everyone moves one step forward
-and a new person joins the back. After 8 ticks, the entire queue has been replaced.</p>
+Imagine a queue of 8 people standing in a line — on each clock tick, everyone moves one
+step forward and a new person joins the back. After 8 ticks, the entire queue has been
+replaced, and you can look at all 8 people at once. That is serial-in, parallel-out.</p>
 
 <p>The <strong>SIPO (Serial-In Parallel-Out)</strong> shift register does exactly this with bits.
 One bit arrives on <code>serial_in</code> each clock cycle.
 After 8 cycles all 8 bits are simultaneously visible on <code>data_out[7:0]</code>.
 This is how an SPI slave assembles a byte sent by the master.</p>
 
-<pre class="code-block">// Shift left: keep bits 6 down to 0, insert new bit at position 0
-data_out &lt;= {data_out[6:0], serial_in};
-// {A, B} is concatenation — it joins A and B into one wider value
-</pre>
+<h3>Why serial? The wire-count problem</h3>
+<p>Sending 8 bits in parallel needs 8 data wires — one per bit. That is fine on a chip
+but impractical between chips on a PCB. SPI solves this by sending bits one at a time
+over a <strong>single wire (MOSI)</strong>, using a clock wire to say "sample this bit now."
+The four SPI wires are:</p>
+<ul>
+  <li><strong>SCLK</strong> — Serial Clock, driven by the master</li>
+  <li><strong>MOSI</strong> — Master Out Slave In — data from master to slave</li>
+  <li><strong>MISO</strong> — Master In Slave Out — data from slave to master</li>
+  <li><strong>CS_N</strong> — Chip Select, active-low — frames the transaction</li>
+</ul>
+<p>The SIPO register sits on the slave's MOSI line. Every time the master pulses SCLK,
+the slave samples MOSI and shifts the new bit into <code>data_out</code>. After 8 pulses
+the slave holds a complete byte.</p>
 
-<h3>How each clock tick changes data_out</h3>
+<h3>Breaking down the shift expression</h3>
+<pre class="code-block">data_out &lt;= {data_out[6:0], serial_in};
+</pre>
+<p>This single line does three things at once:</p>
+<ul>
+  <li><code>data_out[6:0]</code> — take the current bits 6 down to 0 (drop bit 7, it has been sent)</li>
+  <li><code>serial_in</code> — the new bit arriving from MOSI</li>
+  <li><code>{ , }</code> — concatenate them into a new 8-bit value: old bits move left, new bit enters at position 0</li>
+</ul>
+<p>After 8 clock cycles of receiving bits 7, 6, 5 … 0 in that order, <code>data_out</code>
+holds the full original byte. The first bit received ends up at bit 7 (MSB), the last
+bit received sits at bit 0 (LSB).</p>
+
+<h3>Full 8-cycle trace — receiving 8'hA5 (10100101)</h3>
 <table class="truth-table">
-<tr><th>Before (data_out)</th><th>serial_in</th><th>After (data_out)</th></tr>
-<tr><td>8'b0000_0000</td><td>1</td><td>8'b0000_0001</td></tr>
-<tr><td>8'b0000_0001</td><td>1</td><td>8'b0000_0011</td></tr>
-<tr><td>8'b0000_0011</td><td>0</td><td>8'b0000_0110</td></tr>
-<tr><td>8'b0000_0110</td><td>1</td><td>8'b0000_1101</td></tr>
+<tr><th>Cycle</th><th>serial_in</th><th>data_out after shift</th></tr>
+<tr><td>reset</td><td>—</td><td>0000_0000</td></tr>
+<tr><td>1 (bit 7)</td><td>1</td><td>0000_0001</td></tr>
+<tr><td>2 (bit 6)</td><td>0</td><td>0000_0010</td></tr>
+<tr><td>3 (bit 5)</td><td>1</td><td>0000_0101</td></tr>
+<tr><td>4 (bit 4)</td><td>0</td><td>0000_1010</td></tr>
+<tr><td>5 (bit 3)</td><td>0</td><td>0001_0100</td></tr>
+<tr><td>6 (bit 2)</td><td>1</td><td>0010_1001</td></tr>
+<tr><td>7 (bit 1)</td><td>0</td><td>0101_0010</td></tr>
+<tr><td>8 (bit 0)</td><td>1</td><td>1010_0101  ← 0xA5 ✓</td></tr>
 </table>
+
+<h3>Why non-blocking assignment (&lt;=)?</h3>
+<p>Inside <code>always_ff</code> you must use <code>&lt;=</code> (non-blocking).
+This tells the simulator: <em>compute the new value now, but write it only after all
+always_ff blocks in this time step have finished evaluating.</em>
+If you used <code>=</code> (blocking), one always_ff block could overwrite a value that
+another block still needs to read, causing race conditions that are notoriously hard
+to debug in hardware.</p>
 
 <h3>The circuit you will build</h3>
 <table class="truth-table">
 <tr><th>Port</th><th>Direction</th><th>Width</th><th>Purpose</th></tr>
 <tr><td>clk</td><td>input</td><td>1</td><td>Clock — shift happens on every rising edge</td></tr>
-<tr><td>rst</td><td>input</td><td>1</td><td>Active-high synchronous reset</td></tr>
-<tr><td>serial_in</td><td>input</td><td>1</td><td>One bit of serial data arrives per clock</td></tr>
+<tr><td>rst</td><td>input</td><td>1</td><td>Active-high synchronous reset — clears all bits</td></tr>
+<tr><td>serial_in</td><td>input</td><td>1</td><td>One bit of MOSI data per clock</td></tr>
 <tr><td>data_out</td><td>output</td><td>8</td><td>All 8 received bits visible in parallel</td></tr>
 </table>
 
@@ -162,32 +199,64 @@ endmodule`,
       title: 'L2 — Parallel-In Serial-Out Shift Register',
       theory: `
 <h2>Sending Data Over SPI — The PISO Register</h2>
-<p>The last lesson built the <em>receive</em> side — a SIPO register that assembles serial bits
-into a parallel byte. Now flip that around: the <strong>PISO (Parallel-In Serial-Out)</strong>
+<p>The last lesson built the <em>receive</em> side: a SIPO register that assembles serial bits
+into a parallel byte. Now flip that around. The <strong>PISO (Parallel-In Serial-Out)</strong>
 register takes a full byte and sends it out one bit at a time.
-This is what the SPI master uses on its MOSI line.</p>
+This is what the SPI master uses on its MOSI line — and what a slave uses on its MISO line
+to send a reply back.</p>
 
+<p>Think of it like a printer queue: you hand over a whole document (parallel load),
+then pages come out one at a time (serial out). The queue empties from the front —
+that is the MSB — and keeps going until all 8 bits have been sent.</p>
+
+<h3>PISO vs SIPO — mirror images</h3>
+<p>SIPO and PISO are complementary circuits. In a full SPI system they work as a pair:</p>
+<ul>
+  <li>The <strong>master</strong> uses PISO to shift a byte out onto MOSI bit by bit</li>
+  <li>The <strong>slave</strong> uses SIPO to shift those bits from MOSI back into a parallel byte</li>
+  <li>Simultaneously, the slave's PISO pushes its own byte onto MISO while the master's SIPO collects it</li>
+</ul>
+<p>This is why SPI is called <em>full-duplex</em> — both sides transmit and receive at the same time,
+driven by the same SCLK.</p>
+
+<h3>The load-then-shift sequence</h3>
 <p>The key control signal is <code>load</code>.
 When <code>load = 1</code>, the register captures the full parallel byte on the next rising edge.
 When <code>load = 0</code>, each rising edge shifts the register left —
 the MSB appears on <code>serial_out</code>.
-SPI always sends the MSB first.</p>
+SPI always sends the MSB first by convention.</p>
 
 <pre class="code-block">// Three-way priority in one always_ff block
 if (rst)       shift_reg &lt;= 8'b0;
-else if (load) shift_reg &lt;= data_in;               // capture byte
-else           shift_reg &lt;= {shift_reg[6:0], 1'b0}; // shift, pad 0 at LSB
+else if (load) shift_reg &lt;= data_in;                // capture whole byte
+else           shift_reg &lt;= {shift_reg[6:0], 1'b0}; // shift left, 0 fills LSB
 
-assign serial_out = shift_reg[7];  // MSB is always the bit being sent
+assign serial_out = shift_reg[7];  // MSB is always the bit on the wire
 </pre>
 
-<h3>Timing trace — sending 8'b1011_0010</h3>
+<p>Notice the shift direction: <code>{shift_reg[6:0], 1'b0}</code> moves bits 6–0 up to positions 7–1
+and fills position 0 with zero. After each clock, bit 7 has been sent and bit 6 takes its place.
+We pad with <code>1'b0</code> because the master ignores whatever spills past bit 0 — it already
+knows the transfer is done after 8 edges.</p>
+
+<h3>Why assign for serial_out, not always_ff?</h3>
+<p><code>assign serial_out = shift_reg[7]</code> is a <em>continuous assignment</em> — it updates
+immediately whenever <code>shift_reg</code> changes, with zero extra delay.
+If instead you registered it with <code>always_ff</code>, <code>serial_out</code> would lag one clock
+behind the shift, causing the slave to sample the wrong bit.
+Always drive combinational outputs with <code>assign</code>.</p>
+
+<h3>Full 8-cycle trace — sending 8'hB2 (10110010)</h3>
 <table class="truth-table">
-<tr><th>Cycle</th><th>load</th><th>shift_reg</th><th>serial_out</th></tr>
-<tr><td>0 (load)</td><td>1</td><td>1011_0010</td><td>1  (bit 7)</td></tr>
-<tr><td>1</td><td>0</td><td>0110_0100</td><td>0  (bit 6)</td></tr>
-<tr><td>2</td><td>0</td><td>1100_1000</td><td>1  (bit 5)</td></tr>
-<tr><td>3</td><td>0</td><td>1001_0000</td><td>1  (bit 4)</td></tr>
+<tr><th>Cycle</th><th>load</th><th>shift_reg</th><th>serial_out (MSB)</th></tr>
+<tr><td>0 (load)</td><td>1</td><td>1011_0010</td><td>1  — bit 7</td></tr>
+<tr><td>1</td><td>0</td><td>0110_0100</td><td>0  — bit 6</td></tr>
+<tr><td>2</td><td>0</td><td>1100_1000</td><td>1  — bit 5</td></tr>
+<tr><td>3</td><td>0</td><td>1001_0000</td><td>1  — bit 4</td></tr>
+<tr><td>4</td><td>0</td><td>0010_0000</td><td>0  — bit 3</td></tr>
+<tr><td>5</td><td>0</td><td>0100_0000</td><td>0  — bit 2</td></tr>
+<tr><td>6</td><td>0</td><td>1000_0000</td><td>1  — bit 1</td></tr>
+<tr><td>7</td><td>0</td><td>0000_0000</td><td>0  — bit 0  ← transfer complete</td></tr>
 </table>
 
 <h3>The circuit you will build</h3>
@@ -195,7 +264,7 @@ assign serial_out = shift_reg[7];  // MSB is always the bit being sent
 <tr><th>Port</th><th>Dir</th><th>Width</th><th>Purpose</th></tr>
 <tr><td>clk</td><td>in</td><td>1</td><td>Clock</td></tr>
 <tr><td>rst</td><td>in</td><td>1</td><td>Active-high synchronous reset</td></tr>
-<tr><td>load</td><td>in</td><td>1</td><td>1 = load data_in; 0 = shift out</td></tr>
+<tr><td>load</td><td>in</td><td>1</td><td>1 = capture data_in; 0 = shift out MSB-first</td></tr>
 <tr><td>data_in</td><td>in</td><td>8</td><td>Parallel byte to transmit</td></tr>
 <tr><td>serial_out</td><td>out</td><td>1</td><td>MSB exits first — connect to MOSI</td></tr>
 </table>
@@ -336,26 +405,61 @@ endmodule`,
 <h2>Keeping Track: CS_N and Bit Position</h2>
 <p>SPI uses a <strong>Chip Select</strong> signal (<code>cs_n</code>, active-low) to frame each transaction.
 When <code>cs_n</code> goes LOW, the slave wakes up and starts counting incoming SCLK edges.
-After exactly 8 edges, one byte has arrived.
-When <code>cs_n</code> goes HIGH, the transaction ends and the counter resets to zero.</p>
+After exactly 8 edges, one complete byte has arrived.
+When <code>cs_n</code> goes HIGH again, the transaction ends and the counter resets to zero,
+ready for the next byte.</p>
 
-<p>Your slave runs on a fast <em>system clock</em> — much faster than the master's SCLK.
-That means you cannot sample SCLK directly inside <code>always_ff</code>.
-Instead you <strong>detect the rising edge</strong> by comparing SCLK now to SCLK last cycle.
-When SCLK is high now but was low last cycle, a rising edge just happened.</p>
+<p>This module is the <em>bookkeeper</em> of the slave — it does not touch the data itself.
+It just watches the SPI clock, counts edges, and signals when a full byte is ready.
+Other modules (like the SIPO from L1) use <code>bit_idx</code> to know which bit they are on,
+and watch for <code>byte_done</code> to latch the completed byte.</p>
 
-<pre class="code-block">// Edge detection — register SCLK one cycle, compare next cycle
+<h3>The clock domain problem</h3>
+<p>Your slave runs on a fast <em>system clock</em> that might be 50 MHz or 100 MHz.
+The SPI master's SCLK is far slower — often 1–10 MHz.
+That means one SCLK period spans <strong>many</strong> system clock cycles.</p>
+<p>You cannot write <code>always_ff @(posedge sclk)</code> because Verilator and most synthesis
+tools require all flip-flops in a design to share one clock domain.
+Instead, keep everything clocked by <code>clk</code> and <strong>detect</strong> SCLK edges by
+comparing consecutive samples:</p>
+
+<pre class="code-block">// Sample SCLK every system clock
 always_ff @(posedge clk) sclk_prev &lt;= sclk;
-assign sclk_rise = sclk &amp; ~sclk_prev;   // HIGH for exactly one system clock
+
+// sclk_rise is HIGH for exactly one system clock — the cycle after SCLK rises
+assign sclk_rise = sclk &amp; ~sclk_prev;
 </pre>
 
-<h3>Signal behaviour</h3>
+<p>When <code>sclk</code> is 1 <em>now</em> and was 0 <em>last cycle</em>, the AND gate fires: <code>1 &amp; ~0 = 1</code>.
+Every other cycle it stays 0. This gives you a precise, single-clock-wide strobe
+that you can safely use inside <code>always_ff @(posedge clk)</code>.</p>
+
+<h3>A complete transaction walkthrough</h3>
+<p>Here is what happens cycle by cycle when the master sends one byte:</p>
+<ul>
+  <li><strong>Before transaction:</strong> <code>cs_n = 1</code>, counter holds at 0, <code>byte_done = 0</code></li>
+  <li><strong>cs_n falls LOW:</strong> counter clears (already 0), slave is now listening</li>
+  <li><strong>SCLK edges 1–7:</strong> each <code>sclk_rise</code> increments <code>bit_idx</code> from 0 to 6</li>
+  <li><strong>SCLK edge 8:</strong> <code>bit_idx</code> is 7, so instead of incrementing: reset it to 0 and pulse <code>byte_done = 1</code></li>
+  <li><strong>Next system clock:</strong> <code>byte_done</code> falls back to 0 automatically (the else branch)</li>
+  <li><strong>cs_n rises HIGH:</strong> counter resets, slave stops listening</li>
+</ul>
+
+<h3>Why byte_done is only one clock wide</h3>
+<p>A <em>pulse</em> (one clock wide) is easier for downstream logic than a <em>level</em> (stays high).
+If <code>byte_done</code> stayed high, any register watching it would latch the byte on
+<em>every</em> clock until it fell — potentially many spurious captures.
+A single-cycle pulse fires exactly once and forces the consumer to act immediately.
+The key is the <code>else byte_done &lt;= 1'b0</code> at the bottom of the always_ff block —
+it clears <code>byte_done</code> on every cycle that is not the 8th edge.</p>
+
+<h3>Signal behaviour summary</h3>
 <table class="truth-table">
 <tr><th>cs_n</th><th>sclk_rise</th><th>bit_idx action</th><th>byte_done</th></tr>
 <tr><td>1</td><td>X</td><td>reset to 0</td><td>0</td></tr>
 <tr><td>0</td><td>0</td><td>hold</td><td>0</td></tr>
 <tr><td>0</td><td>1  (idx 0–6)</td><td>increment</td><td>0</td></tr>
-<tr><td>0</td><td>1  (idx 7)</td><td>reset to 0</td><td>1  (one pulse)</td></tr>
+<tr><td>0</td><td>1  (idx 7)</td><td>reset to 0</td><td>1  (one pulse only)</td></tr>
 </table>
 
 <h3>The circuit you will build</h3>
@@ -363,10 +467,10 @@ assign sclk_rise = sclk &amp; ~sclk_prev;   // HIGH for exactly one system clock
 <tr><th>Port</th><th>Dir</th><th>Purpose</th></tr>
 <tr><td>clk</td><td>in</td><td>System clock — much faster than SCLK</td></tr>
 <tr><td>rst</td><td>in</td><td>Active-high synchronous reset</td></tr>
-<tr><td>cs_n</td><td>in</td><td>Chip Select active-low — 0 means transaction active</td></tr>
-<tr><td>sclk</td><td>in</td><td>SPI clock from master</td></tr>
-<tr><td>bit_idx</td><td>out [2:0]</td><td>Current bit position (0 to 7)</td></tr>
-<tr><td>byte_done</td><td>out</td><td>Pulses high for one system clock after bit 7</td></tr>
+<tr><td>cs_n</td><td>in</td><td>Chip Select active-low — 0 = transaction in progress</td></tr>
+<tr><td>sclk</td><td>in</td><td>SPI clock from master — sampled, not used as clock</td></tr>
+<tr><td>bit_idx</td><td>out [2:0]</td><td>Current bit position 0–7</td></tr>
+<tr><td>byte_done</td><td>out</td><td>Pulses HIGH for exactly one system clock after bit 7</td></tr>
 </table>
 
 <p>The edge-detection pattern is new — this one takes a few tries and that is completely normal.</p>
