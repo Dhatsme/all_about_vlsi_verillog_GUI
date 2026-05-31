@@ -11,6 +11,6 @@ window.COURSES = [
     title: 'SPI Protocol Deep Dive',
     icon: '🔌',
     description: 'Build SPI shift registers, master controller, slave receiver, and real-world applications',
-    modules: ['spi1', 'spi2', 'spi3', 'spi4'],
+    modules: ['spi1', 'spi2', 'spi3', 'spi4', 'spi5'],
   }
 ];
