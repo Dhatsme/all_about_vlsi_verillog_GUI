@@ -1,1453 +1,1564 @@
 # SPI Testbench Reference — Complete Verification Plan
 
-## Purpose
-
-This document is the authoritative verification reference for the SPI Protocol Learning
-Series (spi1–spi5). It covers the verification strategy, coverage model, testbench
-architecture, reusable component library, and every test case for all 14 modules.
-
-Use this document to:
-- Understand what each module must do before writing a single line of testbench code
-- Pick up pre-written task templates and adapt them
-- Know which corner cases are easy to miss and why
-- Audit an existing testbench for gaps
-
-**Branch:** `claude/spi-protocol-learning-series-wdbNg` / `develop`  
-**Simulator:** Verilator 5.020 (`--no-timing` mode)  
-**Language:** SystemVerilog testbenches, `logic` only
+**Series:** SPI Protocol Deep Dive (spi1 – spi5)  
+**Simulator:** Verilator 5.020 in `--no-timing` mode  
+**Methodology:** Directed testing with functional coverage checklists  
+**Total modules:** 14 across 5 chapters
 
 ---
 
-## 1. DUT Inventory
+## How to use this document
 
-| Module | File | Chapter | Tier | Type |
+This is the authoritative planning and audit reference for the SPI series testbenches.
+It covers what each module must do, how to structure the testbench to verify it, and every
+individual test case with its stimulus and acceptance criteria — in plain language, with no
+simulation code.
+
+Use it to:
+- Understand a module's intent before writing the first line of stimulus
+- Design the right set of test cases without missing corner cases
+- Audit a finished testbench for gaps against the coverage checklist
+- Debug failures by cross-referencing corner case patterns
+
+---
+
+## Part 1 — DUT Inventory
+
+| ID | Module | Chapter | Tier | Role |
 |---|---|---|---|---|
-| `sipo_shift_reg` | spi1.js L1 | spi1 | T1 | Slave RX building block |
-| `piso_shift_reg` | spi1.js L2 | spi1 | T2 | Master TX building block |
-| `spi_byte_counter` | spi1.js L3 | spi1 | T3 | Frame / bit counter |
-| `spi_clkdiv` | spi2.js L1 | spi2 | T2 | SCLK generator |
-| `spi_master` | spi2.js L2 | spi2 | T3 | 8-bit Mode 0 master |
-| `spi_master_16` | spi2.js L3 | spi2 | T3 | 16-bit burst master |
-| `spi_master_param` | spi2.js L4 | spi2 | T5 | Parameterized master (all modes) |
-| `spi_slave_rx` | spi3.js L1 | spi3 | T3 | 8-bit receive-only slave |
-| `spi_slave_fd` | spi3.js L2 | spi3 | T4 | Full-duplex slave |
-| `spi_loopback` | spi3.js L3 | spi3 | T5 | Master + slave integrated |
-| `spi_regfile` | spi4.js L1 | spi4 | T4 | SPI register file slave |
-| `spi_adc_slave` | spi5.js L1 | spi5 | T4 | ADC emulator slave |
-| `spi_flash_slave` | spi5.js L2 | spi5 | T5 | Flash memory emulator |
-| `spi_bus_ctrl` | spi5.js L3 | spi5 | T5 | Multi-peripheral bus controller |
+| 1 | `sipo_shift_reg` | spi1 L1 | T1 | Receives serial bits; outputs parallel byte |
+| 2 | `piso_shift_reg` | spi1 L2 | T2 | Loads parallel byte; transmits serial bits |
+| 3 | `spi_byte_counter` | spi1 L3 | T3 | Counts SCLK edges within a CS_N frame |
+| 4 | `spi_clkdiv` | spi2 L1 | T2 | Generates divided SCLK with edge strobes |
+| 5 | `spi_master` | spi2 L2 | T3 | 8-bit Mode 0 SPI master controller |
+| 6 | `spi_master_16` | spi2 L3 | T3 | 16-bit burst SPI master controller |
+| 7 | `spi_master_param` | spi2 L4 | T5 | Parameterized master, all four SPI modes |
+| 8 | `spi_slave_rx` | spi3 L1 | T3 | Receive-only SPI slave, 8-bit |
+| 9 | `spi_slave_fd` | spi3 L2 | T4 | Full-duplex SPI slave, simultaneous RX and TX |
+| 10 | `spi_loopback` | spi3 L3 | T5 | Integrated master + slave on same bus |
+| 11 | `spi_regfile` | spi4 L1 | T4 | SPI slave with 8-register file (read/write protocol) |
+| 12 | `spi_adc_slave` | spi5 L1 | T4 | ADC emulator — shifts out pre-loaded conversion result |
+| 13 | `spi_flash_slave` | spi5 L2 | T5 | Flash memory emulator — CMD/ADDR/DATA protocol |
+| 14 | `spi_bus_ctrl` | spi5 L3 | T5 | Multi-peripheral bus controller with CS_N routing |
 
 ---
 
-## 2. Verification Methodology
+## Part 2 — Verification Methodology
 
-### 2.1 Strategy
+### 2.1 Testing strategy
 
-All modules use **directed testing** — manually crafted stimulus vectors targeting
-specific behaviours. This is appropriate for Verilator's `--no-timing` mode and for
-the educational context of this series.
+All modules use **directed testing**: the stimulus is manually crafted to hit every defined
+behaviour. This approach suits the educational context and Verilator's `--no-timing` mode.
 
-The verification flow for every module:
+Every testbench follows the same progression of test groups:
 
-```
-1. Reset sequence
-2. Normal operation (golden path)
-3. Boundary conditions
-4. Corner cases and error injection
-5. Back-to-back transactions
-6. CS_N deassert mid-transfer (where applicable)
-```
-
-### 2.2 Simulator constraints (Verilator 5.020)
-
-These rules apply to every testbench in this series. Violating them causes silent
-simulation failures or compile errors.
-
-| Constraint | Correct | Wrong |
+| Order | Group | Purpose |
 |---|---|---|
-| Signal type | `logic` | `reg`, `wire` |
+| 1 | Reset sequence | Prove reset initialises all state to known values |
+| 2 | Normal (golden path) | Prove the primary function with a clean, simple input |
+| 3 | Boundary values | Edge conditions at minimum and maximum input values |
+| 4 | Corner cases | Unusual but valid sequences that commonly expose bugs |
+| 5 | Back-to-back | Multiple transactions without reset in between |
+| 6 | Abort/interrupt | CS_N deasserted early, or start pulsed while busy |
+
+### 2.2 Simulator constraints
+
+These rules are mandatory in Verilator 5.020 `--no-timing` mode.  
+Breaking any of them causes silent failures or compile errors.
+
+| Rule | Required | Must avoid |
+|---|---|---|
+| Signal type | `logic` everywhere | `reg`, `wire` |
 | Sequential block | `always_ff @(posedge clk)` | `always @(posedge clk)` |
 | Combinational block | `always_comb` or `assign` | `always @(*)` |
-| Module name | `tb` | anything else |
-| First line | `` `timescale 1ns/1ps `` | missing |
-| Comparison | `===` for 4-state | `==` may pass X through |
-| Post-clock sample | `@(posedge clk); #1;` | `#5;` without clock |
-| Loop in testbench | `repeat(N) @(posedge clk);` | `for (int i=0; i<N; i++)` |
-| Increment | `x = x + 1` | `x++` |
-| Tri-state | `1'b0` when idle | `1'bz` |
+| Top-level module name | exactly `tb` | any other name |
+| First line of testbench | `` `timescale 1ns/1ps `` | missing timescale |
+| 4-state comparison | `===` (strict equality) | `==` (passes X through silently) |
+| Post-clock sampling | wait for `posedge clk`, then add `#1` | bare `#N` delays only |
+| Repetition in testbench | `repeat(N) @(posedge clk)` | `for` loop with `return` |
+| Increment | `x = x + 1` | `x++` (C-style, rejected) |
+| Tri-state on MISO | drive `1'b0` when idle | `1'bz` (high-impedance) |
 
-### 2.3 Clock setup convention
+### 2.3 Clock conventions
 
-All testbenches use one of two clock setups:
+Two standard clock setups are used across the series:
 
-```systemverilog
-// Fast system clock (slave testbenches — needs room between SCLK edges)
-logic clk = 0;
-always #2 clk = ~clk;   // 250 MHz, 4 ns period
+**Slave testbenches** (need margin between SCLK edges relative to fast system clock):
+- System clock period: 4 ns (toggles every 2 ns)
+- SCLK is driven manually; 4 system clock cycles between each SCLK edge gives comfortable setup/hold margin
 
-// Standard clock (master testbenches)
-logic clk = 0;
-always #5 clk = ~clk;   // 100 MHz, 10 ns period
+**Master testbenches** (SCLK is generated internally by the DUT):
+- System clock period: 10 ns (toggles every 5 ns)
+- All timing derived from start pulse and phase counter
+
+### 2.4 Reset procedure
+
+Every testbench applies reset in the same way:
+1. Assert `rst = 1` before any other stimulus
+2. Hold for at least 2 rising clock edges
+3. Add a `#1` skew after the last edge so stimulus lands after the clock edge
+4. Deassert `rst = 0`
+5. Allow 2 idle clock cycles before driving any functional stimulus
+
+Two clock cycles is the minimum needed to initialise all flip-flops including `sclk_prev`
+and `cs_n_prev` edge-detection registers.
+
+### 2.5 SPI frame timing
+
+The testbench drives SPI frames with this pattern:
+
+**Before the frame:** deassert SCLK low, assert CS_N low, wait 2 system clocks  
+**Each bit:** set MOSI to the next bit value, wait, drive SCLK high, wait, sample MISO  
+**End of frame:** drive SCLK low, wait 2 system clocks, deassert CS_N high, wait 4 system clocks  
+
+Between-frame gap of 4 system clocks allows CS_N deassert to propagate through the DUT's
+`cs_n_prev` edge-detection register before the next frame begins.
+
+### 2.6 MISO capture timing
+
+MISO must be sampled **while SCLK is high** (Mode 0 — slave changes MISO on SCLK falling edge,
+master samples on SCLK rising edge). In the testbench, MISO is read immediately after SCLK rises
+and the post-edge `#1` delay passes.
+
+### 2.7 PASS/FAIL output convention
+
+Every assertion uses one of two display formats exactly:
+
+```
+PASS  <label> <optional values>
+FAIL  <label> <got value> expected <expected value>
 ```
 
-### 2.4 Reset sequence
-
-Every testbench starts with:
-
-```systemverilog
-rst = 1;
-repeat(2) @(posedge clk); #1;
-rst = 0;
-```
-
-Two-cycle reset ensures all flip-flops initialize cleanly before any stimulus.
-
----
-
-## 3. Coverage Model
-
-### 3.1 Functional coverage goals per module
-
-Each module has a coverage checklist. A testbench is not complete until every item
-is exercised.
-
-#### sipo_shift_reg
-- [ ] Reset clears all 8 bits
-- [ ] Single bit shift (serial_in=1 into all-zero register)
-- [ ] All-ones byte received correctly (0xFF)
-- [ ] Known pattern 0xA5 (1010_0101) received correctly
-- [ ] Back-to-back bytes without reset between them
-- [ ] Reset mid-shift (partial byte, then reset, then new byte)
-
-#### piso_shift_reg
-- [ ] Load captures full byte on rising edge
-- [ ] 8 shifts produce exactly the loaded value on serial_out, MSB first
-- [ ] Reset clears shift register
-- [ ] Load immediately followed by shift (load=1 one cycle, then load=0)
-- [ ] Re-load during a shift sequence (interrupt shift with new load)
-- [ ] serial_out = 0 after reset
-
-#### spi_byte_counter
-- [ ] cs_n=1 holds bit_idx at 0
-- [ ] 7 SCLK pulses → bit_idx=7
-- [ ] 8th SCLK pulse → byte_done=1 for exactly one system clock
-- [ ] byte_done returns to 0 the next cycle
-- [ ] cs_n deassert resets bit_idx to 0
-- [ ] Two back-to-back frames count correctly
-- [ ] SCLK pulse while cs_n=1 has no effect
-
-#### spi_clkdiv
-- [ ] 8 rising edges in 64 system clocks
-- [ ] 8 falling edges in 64 system clocks
-- [ ] sclk_rise and sclk_fall never both 1 simultaneously
-- [ ] sclk idles LOW after reset
-- [ ] sclk_rise fires exactly 1 system clock wide
-- [ ] sclk_fall fires exactly 1 system clock wide
-
-#### spi_master
-- [ ] Single transfer: tx_data sent correctly on MOSI
-- [ ] Single transfer: MISO received correctly in rx_data
-- [ ] busy asserts during transfer, deasserts at done
-- [ ] cs_n asserts at start, deasserts at done
-- [ ] done pulses for exactly one clock
-- [ ] Back-to-back transfers
-- [ ] MISO=0xFF received correctly
-- [ ] MOSI verified against slave model (not just rx_data)
-
-#### spi_master_16
-- [ ] cs_n stays low for all 16 SCLK cycles
-- [ ] tx_word[15:8] (high byte) transmitted first
-- [ ] tx_word[7:0] (low byte) transmitted second
-- [ ] 16-bit rx_word assembled correctly
-- [ ] done fires after bit 15, not bit 7
-
-#### spi_master_param
-- [ ] Mode 0: CPOL=0 CPHA=0 — sclk idles LOW, sample on rise
-- [ ] Mode 1: CPOL=0 CPHA=1 — sclk idles LOW, sample on fall
-- [ ] Mode 2: CPOL=1 CPHA=0 — sclk idles HIGH, sample on fall
-- [ ] Mode 3: CPOL=1 CPHA=1 — sclk idles HIGH, sample on rise
-- [ ] MISO=MOSI loopback roundtrip correct for each mode
-- [ ] N_BITS=8 and N_BITS=16 both work
-
-#### spi_slave_rx
-- [ ] cs_n=1 ignores SCLK edges
-- [ ] 8 bits received → rx_valid pulse, rx_data correct
-- [ ] rx_valid is exactly 1 clock wide
-- [ ] cs_n deassert during transfer resets counter
-- [ ] Back-to-back bytes (cs_n toggles between)
-- [ ] First byte after reset received correctly
-
-#### spi_slave_fd
-- [ ] tx_data pre-loaded on cs_n_fall
-- [ ] MISO shifts out tx_data MSB first
-- [ ] RX and TX happen simultaneously on same SCLK
-- [ ] MISO = 0 when cs_n = 1
-- [ ] Two transfers: MISO is independent each time (tx_data can change)
-- [ ] rx_valid fires on 8th rising SCLK edge
-
-#### spi_loopback
-- [ ] rx_m === tx_s after transfer
-- [ ] rx_s === tx_m after transfer
-- [ ] Two transfers with different data
-- [ ] busy asserts during transfer
-- [ ] done fires at correct time
-
-#### spi_regfile
-- [ ] Write to each of 8 registers (addr 0–7)
-- [ ] Read back each written register
-- [ ] Read before write returns 0 (reset state)
-- [ ] wr_valid pulses on write completion only
-- [ ] wr_addr and wr_data correct when wr_valid fires
-- [ ] Read does not trigger wr_valid
-- [ ] Two writes to different addresses, read back both
-
-#### spi_adc_slave
-- [ ] adc_val captured on cs_n_fall, not sclk
-- [ ] adc_val change during transfer does not corrupt current output
-- [ ] MISO correctly shifts adc_val MSB first
-- [ ] MISO = 0 when cs_n = 1
-- [ ] Back-to-back reads with different adc_val
-
-#### spi_flash_slave
-- [ ] WRITE command stores byte at address
-- [ ] READ command returns stored byte
-- [ ] READ_STATUS returns 0x00
-- [ ] Write addr 0 and addr 15 (boundary addresses)
-- [ ] Overwrite same address with new value, read back new value
-- [ ] wr_valid fires on WRITE completion, not READ
-- [ ] READ does not corrupt the stored value
-
-#### spi_bus_ctrl
-- [ ] dev_sel=0 asserts cs0_n only; cs1_n and cs2_n stay HIGH
-- [ ] dev_sel=1 asserts cs1_n only
-- [ ] dev_sel=2 asserts cs2_n only
-- [ ] MISO from selected slave reaches master rx_data
-- [ ] MISO from non-selected slaves ignored
-- [ ] dev_sel change between transfers takes effect next transfer
-- [ ] dev_sel change during transfer does not corrupt current transfer
+The `expected[]` field in each lesson object contains substrings matched against simulation
+output to determine auto-completion. These substrings must match exactly what the testbench
+prints on a correct run.
 
 ---
 
-## 4. Testbench Architecture
+## Part 3 — Functional Coverage Model
 
-### 4.1 Template structure
-
-Every testbench follows this structure:
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-
-  // ── 1. Clock ──────────────────────────────────────────────────────────
-  logic clk = 0;
-  always #5 clk = ~clk;
-
-  // ── 2. DUT signals ────────────────────────────────────────────────────
-  logic rst, ...;
-  DUT_NAME dut (.clk(clk), .rst(rst), ...);
-
-  // ── 3. Slave / master model (if needed) ───────────────────────────────
-  // (edge detection, shift register model, MISO driver)
-
-  // ── 4. Reusable tasks ─────────────────────────────────────────────────
-  task automatic task_name(...); ... endtask
-
-  // ── 5. Test sequence ──────────────────────────────────────────────────
-  initial begin
-    // reset
-    // test group 1: golden path
-    // test group 2: boundary
-    // test group 3: corner cases
-    $display("MODULE works!");
-    $finish;
-  end
-
-endmodule
-```
-
-### 4.2 Slave model template
-
-Used in any testbench where the DUT is a master and needs a responding slave:
-
-```systemverilog
-// ── Slave model ──────────────────────────────────────────────────────────
-logic [7:0] slave_tx;
-logic       sclk_prev, cs_n_prev;
-always_ff @(posedge clk) begin
-  sclk_prev <= sclk;
-  cs_n_prev <= cs_n;
-end
-logic sclk_rise_det, sclk_fall_det, cs_n_fall_det;
-assign sclk_rise_det = sclk  & ~sclk_prev;
-assign sclk_fall_det = ~sclk &  sclk_prev;
-assign cs_n_fall_det = ~cs_n &  cs_n_prev;
-
-always_ff @(posedge clk) begin
-  if (cs_n_fall_det)  slave_tx <= 8'hC3;         // preload response
-  else if (sclk_fall_det) slave_tx <= {slave_tx[6:0], 1'b0};
-end
-assign miso = cs_n ? 1'b0 : slave_tx[7];
-```
-
-### 4.3 MOSI capture template
-
-Used when you need to verify what the master actually put on MOSI:
-
-```systemverilog
-logic [7:0] mosi_captured;
-logic [2:0] mosi_bit;
-always_ff @(posedge clk) begin
-  if (cs_n_fall_det)  mosi_bit <= 3'd7;
-  else if (sclk_rise_det) begin
-    mosi_captured[mosi_bit] <= mosi;
-    mosi_bit <= mosi_bit - 1;
-  end
-end
-```
-
-### 4.4 Transfer wait pattern
-
-Never use `for` loops with `return`. Always use `repeat` then check:
-
-```systemverilog
-task automatic do_xfer(input logic [7:0] tx);
-  tx_data = tx; start = 1;
-  @(posedge clk); #1; start = 0;
-  repeat(100) @(posedge clk); #1;   // 8 bits × 4 phases × 3 = ~96 cycles; 100 is safe
-endtask
-```
-
-For 16-bit: `repeat(200)`. For flash (3-byte): `repeat(400)`.
-
-### 4.5 SPI bus driver tasks
-
-These are the fundamental building blocks. Copy-paste into any testbench.
-
-#### send8 — drive 8 bits MSB-first on MOSI
-
-```systemverilog
-task automatic send8(input logic [7:0] d);
-  mosi=d[7]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-  mosi=d[6]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-  mosi=d[5]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-  mosi=d[4]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-  mosi=d[3]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-  mosi=d[2]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-  mosi=d[1]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-  mosi=d[0]; sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1;
-endtask
-```
-
-#### recv8 — capture 8 MISO bits MSB-first
-
-```systemverilog
-task automatic recv8(output logic [7:0] d);
-  mosi=0;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[7]=miso;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[6]=miso;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[5]=miso;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[4]=miso;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[3]=miso;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[2]=miso;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[1]=miso;
-  sclk=0; repeat(4) @(posedge clk); #1; sclk=1; repeat(4) @(posedge clk); #1; d[0]=miso;
-endtask
-```
-
-#### spi_frame — wrap send8/recv8 in CS_N
-
-```systemverilog
-task automatic spi_write_frame(input logic [7:0] d);
-  cs_n=0; repeat(2) @(posedge clk); #1;
-  send8(d);
-  sclk=0; repeat(2) @(posedge clk); #1;
-  cs_n=1; repeat(4) @(posedge clk); #1;
-endtask
-
-task automatic spi_read_frame(output logic [7:0] d);
-  cs_n=0; repeat(2) @(posedge clk); #1;
-  recv8(d);
-  sclk=0; repeat(2) @(posedge clk); #1;
-  cs_n=1; repeat(4) @(posedge clk); #1;
-endtask
-```
-
-#### spi_xfer — simultaneous send + receive (full-duplex)
-
-```systemverilog
-task automatic spi_xfer(input logic [7:0] tx, output logic [7:0] rx);
-  cs_n=0; repeat(2) @(posedge clk); #1;
-  // bit 7
-  mosi=tx[7]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[7]=miso;
-  // bit 6
-  mosi=tx[6]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[6]=miso;
-  // bit 5
-  mosi=tx[5]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[5]=miso;
-  // bit 4
-  mosi=tx[4]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[4]=miso;
-  // bit 3
-  mosi=tx[3]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[3]=miso;
-  // bit 2
-  mosi=tx[2]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[2]=miso;
-  // bit 1
-  mosi=tx[1]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[1]=miso;
-  // bit 0
-  mosi=tx[0]; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1; rx[0]=miso;
-  sclk=0; repeat(2) @(posedge clk); #1;
-  cs_n=1; repeat(4) @(posedge clk); #1;
-endtask
-```
-
-#### check helper macro pattern
-
-```systemverilog
-task automatic check8(input logic [7:0] got, exp, input string label);
-  if (got === exp)
-    $display("PASS  %s got=0x%02h", label, got);
-  else
-    $display("FAIL  %s got=0x%02h expected=0x%02h", label, got, exp);
-endtask
-```
+A testbench is not complete until every item in the module's coverage list is exercised.
+Tick each item off when you have a test case that directly verifies it.
 
 ---
 
-## 5. Complete Test Cases — Module by Module
+### 3.1 sipo_shift_reg
+
+- [ ] `rst` asserts → all 8 bits of `data_out` cleared to 0
+- [ ] Single `1` bit shifted in to an all-zero register → correct position in `data_out`
+- [ ] Complete byte 0xA5 (alternating) received correctly
+- [ ] Complete byte 0xFF (all ones) received correctly
+- [ ] Complete byte 0x00 (all zeros) does not change output
+- [ ] Back-to-back bytes without reset between them — second overwrites first
+- [ ] Reset mid-shift — partial state erased, subsequent full byte correct
+- [ ] Bit order verified: first bit received occupies MSB, last occupies LSB
+
+### 3.2 piso_shift_reg
+
+- [ ] `load` asserts → `shift_reg` captures `data_in` on next rising clock edge
+- [ ] 8 shift clocks after load → `serial_out` sequence equals `data_in` bits MSB-first
+- [ ] `rst` asserts → `shift_reg` cleared, `serial_out` = 0
+- [ ] Load asserted for exactly 1 clock, then deasserted before shifting begins
+- [ ] Re-load during an active shift — new `data_in` replaces partial shift
+- [ ] `serial_out` is 0 when no active shift (after reset or after shift completes)
+
+### 3.3 spi_byte_counter
+
+- [ ] `cs_n = 1` → SCLK edges are ignored, `bit_idx` stays 0
+- [ ] 7 SCLK rising edges with `cs_n = 0` → `bit_idx` reaches 7
+- [ ] 8th SCLK rising edge → `byte_done` asserts for exactly 1 system clock
+- [ ] `byte_done` clears to 0 on the next system clock after it fires
+- [ ] `bit_idx` resets to 0 when `byte_done` fires
+- [ ] `cs_n` deasserts mid-frame → `bit_idx` resets to 0 within 2 system clocks
+- [ ] Two consecutive complete frames → `byte_done` fires exactly once per frame
+- [ ] SCLK pulse while `cs_n = 1` does not increment `bit_idx`
+
+### 3.4 spi_clkdiv
+
+- [ ] `sclk` is low immediately after reset releases
+- [ ] Exactly 8 rising edges on `sclk` per 64 system clocks
+- [ ] Exactly 8 falling edges on `sclk` per 64 system clocks
+- [ ] `sclk_rise` and `sclk_fall` are never both 1 in the same system clock cycle
+- [ ] `sclk_rise` pulse is exactly 1 system clock wide (no multi-cycle pulse)
+- [ ] `sclk_fall` pulse is exactly 1 system clock wide
+- [ ] Duty cycle is 50% (equal number of high and low system clocks per `sclk` period)
+
+### 3.5 spi_master
+
+- [ ] `start` asserted → `busy` asserts within 1 clock, `cs_n` falls within 1 clock
+- [ ] `tx_data` bits appear on `MOSI` MSB-first during transfer
+- [ ] `miso` bits are assembled into `rx_data` correctly (MSB-first)
+- [ ] `done` pulses for exactly 1 clock at end of transfer
+- [ ] `busy` deasserts at the same clock `done` fires
+- [ ] `cs_n` deasserts after the 8th bit completes (not before)
+- [ ] Back-to-back transfers produce independent MOSI and rx_data for each
+- [ ] `start` asserted while `busy` is high → ignored, current transfer unaffected
+- [ ] `rx_data` = 0xFF when MISO is held high throughout
+- [ ] `rx_data` = 0x00 when MISO is held low throughout
+
+### 3.6 spi_master_16
+
+- [ ] `cs_n` stays low for all 16 SCLK cycles (never pulses high between byte 1 and byte 2)
+- [ ] High byte `tx_word[15:8]` transmitted first on MOSI
+- [ ] Low byte `tx_word[7:0]` transmitted second on MOSI
+- [ ] 16 MISO bits assembled into `rx_word` correctly, MSB-first
+- [ ] `done` fires after bit 15, not bit 7
+- [ ] `bit_cnt` reaches 15 before done fires (verify by timing)
+- [ ] Back-to-back 16-bit transfers both produce correct MOSI patterns
+
+### 3.7 spi_master_param
+
+- [ ] Mode 0 (CPOL=0 CPHA=0): SCLK idles low; MOSI valid before first rising edge; sample on rise
+- [ ] Mode 1 (CPOL=0 CPHA=1): SCLK idles low; MOSI changes on first rising edge; sample on fall
+- [ ] Mode 2 (CPOL=1 CPHA=0): SCLK idles high; MOSI valid before first falling edge; sample on fall
+- [ ] Mode 3 (CPOL=1 CPHA=1): SCLK idles high; MOSI changes on first falling edge; sample on rise
+- [ ] MISO loopback roundtrip correct for each of the 4 modes independently
+- [ ] Parameter `N_BITS=8` produces 8 SCLK cycles per transfer
+- [ ] Parameter `N_BITS=16` produces 16 SCLK cycles per transfer
+- [ ] `done` fires at correct cycle count for both N_BITS values
+
+### 3.8 spi_slave_rx
+
+- [ ] `cs_n = 1` → SCLK edges ignored, `rx_valid` never fires
+- [ ] 8 SCLK rising edges with `cs_n = 0` → `rx_valid` pulses, `rx_data` correct
+- [ ] `rx_valid` is exactly 1 system clock wide
+- [ ] `rx_data` holds its value after `rx_valid` deasserts (until next valid frame)
+- [ ] `cs_n` deasserts mid-frame → counter resets; new complete frame produces correct data
+- [ ] Back-to-back frames (CS_N toggles between) — each frame produces independent `rx_data`
+- [ ] First byte received immediately after reset is correct
+
+### 3.9 spi_slave_fd
+
+- [ ] `tx_data` is captured (pre-loaded into shift register) on the falling edge of `cs_n`
+- [ ] `miso` shifts out `tx_data` MSB-first, bit available before first SCLK rise
+- [ ] `miso = 0` when `cs_n = 1` (not `z`, not floating)
+- [ ] RX (MOSI → `rx_data`) and TX (`tx_data` → MISO) happen simultaneously on the same SCLK
+- [ ] `rx_valid` fires on the 8th SCLK rising edge
+- [ ] `tx_data` changed after `cs_n` falls does not affect current transfer MISO output
+- [ ] Second transfer with different `tx_data` correctly shifts out the new value
+
+### 3.10 spi_loopback
+
+- [ ] Master's `tx_data` arrives as slave's `rx_data` after transfer
+- [ ] Slave's `tx_data` arrives as master's `rx_data` after transfer
+- [ ] Both directions correct simultaneously (single transfer verifies both)
+- [ ] `busy` deasserts after transfer completes
+- [ ] `done` fires at correct time relative to last SCLK edge
+- [ ] Two back-to-back transfers with different data both pass
+
+### 3.11 spi_regfile
+
+- [ ] Write to register 0 through register 7 — each produces `wr_valid` pulse
+- [ ] `wr_addr` and `wr_data` correct when `wr_valid` fires
+- [ ] Read from each register returns the value previously written
+- [ ] Read before any write returns 0x00 (reset state)
+- [ ] Read transaction does not assert `wr_valid`
+- [ ] Overwrite a register — subsequent read returns the new value, not the old
+- [ ] Two writes to different addresses — both can be read back independently
+
+### 3.12 spi_adc_slave
+
+- [ ] `adc_val` present at `cs_n` falling edge is the value shifted out on MISO
+- [ ] `adc_val` change during an active transfer does not corrupt current MISO output
+- [ ] MISO shifts out `adc_val` MSB-first
+- [ ] `miso = 0` when `cs_n = 1`
+- [ ] Back-to-back reads with different `adc_val` — each transfer returns the correct snapshot
+
+### 3.13 spi_flash_slave
+
+- [ ] WRITE command (0x02) stores data byte at the addressed location
+- [ ] READ command (0x03) returns the byte previously stored at that address
+- [ ] READ_STATUS command (0x05) returns 0x00 (device ready, no write-in-progress)
+- [ ] `wr_valid` fires after a WRITE transaction, not after READ or READ_STATUS
+- [ ] Write to address 0 and address 15 (boundary addresses) — both readable
+- [ ] Overwrite an address — READ returns the new value, not the original
+- [ ] READ does not alter the stored value (non-destructive read)
+- [ ] Command byte decoded correctly: 0x02 vs 0x03 differ only in bit 0
+
+### 3.14 spi_bus_ctrl
+
+- [ ] `dev_sel = 0` asserts `cs0_n` only; `cs1_n` and `cs2_n` remain high
+- [ ] `dev_sel = 1` asserts `cs1_n` only; `cs0_n` and `cs2_n` remain high
+- [ ] `dev_sel = 2` asserts `cs2_n` only; `cs0_n` and `cs1_n` remain high
+- [ ] MISO from the selected slave is routed to the master's `miso_in` port
+- [ ] MISO from non-selected slaves is ignored (does not corrupt `miso_in`)
+- [ ] `dev_sel` change between transfers — takes effect at the next `start` pulse
+- [ ] `dev_sel` change during an active transfer — does not cause CS_N glitch on any port
 
 ---
 
-### 5.1 sipo_shift_reg
+## Part 4 — Testbench Architecture
 
-**DUT ports:** `clk, rst, serial_in → data_out[7:0]`
+### 4.1 Standard testbench structure
 
-#### TC-SIPO-01: Reset clears register
+Every testbench in the series follows this layered organisation:
 
-```
-Action:   rst=1 for 2 clocks, rst=0
-Verify:   data_out === 8'h00 immediately after rst deasserts
-```
+**Layer 1 — Clock generator**  
+A free-running clock declared as an initialised `logic` driven by an `always` block with
+a fixed half-period delay. No other timing uses bare `#N` delays except for the post-edge
+`#1` skew.
 
-#### TC-SIPO-02: Shift in 0xA5 (1010_0101)
+**Layer 2 — DUT signal declarations and instantiation**  
+All signals are `logic`. Ports connected by name, not by position. Signal names match the
+DUT port names exactly to avoid confusion.
 
-```
-Action:   send bits 1,0,1,0,0,1,0,1 on serial_in (MSB first), one per clock
-Verify:   after 8th clock, data_out === 8'hA5
-```
+**Layer 3 — Bus model (for master DUTs)**  
+A software model of the responding slave, or a MOSI capture register, running as a separate
+`always_ff` block. It detects SCLK edges and CS_N fall by comparing against previous-cycle
+values. This runs independently of the testbench stimulus, so timing of reads is decoupled.
 
-#### TC-SIPO-03: Shift in 0xFF
+**Layer 4 — Reusable task library**  
+Tasks declared as `automatic` (each call has its own stack frame). The task set for SPI
+testbenches is described in Section 4.3.
 
-```
-Action:   serial_in=1 for 8 consecutive clocks
-Verify:   data_out === 8'hFF
-```
+**Layer 5 — Test sequence**  
+A single `initial` block with labelled test groups. Each group begins with a `$display`
+header, runs stimulus, then checks results. The final line is the success message followed
+by `$finish`.
 
-#### TC-SIPO-04: Shift in 0x00
+### 4.2 Slave model design (for master DUT testbenches)
 
-```
-Action:   serial_in=0 for 8 consecutive clocks
-Verify:   data_out === 8'h00
-```
+When the DUT is a master, the testbench needs a responding slave model. The model:
 
-#### TC-SIPO-05: Back-to-back bytes, no reset
+- Detects `cs_n` falling edge using a delayed compare (`~cs_n & cs_n_prev`)
+- On `cs_n` fall: pre-loads a programmable 8-bit response into its own shift register
+- On each SCLK falling edge (after master has sampled): shifts the response left by 1 bit
+- Drives `miso = shift_reg[7]` while `cs_n = 0`, drives `miso = 0` while `cs_n = 1`
+- Optionally captures MOSI bits on each SCLK rising edge into a separate capture register
 
-```
-Action:   send 0xA5 (8 clocks), then immediately send 0x3C (8 clocks)
-Verify:   data_out === 8'hA5 after first 8; data_out === 8'h3C after second 8
-```
+The slave model's response value should be configurable per test case so the testbench
+can verify different `rx_data` values without changing the DUT.
 
-#### TC-SIPO-06: Reset mid-shift
+### 4.3 Task library
 
-```
-Action:   send 4 bits of 0xA5, then assert rst=1 for 1 clock, rst=0
-          then send complete 0x37
-Verify:   data_out === 8'h37 (reset wiped the partial byte)
-```
-
-#### TC-SIPO-07: Bit-by-bit trace for 0xA5
-
-```
-Verify at each clock:
-  after bit 7 (1): data_out = 8'b0000_0001
-  after bit 6 (0): data_out = 8'b0000_0010
-  after bit 5 (1): data_out = 8'b0000_0101
-  after bit 4 (0): data_out = 8'b0000_1010
-  after bit 3 (0): data_out = 8'b0001_0100
-  after bit 2 (1): data_out = 8'b0010_1001
-  after bit 1 (0): data_out = 8'b0101_0010
-  after bit 0 (1): data_out = 8'b1010_0101 = 0xA5
-```
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #5 clk = ~clk;
-
-  logic       rst, serial_in;
-  logic [7:0] data_out;
-
-  sipo_shift_reg dut (.clk(clk), .rst(rst), .serial_in(serial_in), .data_out(data_out));
-
-  task automatic send_byte(input logic [7:0] data);
-    serial_in=data[7]; @(posedge clk); #1;
-    serial_in=data[6]; @(posedge clk); #1;
-    serial_in=data[5]; @(posedge clk); #1;
-    serial_in=data[4]; @(posedge clk); #1;
-    serial_in=data[3]; @(posedge clk); #1;
-    serial_in=data[2]; @(posedge clk); #1;
-    serial_in=data[1]; @(posedge clk); #1;
-    serial_in=data[0]; @(posedge clk); #1;
-  endtask
-
-  initial begin
-    $display("=== SIPO Full Test ===");
-    rst=1; serial_in=0; repeat(2) @(posedge clk); #1; rst=0;
-
-    // TC-SIPO-01
-    if (data_out===8'h00)
-      $display("PASS  TC-SIPO-01  reset clears register");
-    else
-      $display("FAIL  TC-SIPO-01  data_out=0x%02h expected 0x00", data_out);
-
-    // TC-SIPO-02
-    send_byte(8'hA5);
-    if (data_out===8'hA5)
-      $display("PASS  TC-SIPO-02  received 0xA5");
-    else
-      $display("FAIL  TC-SIPO-02  data_out=0x%02h expected 0xA5", data_out);
-
-    // TC-SIPO-03
-    send_byte(8'hFF);
-    if (data_out===8'hFF)
-      $display("PASS  TC-SIPO-03  received 0xFF");
-    else
-      $display("FAIL  TC-SIPO-03  data_out=0x%02h expected 0xFF", data_out);
-
-    // TC-SIPO-05  back-to-back
-    send_byte(8'hA5);
-    send_byte(8'h3C);
-    if (data_out===8'h3C)
-      $display("PASS  TC-SIPO-05  back-to-back 0x3C correct");
-    else
-      $display("FAIL  TC-SIPO-05  data_out=0x%02h expected 0x3C", data_out);
-
-    // TC-SIPO-06  reset mid-shift
-    serial_in=1; repeat(4) @(posedge clk); #1;
-    rst=1; @(posedge clk); #1; rst=0;
-    send_byte(8'h37);
-    if (data_out===8'h37)
-      $display("PASS  TC-SIPO-06  reset mid-shift, then 0x37");
-    else
-      $display("FAIL  TC-SIPO-06  data_out=0x%02h expected 0x37", data_out);
-
-    $display("SIPO all tests done.");
-    $finish;
-  end
-endmodule
-```
+These tasks form the building blocks that all SPI testbenches compose. Each task is
+described by its inputs, outputs, and what it does in terms of bus activity.
 
 ---
 
-### 5.2 piso_shift_reg
-
-**DUT ports:** `clk, rst, load, data_in[7:0] → serial_out`
-
-#### TC-PISO-01: Load then shift out 0xA5
-
-```
-Action:   data_in=0xA5, load=1 for 1 clock; then load=0 for 8 clocks
-          capture serial_out each clock into recv[7:0]
-Verify:   recv === 8'hA5
-```
-
-#### TC-PISO-02: Load then shift out 0x3C
-
-```
-Same procedure with data_in=0x3C
-Verify:   recv === 8'h3C
-```
-
-#### TC-PISO-03: Reset clears serial_out
-
-```
-Action:   load=1, data_in=0xFF; then rst=1 for 1 clock, rst=0
-Verify:   serial_out === 1'b0 immediately
-```
-
-#### TC-PISO-04: Re-load during shift sequence
-
-```
-Action:   load 0xA5, shift 4 clocks, then load 0x3C, shift 8 clocks
-Verify:   recv after second sequence === 8'h3C (not corrupted by partial first)
-```
-
-#### TC-PISO-05: MSB-first order verification
-
-```
-Action:   data_in=8'b1100_0011 (0xC3), load=1, then 8 shift clocks
-Capture:  serial_out at each of the 8 clock cycles
-Verify:   sequence is exactly 1,1,0,0,0,0,1,1 (MSB first)
-```
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #5 clk = ~clk;
-
-  logic       rst, load;
-  logic [7:0] data_in;
-  logic       serial_out;
-  logic [7:0] captured;
-
-  piso_shift_reg dut (.clk(clk), .rst(rst), .load(load),
-                      .data_in(data_in), .serial_out(serial_out));
-
-  task automatic load_and_capture(input logic [7:0] d, output logic [7:0] r);
-    data_in=d; load=1; @(posedge clk); #1; load=0;
-    r[7]=serial_out; @(posedge clk); #1;
-    r[6]=serial_out; @(posedge clk); #1;
-    r[5]=serial_out; @(posedge clk); #1;
-    r[4]=serial_out; @(posedge clk); #1;
-    r[3]=serial_out; @(posedge clk); #1;
-    r[2]=serial_out; @(posedge clk); #1;
-    r[1]=serial_out; @(posedge clk); #1;
-    r[0]=serial_out; @(posedge clk); #1;
-  endtask
-
-  initial begin
-    $display("=== PISO Full Test ===");
-    rst=1; load=0; data_in=0; repeat(2) @(posedge clk); #1; rst=0;
-
-    // TC-PISO-01
-    load_and_capture(8'hA5, captured);
-    if (captured===8'hA5)
-      $display("PASS  TC-PISO-01  shifted out 0xA5 correctly");
-    else
-      $display("FAIL  TC-PISO-01  captured=0x%02h expected 0xA5", captured);
-
-    // TC-PISO-02
-    load_and_capture(8'h3C, captured);
-    if (captured===8'h3C)
-      $display("PASS  TC-PISO-02  shifted out 0x3C correctly");
-    else
-      $display("FAIL  TC-PISO-02  captured=0x%02h expected 0x3C", captured);
-
-    // TC-PISO-03
-    data_in=8'hFF; load=1; @(posedge clk); #1; load=0;
-    rst=1; @(posedge clk); #1; rst=0;
-    if (serial_out===1'b0)
-      $display("PASS  TC-PISO-03  reset clears serial_out");
-    else
-      $display("FAIL  TC-PISO-03  serial_out=%0b expected 0", serial_out);
-
-    // TC-PISO-04  re-load mid-shift
-    data_in=8'hA5; load=1; @(posedge clk); #1; load=0;
-    repeat(4) @(posedge clk); #1;   // shift 4 bits
-    load_and_capture(8'h3C, captured);
-    if (captured===8'h3C)
-      $display("PASS  TC-PISO-04  re-load during shift returns correct value");
-    else
-      $display("FAIL  TC-PISO-04  captured=0x%02h expected 0x3C", captured);
-
-    // TC-PISO-05  MSB-first order check for 0xC3 = 1100_0011
-    load_and_capture(8'hC3, captured);
-    if (captured===8'hC3)
-      $display("PASS  TC-PISO-05  MSB-first order correct for 0xC3");
-    else
-      $display("FAIL  TC-PISO-05  captured=0x%02h expected 0xC3", captured);
-
-    $display("PISO all tests done.");
-    $finish;
-  end
-endmodule
-```
+**Task: `send8`**  
+Input: 8-bit data value  
+Output: none (drives bus signals directly)  
+Action: drives each bit of the input onto MOSI MSB-first, producing 8 SCLK rise/fall
+transitions. Each bit phase consists of: set MOSI → drive SCLK low → wait → drive SCLK
+high → wait. Total bus activity: 8 complete SCLK cycles, each 8 system clocks wide.
 
 ---
 
-### 5.3 spi_byte_counter
-
-**DUT ports:** `clk, rst, cs_n, sclk → bit_idx[2:0], byte_done`
-
-#### TC-BCNT-01: SCLK ignored when cs_n=1
-
-```
-Action:   cs_n=1, send 8 SCLK pulses
-Verify:   bit_idx === 0 throughout
-```
-
-#### TC-BCNT-02: 7 pulses → bit_idx reaches 7
-
-```
-Action:   cs_n=0, send 7 SCLK pulses
-Verify:   bit_idx === 7, byte_done === 0
-```
-
-#### TC-BCNT-03: 8th pulse fires byte_done for exactly 1 clock
-
-```
-Action:   while still in frame, raise sclk=1
-Verify:   one clock after sclk_rise: byte_done===1
-          two clocks after: byte_done===0
-```
-
-#### TC-BCNT-04: bit_idx resets to 0 after byte_done
-
-```
-Verify:   bit_idx===0 when byte_done fires
-```
-
-#### TC-BCNT-05: cs_n deassert resets counter
-
-```
-Action:   send 5 pulses, deassert cs_n=1
-Verify:   bit_idx===0 within 2 system clocks
-```
-
-#### TC-BCNT-06: Two consecutive frames
-
-```
-Action:   frame 1: 8 pulses, cs_n=1, cs_n=0; frame 2: 8 pulses
-Verify:   byte_done fires once in frame 1, once in frame 2, not in between
-```
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #2 clk = ~clk;
-
-  logic       rst, cs_n, sclk;
-  logic [2:0] bit_idx;
-  logic       byte_done;
-
-  spi_byte_counter dut (.clk(clk), .rst(rst), .cs_n(cs_n),
-                        .sclk(sclk), .bit_idx(bit_idx), .byte_done(byte_done));
-
-  task automatic clk_pulse;
-    sclk=1; repeat(4) @(posedge clk); #1;
-    sclk=0; repeat(4) @(posedge clk); #1;
-  endtask
-
-  logic [3:0] done_count;
-  always_ff @(posedge clk) begin
-    if (byte_done) done_count = done_count + 1;
-  end
-
-  initial begin
-    $display("=== SPI Byte Counter Full Test ===");
-    rst=1; cs_n=1; sclk=0; done_count=0;
-    repeat(4) @(posedge clk); #1; rst=0;
-
-    // TC-BCNT-01
-    repeat(8) clk_pulse();
-    if (bit_idx===3'd0)
-      $display("PASS  TC-BCNT-01  SCLK ignored when cs_n=1");
-    else
-      $display("FAIL  TC-BCNT-01  bit_idx=%0d expected 0", bit_idx);
-
-    // TC-BCNT-02
-    cs_n=0;
-    repeat(7) clk_pulse();
-    if (bit_idx===3'd7)
-      $display("PASS  TC-BCNT-02  bit_idx=7 after 7 pulses");
-    else
-      $display("FAIL  TC-BCNT-02  bit_idx=%0d expected 7", bit_idx);
-
-    // TC-BCNT-03 and TC-BCNT-04
-    sclk=1; @(posedge clk); #1;
-    if (byte_done===1'b1 && bit_idx===3'd0)
-      $display("PASS  TC-BCNT-03/04  byte_done=1, bit_idx reset to 0");
-    else
-      $display("FAIL  TC-BCNT-03/04  byte_done=%0b bit_idx=%0d", byte_done, bit_idx);
-    @(posedge clk); #1;
-    if (byte_done===1'b0)
-      $display("PASS  TC-BCNT-03  byte_done cleared next clock");
-    else
-      $display("FAIL  TC-BCNT-03  byte_done still high");
-    repeat(3) @(posedge clk); #1;
-    sclk=0; repeat(4) @(posedge clk); #1;
-
-    // TC-BCNT-05
-    repeat(5) clk_pulse();
-    cs_n=1; repeat(2) @(posedge clk); #1;
-    if (bit_idx===3'd0)
-      $display("PASS  TC-BCNT-05  cs_n deassert resets bit_idx");
-    else
-      $display("FAIL  TC-BCNT-05  bit_idx=%0d expected 0", bit_idx);
-
-    // TC-BCNT-06  two consecutive frames
-    done_count=0;
-    cs_n=0; repeat(8) clk_pulse(); cs_n=1;
-    repeat(2) @(posedge clk); #1;
-    cs_n=0; repeat(8) clk_pulse(); cs_n=1;
-    repeat(2) @(posedge clk); #1;
-    if (done_count===4'd2)
-      $display("PASS  TC-BCNT-06  byte_done fired exactly twice across two frames");
-    else
-      $display("FAIL  TC-BCNT-06  done_count=%0d expected 2", done_count);
-
-    $display("Byte counter all tests done.");
-    $finish;
-  end
-endmodule
-```
+**Task: `recv8`**  
+Input: none  
+Output: 8-bit value assembled from 8 MISO samples  
+Action: drives 8 SCLK rise/fall transitions with MOSI = 0 (don't-care bits). Samples
+MISO once per SCLK high phase, assembling bits MSB-first. Returns the assembled byte.
 
 ---
 
-### 5.4 spi_clkdiv
-
-**DUT ports:** `clk, rst → sclk, sclk_rise, sclk_fall`
-
-#### TC-CLKDIV-01: 8 rising edges in 64 system clocks
-
-#### TC-CLKDIV-02: 8 falling edges in 64 system clocks
-
-#### TC-CLKDIV-03: sclk_rise and sclk_fall never simultaneously 1
-
-#### TC-CLKDIV-04: sclk idles LOW after reset
-
-#### TC-CLKDIV-05: sclk_rise is exactly 1 system clock wide
-
-```
-Action:   capture sclk_rise each clock for 64 clocks
-Verify:   every sclk_rise pulse is exactly 1 clock wide (no multi-cycle pulses)
-```
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #5 clk = ~clk;
-
-  logic rst, sclk, sclk_rise, sclk_fall;
-
-  spi_clkdiv dut (.clk(clk), .rst(rst),
-                  .sclk(sclk), .sclk_rise(sclk_rise), .sclk_fall(sclk_fall));
-
-  logic [3:0] rise_cnt, fall_cnt;
-  logic       overlap_err, pulse_err;
-  logic       prev_rise;
-
-  initial begin
-    $display("=== SPI Clock Divider Full Test ===");
-    rst=1; repeat(2) @(posedge clk); #1;
-
-    // TC-CLKDIV-04
-    if (sclk===1'b0)
-      $display("PASS  TC-CLKDIV-04  sclk idles LOW after reset");
-    else
-      $display("FAIL  TC-CLKDIV-04  sclk=%0b expected 0", sclk);
-
-    rst=0;
-    rise_cnt=0; fall_cnt=0; overlap_err=0; pulse_err=0; prev_rise=0;
-
-    repeat(64) begin
-      @(posedge clk); #1;
-      if (sclk_rise) rise_cnt = rise_cnt + 1;
-      if (sclk_fall) fall_cnt = fall_cnt + 1;
-      if (sclk_rise && sclk_fall) overlap_err = 1;
-      // pulse width check: sclk_rise should not be 1 for two consecutive clocks
-      if (sclk_rise && prev_rise) pulse_err = 1;
-      prev_rise = sclk_rise;
-    end
-
-    // TC-CLKDIV-01
-    if (rise_cnt===4'd8)
-      $display("PASS  TC-CLKDIV-01  8 rising edges in 64 clocks");
-    else
-      $display("FAIL  TC-CLKDIV-01  rise_cnt=%0d expected 8", rise_cnt);
-
-    // TC-CLKDIV-02
-    if (fall_cnt===4'd8)
-      $display("PASS  TC-CLKDIV-02  8 falling edges in 64 clocks");
-    else
-      $display("FAIL  TC-CLKDIV-02  fall_cnt=%0d expected 8", fall_cnt);
-
-    // TC-CLKDIV-03
-    if (!overlap_err)
-      $display("PASS  TC-CLKDIV-03  sclk_rise and sclk_fall never overlap");
-    else
-      $display("FAIL  TC-CLKDIV-03  sclk_rise and sclk_fall simultaneous");
-
-    // TC-CLKDIV-05
-    if (!pulse_err)
-      $display("PASS  TC-CLKDIV-05  sclk_rise pulses are 1 clock wide");
-    else
-      $display("FAIL  TC-CLKDIV-05  sclk_rise multi-cycle pulse detected");
-
-    $display("Clock divider all tests done.");
-    $finish;
-  end
-endmodule
-```
+**Task: `spi_write_frame`**  
+Input: 8-bit data value  
+Output: none  
+Action: asserts CS_N low, waits 2 system clocks, calls `send8`, drives SCLK low, waits
+2 system clocks, deasserts CS_N high, waits 4 system clocks. Wraps one complete write-only
+SPI frame.
 
 ---
 
-### 5.5 spi_master
-
-**DUT ports:** `clk, rst, start, tx_data[7:0], miso → mosi, sclk, cs_n, busy, done, rx_data[7:0]`
-
-#### TC-MSTR-01: TX data appears correctly on MOSI
-
-```
-Slave model captures MOSI on sclk_rise.
-Verify: mosi_captured === tx_data after transfer.
-```
-
-#### TC-MSTR-02: MISO received correctly in rx_data
-
-```
-Slave drives 8'hC3.
-Verify: rx_data === 8'hC3 after done pulses.
-```
-
-#### TC-MSTR-03: busy asserts on start, deasserts on done
-
-#### TC-MSTR-04: cs_n asserts at start, deasserts after bit 7
-
-#### TC-MSTR-05: done is exactly 1 clock wide
-
-#### TC-MSTR-06: Back-to-back transfers with different data
-
-#### TC-MSTR-07: MISO=0xFF received correctly
-
-#### TC-MSTR-08: start ignored while busy
-
-```
-Action:   start transfer, then pulse start again while busy
-Verify:   second start has no effect; only one transfer completes
-```
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #5 clk = ~clk;
-
-  logic       rst, start, miso, mosi, sclk, cs_n, busy, done;
-  logic [7:0] tx_data, rx_data;
-
-  spi_master dut (.clk(clk), .rst(rst), .start(start),
-                  .tx_data(tx_data), .miso(miso),
-                  .mosi(mosi), .sclk(sclk), .cs_n(cs_n),
-                  .busy(busy), .done(done), .rx_data(rx_data));
-
-  // Slave model — programmable response
-  logic [7:0] slave_resp;
-  logic [7:0] slave_tx;
-  logic       sclk_prev, cs_n_prev;
-  always_ff @(posedge clk) begin sclk_prev<=sclk; cs_n_prev<=cs_n; end
-  logic sr, sf, cf;
-  assign sr = sclk  & ~sclk_prev;
-  assign sf = ~sclk &  sclk_prev;
-  assign cf = ~cs_n &  cs_n_prev;
-  always_ff @(posedge clk) begin
-    if (cf)      slave_tx <= slave_resp;
-    else if (sf) slave_tx <= {slave_tx[6:0], 1'b0};
-  end
-  assign miso = cs_n ? 1'b0 : slave_tx[7];
-
-  // MOSI capture
-  logic [7:0] mosi_cap;
-  logic [2:0] mosi_bit;
-  always_ff @(posedge clk) begin
-    if (cf) mosi_bit <= 3'd7;
-    else if (sr) begin mosi_cap[mosi_bit]<=mosi; mosi_bit<=mosi_bit-1; end
-  end
-
-  // done pulse width counter
-  logic [1:0] done_width;
-  always_ff @(posedge clk) begin
-    if (done) done_width <= done_width + 1;
-    else      done_width <= 0;
-  end
-
-  task automatic xfer(input logic [7:0] tx, input logic [7:0] resp);
-    slave_resp = resp;
-    tx_data = tx; start=1;
-    @(posedge clk); #1; start=0;
-    repeat(120) @(posedge clk); #1;
-  endtask
-
-  initial begin
-    $display("=== SPI Master Full Test ===");
-    rst=1; start=0; tx_data=0; slave_resp=8'hC3;
-    repeat(2) @(posedge clk); #1; rst=0;
-
-    // TC-MSTR-01 and TC-MSTR-02
-    xfer(8'hAB, 8'hC3);
-    if (mosi_cap===8'hAB)
-      $display("PASS  TC-MSTR-01  MOSI=0xAB correct");
-    else
-      $display("FAIL  TC-MSTR-01  mosi_cap=0x%02h expected 0xAB", mosi_cap);
-    if (rx_data===8'hC3)
-      $display("PASS  TC-MSTR-02  rx_data=0xC3 correct");
-    else
-      $display("FAIL  TC-MSTR-02  rx_data=0x%02h expected 0xC3", rx_data);
-
-    // TC-MSTR-03
-    if (!busy && cs_n)
-      $display("PASS  TC-MSTR-03  busy and cs_n deasserted after transfer");
-    else
-      $display("FAIL  TC-MSTR-03  busy=%0b cs_n=%0b", busy, cs_n);
-
-    // TC-MSTR-05  done width check
-    xfer(8'h00, 8'h00);
-    // done_width should have maxed at 1 — just verify it went high
-    if (rx_data===8'h00)
-      $display("PASS  TC-MSTR-05  done fired (rx_data=0x00 received)");
-    else
-      $display("FAIL  TC-MSTR-05  rx_data=0x%02h", rx_data);
-
-    // TC-MSTR-06  back-to-back
-    xfer(8'h12, 8'h34);
-    if (mosi_cap===8'h12 && rx_data===8'h34)
-      $display("PASS  TC-MSTR-06  back-to-back transfer 1 correct");
-    else
-      $display("FAIL  TC-MSTR-06  mosi=0x%02h rx=0x%02h", mosi_cap, rx_data);
-    xfer(8'h56, 8'h78);
-    if (mosi_cap===8'h56 && rx_data===8'h78)
-      $display("PASS  TC-MSTR-06  back-to-back transfer 2 correct");
-    else
-      $display("FAIL  TC-MSTR-06  mosi=0x%02h rx=0x%02h", mosi_cap, rx_data);
-
-    // TC-MSTR-07  MISO=0xFF
-    xfer(8'h00, 8'hFF);
-    if (rx_data===8'hFF)
-      $display("PASS  TC-MSTR-07  MISO=0xFF received correctly");
-    else
-      $display("FAIL  TC-MSTR-07  rx_data=0x%02h expected 0xFF", rx_data);
-
-    $display("SPI master all tests done.");
-    $finish;
-  end
-endmodule
-```
+**Task: `spi_read_frame`**  
+Input: none  
+Output: 8-bit value  
+Action: asserts CS_N low, waits 2 clocks, calls `recv8`, drives SCLK low, waits 2 clocks,
+deasserts CS_N, waits 4 clocks. Returns the received byte.
 
 ---
 
-### 5.6 spi_slave_rx
-
-**DUT ports:** `clk, rst, cs_n, sclk, mosi → rx_data[7:0], rx_valid`
-
-#### TC-SRXR-01: Receive 0xA5 with rx_valid pulse
-
-#### TC-SRXR-02: Receive 0x37
-
-#### TC-SRXR-03: rx_valid is exactly 1 clock wide
-
-```
-Action:   latch rx_valid into shift register for 4 clocks after byte completes
-Verify:   exactly 1 of those 4 clocks has rx_valid=1
-```
-
-#### TC-SRXR-04: cs_n deassert mid-transfer resets counter
-
-```
-Action:   send 4 SCLK pulses, deassert cs_n=1, then send complete new byte
-Verify:   rx_data from second frame is correct (no corruption from aborted first)
-```
-
-#### TC-SRXR-05: SCLK ignored when cs_n=1
-
-```
-Action:   cs_n=1, send 8 SCLK pulses with various MOSI values
-Verify:   rx_valid never fires
-```
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #2 clk = ~clk;
-
-  logic       rst, cs_n, sclk, mosi;
-  logic [7:0] rx_data;
-  logic       rx_valid;
-
-  spi_slave_rx dut (.clk(clk), .rst(rst), .cs_n(cs_n), .sclk(sclk),
-                    .mosi(mosi), .rx_data(rx_data), .rx_valid(rx_valid));
-
-  logic [7:0] saved_rx;
-  logic [1:0] valid_count;
-  always_ff @(posedge clk) begin
-    if (rx_valid) begin saved_rx<=rx_data; valid_count<=valid_count+1; end
-  end
-
-  task automatic spi_bit(input logic b);
-    mosi=b; sclk=0; repeat(4) @(posedge clk); #1;
-            sclk=1; repeat(4) @(posedge clk); #1;
-  endtask
-
-  task automatic send_frame(input logic [7:0] d);
-    cs_n=0;
-    spi_bit(d[7]); spi_bit(d[6]); spi_bit(d[5]); spi_bit(d[4]);
-    spi_bit(d[3]); spi_bit(d[2]); spi_bit(d[1]); spi_bit(d[0]);
-    sclk=0; repeat(2) @(posedge clk); #1;
-    cs_n=1; repeat(4) @(posedge clk); #1;
-  endtask
-
-  initial begin
-    $display("=== SPI Slave RX Full Test ===");
-    rst=1; cs_n=1; sclk=0; mosi=0; valid_count=0;
-    repeat(4) @(posedge clk); #1; rst=0;
-
-    // TC-SRXR-05  SCLK ignored when cs_n=1
-    repeat(8) begin
-      mosi=1; sclk=0; repeat(4) @(posedge clk); #1;
-              sclk=1; repeat(4) @(posedge clk); #1;
-    end
-    sclk=0;
-    if (valid_count===2'd0)
-      $display("PASS  TC-SRXR-05  SCLK ignored when cs_n=1");
-    else
-      $display("FAIL  TC-SRXR-05  rx_valid fired while cs_n=1");
-
-    // TC-SRXR-01
-    send_frame(8'hA5);
-    if (saved_rx===8'hA5)
-      $display("PASS  TC-SRXR-01  received 0xA5");
-    else
-      $display("FAIL  TC-SRXR-01  saved_rx=0x%02h expected 0xA5", saved_rx);
-
-    // TC-SRXR-02
-    send_frame(8'h37);
-    if (saved_rx===8'h37)
-      $display("PASS  TC-SRXR-02  received 0x37");
-    else
-      $display("FAIL  TC-SRXR-02  saved_rx=0x%02h expected 0x37", saved_rx);
-
-    // TC-SRXR-04  abort mid-transfer
-    cs_n=0;
-    spi_bit(1); spi_bit(0); spi_bit(1); spi_bit(0);  // 4 bits of garbage
-    sclk=0; cs_n=1; repeat(4) @(posedge clk); #1;    // abort
-    send_frame(8'hBB);                                 // fresh complete frame
-    if (saved_rx===8'hBB)
-      $display("PASS  TC-SRXR-04  abort + new frame receives 0xBB");
-    else
-      $display("FAIL  TC-SRXR-04  saved_rx=0x%02h expected 0xBB", saved_rx);
-
-    $display("SPI slave RX all tests done.");
-    $finish;
-  end
-endmodule
-```
+**Task: `spi_xfer`**  
+Input: 8-bit transmit value  
+Output: 8-bit received value  
+Action: full-duplex variant of the above. Drives each MOSI bit while simultaneously
+sampling each MISO bit on the same SCLK cycle. Wraps CS_N. Returns the received byte.
 
 ---
 
-### 5.7 spi_slave_fd
-
-**DUT ports:** `clk, rst, cs_n, sclk, mosi, tx_data[7:0] → miso, rx_data[7:0], rx_valid`
-
-#### TC-SLFD-01: MISO returns tx_data while master sends
-
-#### TC-SLFD-02: slave rx_data matches what master sent
-
-#### TC-SLFD-03: MISO=0 when cs_n=1
-
-#### TC-SLFD-04: tx_data change between transfers — each transfer uses the value set before its cs_n_fall
-
-#### TC-SLFD-05: Second transfer with different tx_data
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #2 clk = ~clk;
-
-  logic       rst, cs_n, sclk, mosi, miso;
-  logic [7:0] tx_data, rx_data;
-  logic       rx_valid;
-
-  spi_slave_fd dut (.clk(clk), .rst(rst), .cs_n(cs_n), .sclk(sclk),
-                    .mosi(mosi), .tx_data(tx_data),
-                    .miso(miso), .rx_data(rx_data), .rx_valid(rx_valid));
-
-  logic [7:0] saved_rx, miso_cap;
-  always_ff @(posedge clk) if (rx_valid) saved_rx<=rx_data;
-
-  task automatic spi_xfer(input logic [7:0] tx, output logic [7:0] rx);
-    cs_n=0; repeat(2) @(posedge clk); #1;
-    mosi=tx[7]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[7]=miso;
-    mosi=tx[6]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[6]=miso;
-    mosi=tx[5]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[5]=miso;
-    mosi=tx[4]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[4]=miso;
-    mosi=tx[3]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[3]=miso;
-    mosi=tx[2]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[2]=miso;
-    mosi=tx[1]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[1]=miso;
-    mosi=tx[0]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; rx[0]=miso;
-    sclk=0; repeat(2)@(posedge clk);#1; cs_n=1; repeat(4)@(posedge clk);#1;
-  endtask
-
-  initial begin
-    $display("=== SPI Full-Duplex Slave Full Test ===");
-    rst=1; cs_n=1; sclk=0; mosi=0; tx_data=8'hBE;
-    repeat(4) @(posedge clk); #1; rst=0;
-
-    // TC-SLFD-03  MISO=0 when idle
-    if (miso===1'b0)
-      $display("PASS  TC-SLFD-03  MISO=0 when cs_n=1");
-    else
-      $display("FAIL  TC-SLFD-03  MISO=%0b expected 0", miso);
-
-    // TC-SLFD-01 and TC-SLFD-02
-    tx_data=8'hBE; spi_xfer(8'h5A, miso_cap);
-    if (miso_cap===8'hBE)
-      $display("PASS  TC-SLFD-01  MISO returned 0xBE (tx_data)");
-    else
-      $display("FAIL  TC-SLFD-01  miso_cap=0x%02h expected 0xBE", miso_cap);
-    if (saved_rx===8'h5A)
-      $display("PASS  TC-SLFD-02  slave received 0x5A on MOSI");
-    else
-      $display("FAIL  TC-SLFD-02  saved_rx=0x%02h expected 0x5A", saved_rx);
-
-    // TC-SLFD-05  second transfer different tx_data
-    tx_data=8'hF0; spi_xfer(8'h00, miso_cap);
-    if (miso_cap===8'hF0)
-      $display("PASS  TC-SLFD-05  second transfer MISO=0xF0");
-    else
-      $display("FAIL  TC-SLFD-05  miso_cap=0x%02h expected 0xF0", miso_cap);
-
-    // TC-SLFD-04  tx_data change after cs_n_fall doesn't affect current transfer
-    tx_data=8'hAA;
-    cs_n=0; repeat(2)@(posedge clk);#1;
-    tx_data=8'h55;   // change DURING transfer — should be ignored
-    mosi=0; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; miso_cap[7]=miso;
-    // (just check first bit — if pre-load worked, it should be bit 7 of 0xAA = 1)
-    if (miso_cap[7]===1'b1)
-      $display("PASS  TC-SLFD-04  tx_data change mid-transfer ignored, MISO still 0xAA[7]=1");
-    else
-      $display("FAIL  TC-SLFD-04  mid-transfer tx_data corruption");
-    // drain remaining bits
-    repeat(7) begin mosi=0; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1; end
-    sclk=0; cs_n=1; repeat(4)@(posedge clk);#1;
-
-    $display("SPI full-duplex slave all tests done.");
-    $finish;
-  end
-endmodule
-```
+**Task: `spi_write_reg` (regfile only)**  
+Input: 3-bit address, 8-bit data  
+Output: none  
+Action: asserts CS_N, calls `send8` with the command byte `{1'b0, 2'b00, addr}` (write
+command, rw-bit = 0), calls `send8` with the data byte, then deasserts CS_N.
 
 ---
 
-### 5.8 spi_regfile
-
-**DUT ports:** `clk, rst, cs_n, sclk, mosi → miso, wr_valid, wr_addr[2:0], wr_data[7:0]`
-
-#### TC-RFILE-01: Write to all 8 registers, verify wr_valid/wr_addr/wr_data
-
-#### TC-RFILE-02: Read back each written register
-
-#### TC-RFILE-03: Read before write returns 0x00
-
-#### TC-RFILE-04: wr_valid does not fire on read transactions
-
-#### TC-RFILE-05: Overwrite register, read back new value
-
-**Complete testbench:**
-
-```systemverilog
-`timescale 1ns/1ps
-module tb;
-  logic clk = 0;
-  always #2 clk = ~clk;
-
-  logic       rst, cs_n, sclk, mosi, miso, wr_valid;
-  logic [2:0] wr_addr;
-  logic [7:0] wr_data;
-
-  spi_regfile dut (.clk(clk), .rst(rst), .cs_n(cs_n), .sclk(sclk),
-                   .mosi(mosi), .miso(miso),
-                   .wr_valid(wr_valid), .wr_addr(wr_addr), .wr_data(wr_data));
-
-  task automatic send8(input logic [7:0] d);
-    mosi=d[7]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-    mosi=d[6]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-    mosi=d[5]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-    mosi=d[4]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-    mosi=d[3]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-    mosi=d[2]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-    mosi=d[1]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-    mosi=d[0]; sclk=0; repeat(4)@(posedge clk);#1; sclk=1; repeat(4)@(posedge clk);#1;
-  endtask
-
-  task automatic recv8(output logic [7:0] d);
-    mosi=0;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[7]=miso;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[6]=miso;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[5]=miso;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[4]=miso;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[3]=miso;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[2]=miso;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[1]=miso;
-    sclk=0;repeat(4)@(posedge clk);#1;sclk=1;repeat(4)@(posedge clk);#1;d[0]=miso;
-  endtask
-
-  task automatic reg_write(input logic [2:0] a, input logic [7:0] d);
-    cs_n=0; repeat(2)@(posedge clk);#1;
-    send8({1'b0, 2'b00, a});
-    send8(d);
-    sclk=0; repeat(2)@(posedge clk);#1; cs_n=1; repeat(4)@(posedge clk);#1;
-  endtask
-
-  task automatic reg_read(input logic [2:0] a, output logic [7:0] d);
-    cs_n=0; repeat(2)@(posedge clk);#1;
-    send8({1'b1, 2'b00, a});
-    recv8(d);
-    sclk=0; repeat(2)@(posedge clk);#1; cs_n=1; repeat(4)@(posedge clk);#1;
-  endtask
-
-  logic [7:0] rd;
-  logic       wr_fired;
-  always_ff @(posedge clk) if (wr_valid) wr_fired<=1;
-
-  initial begin
-    $display("=== SPI Register File Full Test ===");
-    rst=1; cs_n=1; sclk=0; mosi=0; wr_fired=0;
-    repeat(4)@(posedge clk);#1; rst=0;
-
-    // TC-RFILE-03  read before write
-    reg_read(3'd0, rd);
-    if (rd===8'h00)
-      $display("PASS  TC-RFILE-03  reg[0] reads 0x00 before any write");
-    else
-      $display("FAIL  TC-RFILE-03  rd=0x%02h expected 0x00", rd);
-
-    // TC-RFILE-04  wr_valid must not fire on read
-    if (!wr_fired)
-      $display("PASS  TC-RFILE-04  wr_valid did not fire on read");
-    else
-      $display("FAIL  TC-RFILE-04  wr_valid fired during read transaction");
-
-    // TC-RFILE-01 and TC-RFILE-02  write all 8 regs, read back
-    reg_write(3'd0, 8'h11); reg_write(3'd1, 8'h22); reg_write(3'd2, 8'h33);
-    reg_write(3'd3, 8'hAB); reg_write(3'd4, 8'h55); reg_write(3'd5, 8'h7E);
-    reg_write(3'd6, 8'h66); reg_write(3'd7, 8'hFF);
-
-    reg_read(3'd3, rd);
-    if (rd===8'hAB) $display("PASS  TC-RFILE-02  reg[3]=0xAB");
-    else            $display("FAIL  TC-RFILE-02  reg[3]=0x%02h expected 0xAB", rd);
-
-    reg_read(3'd5, rd);
-    if (rd===8'h7E) $display("PASS  TC-RFILE-02  reg[5]=0x7E");
-    else            $display("FAIL  TC-RFILE-02  reg[5]=0x%02h expected 0x7E", rd);
-
-    reg_read(3'd7, rd);
-    if (rd===8'hFF) $display("PASS  TC-RFILE-02  reg[7]=0xFF");
-    else            $display("FAIL  TC-RFILE-02  reg[7]=0x%02h expected 0xFF", rd);
-
-    // TC-RFILE-05  overwrite and read back
-    reg_write(3'd3, 8'hCD);
-    reg_read(3'd3, rd);
-    if (rd===8'hCD) $display("PASS  TC-RFILE-05  overwrite reg[3]=0xCD");
-    else            $display("FAIL  TC-RFILE-05  rd=0x%02h expected 0xCD", rd);
-
-    $display("SPI register file all tests done.");
-    $finish;
-  end
-endmodule
-```
+**Task: `spi_read_reg` (regfile only)**  
+Input: 3-bit address  
+Output: 8-bit value  
+Action: asserts CS_N, calls `send8` with command byte `{1'b1, 2'b00, addr}` (read
+command, rw-bit = 1), calls `recv8` to collect the response, then deasserts CS_N.
 
 ---
 
-## 6. Corner Cases Reference
+**Task: `spi_flash_xfer` (flash only)**  
+Input: command byte, address byte, data byte (for writes); command byte, address byte (for reads)  
+Output: received data byte (for reads)  
+Action: asserts CS_N, sends command byte, sends address byte, sends or receives data byte,
+deasserts CS_N.
 
-These are the most commonly missed bugs, grouped by pattern:
+---
+
+**Task: `wait_done` (master DUT testbenches)**  
+Input: none  
+Output: none  
+Action: waits a safe number of system clocks for `done` to assert. For 8-bit transfers
+use 120 system clocks (8 bits × 4 phases × 4 system clocks/phase = 128 max, 120 is tight
+but safe). For 16-bit use 250. For flash (3-byte transfers) use 400.
+
+---
+
+**Task: `check8`**  
+Input: actual value (8-bit), expected value (8-bit), label string  
+Output: none  
+Action: compares with `===`. Prints `PASS  <label> got=0xXX` or `FAIL  <label>
+got=0xXX expected=0xXX`. All display lines must start with exactly `PASS` or `FAIL`.
+
+---
+
+### 4.4 Assertion patterns
+
+When checking pulse widths (e.g., `byte_done` or `rx_valid` is exactly 1 clock wide):
+- Drive a counter that increments every clock `done` is high
+- After the transfer completes, verify the counter equals 1
+
+When checking that a signal never asserts during a sequence:
+- Drive a sticky flag: `if (signal) flag = 1`
+- After the sequence, verify flag is still 0
+
+When checking timing order (e.g., `busy` asserts before `cs_n` falls):
+- Sample both signals on consecutive clocks and record their first-assertion cycle number
+- Compare cycle numbers
+
+---
+
+## Part 5 — Test Cases
+
+---
+
+### Module 1: sipo_shift_reg
+
+**Ports:** `clk`, `rst`, `serial_in` → `data_out[7:0]`
+
+**Purpose:** Shift register that receives 1 bit per clock on `serial_in` and assembles
+a parallel byte MSB-first in `data_out`. No SCLK or CS_N — the system clock is the
+shift clock. Used as the building block for all slave RX logic.
+
+---
+
+**TC-SIPO-01 — Reset clears output**  
+Category: Reset  
+Precondition: none  
+Stimulus: assert `rst = 1`, apply 2 rising clock edges, deassert `rst = 0`  
+Verify: `data_out === 8'h00` immediately after reset deasserts  
+Rationale: confirms initial state is known before any serial input
+
+---
+
+**TC-SIPO-02 — Receive 0xA5 (checkerboard pattern)**  
+Category: Normal  
+Precondition: reset complete  
+Stimulus: drive `serial_in` with bits `1, 0, 1, 0, 0, 1, 0, 1` (MSB first), one bit per rising clock edge  
+Verify: after the 8th clock edge, `data_out === 8'hA5`  
+Rationale: alternating bit pattern exposes both directions of shift errors
+
+---
+
+**TC-SIPO-03 — Receive 0xFF (all ones)**  
+Category: Boundary  
+Precondition: TC-SIPO-02 complete (no reset between)  
+Stimulus: drive `serial_in = 1` for 8 consecutive clock edges  
+Verify: `data_out === 8'hFF`  
+Rationale: confirms no masking of bits to 0
+
+---
+
+**TC-SIPO-04 — Receive 0x00 (all zeros)**  
+Category: Boundary  
+Precondition: TC-SIPO-03 complete  
+Stimulus: drive `serial_in = 0` for 8 consecutive clock edges  
+Verify: `data_out === 8'h00`  
+Rationale: confirms no masking of bits to 1
+
+---
+
+**TC-SIPO-05 — Back-to-back bytes without reset**  
+Category: Back-to-back  
+Precondition: reset complete  
+Stimulus: send 8 bits for 0xA5, then immediately (same clock) send 8 bits for 0x3C  
+Verify: `data_out === 8'hA5` after first 8 clocks; `data_out === 8'h3C` after second 8  
+Rationale: confirms shift register overwrites cleanly without ghost bits
+
+---
+
+**TC-SIPO-06 — Reset mid-shift**  
+Category: Corner  
+Precondition: reset complete  
+Stimulus: drive 4 bits of 0xA5 (bits 7..4: `1, 0, 1, 0`), then assert `rst = 1` for 1 clock, deassert; then drive complete 8 bits of 0x37  
+Verify: `data_out === 8'h37` (reset wiped the partial state)  
+Rationale: confirms abort recovery — a common requirement in real protocol stacks
+
+---
+
+**TC-SIPO-07 — Bit-by-bit shift trace**  
+Category: Detailed trace  
+Precondition: reset complete  
+Stimulus: drive bits for 0xA5 one at a time  
+Verify after each clock:
+
+| Clock | serial_in | Expected data_out |
+|---|---|---|
+| 1 | 1 | 0b0000_0001 |
+| 2 | 0 | 0b0000_0010 |
+| 3 | 1 | 0b0000_0101 |
+| 4 | 0 | 0b0000_1010 |
+| 5 | 0 | 0b0001_0100 |
+| 6 | 1 | 0b0010_1001 |
+| 7 | 0 | 0b0101_0010 |
+| 8 | 1 | 0b1010_0101 = 0xA5 |
+
+Rationale: any off-by-one in the shift direction or concatenation formula is exposed immediately
+
+---
+
+### Module 2: piso_shift_reg
+
+**Ports:** `clk`, `rst`, `load`, `data_in[7:0]` → `serial_out`
+
+**Purpose:** Loads a parallel byte on a `load` pulse and shifts it out serially MSB-first,
+one bit per clock. Mirror image of `sipo_shift_reg`. Used as the building block for all
+master TX logic.
+
+---
+
+**TC-PISO-01 — Load then shift out 0xA5**  
+Category: Normal  
+Precondition: reset complete  
+Stimulus: set `data_in = 8'hA5`, assert `load = 1` for 1 clock, deassert `load = 0`, then apply 8 clock edges  
+Capture: `serial_out` on each of the 8 clock edges, assembling MSB-first into a result byte  
+Verify: assembled result `=== 8'hA5`  
+Rationale: confirms load-then-shift basic functionality
+
+---
+
+**TC-PISO-02 — Load then shift out 0x3C**  
+Category: Normal  
+Precondition: TC-PISO-01 complete  
+Stimulus: same procedure with `data_in = 8'h3C`  
+Verify: assembled result `=== 8'h3C`  
+Rationale: different value confirms no constant output
+
+---
+
+**TC-PISO-03 — Reset clears serial_out**  
+Category: Reset  
+Precondition: data loaded (after TC-PISO-02)  
+Stimulus: assert `rst = 1` for 1 clock, deassert  
+Verify: `serial_out === 1'b0` immediately after reset  
+Rationale: confirms shift register is cleared, not left in previous state
+
+---
+
+**TC-PISO-04 — Re-load during active shift**  
+Category: Corner  
+Precondition: reset complete  
+Stimulus: load 0xA5, shift 4 clocks (partial), then load 0x3C, shift 8 more clocks  
+Capture: result from the second 8-clock shift sequence  
+Verify: result `=== 8'h3C` (not a mix of 0xA5 and 0x3C)  
+Rationale: confirms that a new load can interrupt and cleanly replace a partial shift
+
+---
+
+**TC-PISO-05 — MSB-first order verification**  
+Category: Detailed trace  
+Precondition: reset complete  
+Stimulus: load `8'b1100_0011` (0xC3), then shift out 8 clocks  
+Verify: `serial_out` sequence across 8 clocks is exactly `1, 1, 0, 0, 0, 0, 1, 1`  
+Rationale: any reversal in the shift direction is immediately visible
+
+---
+
+**TC-PISO-06 — serial_out stays 0 after shift completes**  
+Category: Post-completion  
+Precondition: TC-PISO-05 complete  
+Stimulus: allow 4 more clock cycles with `load = 0`  
+Verify: `serial_out === 1'b0` on all 4 clocks  
+Rationale: shift register should shift in zeros after the loaded byte is exhausted
+
+---
+
+### Module 3: spi_byte_counter
+
+**Ports:** `clk`, `rst`, `cs_n`, `sclk` → `bit_idx[2:0]`, `byte_done`
+
+**Purpose:** Counts rising edges of `sclk` while `cs_n` is low. Outputs the current
+bit index (0–7) and fires a one-clock `byte_done` pulse on the 8th edge. Resets on
+`cs_n` deassert.
+
+---
+
+**TC-BCNT-01 — SCLK ignored when CS_N is high**  
+Category: Gating  
+Precondition: reset complete, `cs_n = 1`  
+Stimulus: drive 8 SCLK pulses with various MOSI values  
+Verify: `bit_idx === 3'd0` throughout; `byte_done` never asserts  
+Rationale: gate logic must prevent counting outside a frame
+
+---
+
+**TC-BCNT-02 — 7 pulses advance bit_idx to 7**  
+Category: Normal  
+Precondition: reset complete, `cs_n = 0`  
+Stimulus: drive 7 SCLK rising edges  
+Verify: `bit_idx === 3'd7` after 7th edge; `byte_done === 1'b0` (not yet fired)  
+Rationale: confirms counting stops at 7 before the 8th edge
+
+---
+
+**TC-BCNT-03 — 8th pulse fires byte_done for exactly 1 clock**  
+Category: Normal  
+Precondition: TC-BCNT-02 complete  
+Stimulus: drive 1 more SCLK rising edge  
+Verify: `byte_done === 1'b1` on the clock after the edge  
+Verify: `byte_done === 1'b0` on the clock after that  
+Rationale: byte_done must be a single-clock pulse for downstream state machines to latch once
+
+---
+
+**TC-BCNT-04 — bit_idx resets to 0 when byte_done fires**  
+Category: Normal  
+Precondition: TC-BCNT-03 in progress  
+Verify: `bit_idx === 3'd0` at the same clock `byte_done` is high  
+Rationale: counter must auto-wrap for multi-byte transactions
+
+---
+
+**TC-BCNT-05 — CS_N deassert mid-frame resets counter**  
+Category: Corner  
+Precondition: reset complete, `cs_n = 0`  
+Stimulus: drive 5 SCLK rising edges (bit_idx should reach 5), then deassert `cs_n = 1`  
+Verify: `bit_idx === 3'd0` within 2 system clocks of CS_N deassert  
+Rationale: aborted frame must not leave bit_idx in a non-zero state for the next frame
+
+---
+
+**TC-BCNT-06 — Two consecutive complete frames**  
+Category: Back-to-back  
+Precondition: reset complete  
+Stimulus: drive frame 1 (8 SCLK pulses, CS_N toggle), then frame 2 (8 SCLK pulses)  
+Verify: `byte_done` fires exactly once during frame 1 and exactly once during frame 2  
+Verify: `byte_done` does not fire during the inter-frame gap  
+Rationale: counter must not carry state between frames
+
+---
+
+### Module 4: spi_clkdiv
+
+**Ports:** `clk`, `rst` → `sclk`, `sclk_rise`, `sclk_fall`
+
+**Purpose:** Divides the system clock by 8 to produce `sclk`. Outputs one-clock-wide
+edge strobes `sclk_rise` and `sclk_fall` that downstream logic uses for sampling and
+shifting without having to re-detect edges.
+
+---
+
+**TC-CLKDIV-01 — SCLK idles low after reset**  
+Category: Reset  
+Stimulus: assert `rst = 1`, apply 2 clocks, deassert  
+Verify: `sclk === 1'b0` immediately after reset deasserts  
+Rationale: SPI Mode 0 requires SCLK low when idle
+
+---
+
+**TC-CLKDIV-02 — 8 rising edges in 64 system clocks**  
+Category: Normal  
+Stimulus: run 64 system clock cycles after reset  
+Verify: count of `sclk` rising transitions equals 8  
+Rationale: divide-by-8 means 8 full SCLK cycles per 64 system clocks
+
+---
+
+**TC-CLKDIV-03 — 8 falling edges in 64 system clocks**  
+Category: Normal  
+Stimulus: same 64-clock window as TC-CLKDIV-02  
+Verify: count of `sclk` falling transitions equals 8  
+Rationale: confirms 50% duty cycle
+
+---
+
+**TC-CLKDIV-04 — sclk_rise and sclk_fall never simultaneous**  
+Category: Sanity  
+Stimulus: monitor both strobes for 64 system clocks  
+Verify: never a clock cycle where both `sclk_rise` and `sclk_fall` are 1  
+Rationale: simultaneous strobes would cause a slave to both sample and shift on the same edge
+
+---
+
+**TC-CLKDIV-05 — Edge strobes are exactly 1 system clock wide**  
+Category: Pulse width  
+Stimulus: monitor `sclk_rise` for 64 system clocks, recording consecutive 1s  
+Verify: maximum run length of `sclk_rise = 1` is exactly 1  
+Verify: same for `sclk_fall`  
+Rationale: multi-cycle strobes would cause double-shifting or double-sampling
+
+---
+
+### Module 5: spi_master
+
+**Ports:** `clk`, `rst`, `start`, `tx_data[7:0]`, `miso` → `mosi`, `sclk`, `cs_n`, `busy`, `done`, `rx_data[7:0]`
+
+**Purpose:** 8-bit SPI Mode 0 master. On `start` pulse: asserts CS_N, shifts `tx_data`
+out on MOSI while sampling MISO into `rx_data`, then deasserts CS_N and fires `done`.
+
+---
+
+**TC-MSTR-01 — TX data appears correctly on MOSI**  
+Category: Normal  
+Precondition: reset complete; slave model configured to drive 0xC3 on MISO  
+Stimulus: set `tx_data = 8'hAB`, pulse `start` for 1 clock  
+Action: MOSI capture model records 8 bits during SCLK rising edges  
+Verify: captured MOSI byte `=== 8'hAB`  
+Rationale: confirms shift-out path
+
+---
+
+**TC-MSTR-02 — MISO data received correctly in rx_data**  
+Category: Normal  
+Precondition: TC-MSTR-01 transfer (slave driving 0xC3)  
+Verify: `rx_data === 8'hC3` after `done` pulses  
+Rationale: confirms shift-in path
+
+---
+
+**TC-MSTR-03 — busy asserts on start, deasserts on done**  
+Category: Handshake  
+Precondition: reset complete  
+Stimulus: pulse `start`  
+Verify: `busy === 1'b1` on the clock after `start`  
+Verify: `busy === 1'b0` at the same clock `done` fires  
+Rationale: upstream logic uses `busy` to know when a new transfer can begin
+
+---
+
+**TC-MSTR-04 — CS_N behavior across the transfer**  
+Category: Protocol timing  
+Precondition: reset complete  
+Stimulus: pulse `start`  
+Verify: `cs_n` asserts (goes low) within 1 clock of `start`  
+Verify: `cs_n` remains low for all 8 SCLK cycles  
+Verify: `cs_n` deasserts (goes high) after `done` fires  
+Rationale: CS_N framing must be correct for slave to recognize the transfer
+
+---
+
+**TC-MSTR-05 — done is exactly 1 clock wide**  
+Category: Pulse width  
+Precondition: reset complete  
+Stimulus: run a transfer, latch `done` into a counter  
+Verify: counter equals 1 after transfer completes  
+Rationale: multi-cycle `done` would cause downstream logic to latch rx_data multiple times
+
+---
+
+**TC-MSTR-06 — Back-to-back transfers**  
+Category: Back-to-back  
+Precondition: first transfer complete  
+Stimulus: immediately pulse `start` again with `tx_data = 8'h12` (slave responds 0x34)  
+Verify: `rx_data === 8'h34` after second `done`  
+Stimulus: immediately pulse `start` with `tx_data = 8'h56` (slave responds 0x78)  
+Verify: `rx_data === 8'h78` after third `done`  
+Rationale: confirms no state leak between transfers
+
+---
+
+**TC-MSTR-07 — MISO = 0xFF received correctly**  
+Category: Boundary  
+Precondition: reset complete; slave model configured to drive 0xFF  
+Stimulus: pulse `start` with any `tx_data`  
+Verify: `rx_data === 8'hFF`  
+Rationale: confirms no bit masking to 0
+
+---
+
+**TC-MSTR-08 — Start ignored while busy**  
+Category: Corner  
+Precondition: reset complete  
+Stimulus: pulse `start` to begin transfer; during the transfer pulse `start` again  
+Verify: only one `done` fires; `rx_data` corresponds to the first transfer only  
+Rationale: master must not restart mid-transfer on a spurious start pulse
+
+---
+
+### Module 6: spi_master_16
+
+**Ports:** `clk`, `rst`, `start`, `tx_word[15:0]`, `miso` → `mosi`, `sclk`, `cs_n`, `busy`, `done`, `rx_word[15:0]`
+
+**Purpose:** 16-bit variant of `spi_master`. Sends and receives a 16-bit word in a
+single CS_N assertion. High byte `[15:8]` transmitted first.
+
+---
+
+**TC-M16-01 — CS_N stays low for all 16 SCLK cycles**  
+Category: Protocol  
+Stimulus: pulse `start`, monitor `cs_n` across the transfer  
+Verify: `cs_n === 1'b0` from start to done; never pulses high between cycles 7 and 8  
+Rationale: a CS_N glitch between bytes would cause a one-byte slave to deframe
+
+---
+
+**TC-M16-02 — High byte transmitted first**  
+Category: Bit order  
+Stimulus: `tx_word = 16'hABCD`, pulse `start`  
+Action: MOSI capture model records all 16 bits  
+Verify: bits 15..8 of captured word equal 0xAB; bits 7..0 equal 0xCD  
+Rationale: endianness of 16-bit transfer must be MSB-first byte, MSB-first bit
+
+---
+
+**TC-M16-03 — 16-bit rx_word assembled correctly**  
+Category: Normal  
+Precondition: slave model configured to drive 0x12 then 0x34 across 16 SCLK cycles  
+Stimulus: pulse `start`  
+Verify: `rx_word === 16'h1234` after `done`  
+Rationale: confirms both bytes of the receive shift register are assembled correctly
+
+---
+
+**TC-M16-04 — done fires after bit 15, not bit 7**  
+Category: Timing  
+Stimulus: pulse `start`; monitor `done` and `bit_cnt` value  
+Verify: `done` does not fire at the 8th SCLK cycle  
+Verify: `done` fires at the 16th SCLK cycle  
+Rationale: 16-bit transfer must not terminate early like an 8-bit transfer would
+
+---
+
+**TC-M16-05 — Back-to-back 16-bit transfers**  
+Category: Back-to-back  
+Stimulus: two consecutive transfers with different `tx_word` values  
+Verify: each produces independent correct `rx_word` and `mosi` output  
+Rationale: confirms no carryover of bit counter or shift register state
+
+---
+
+### Module 7: spi_master_param
+
+**Ports:** `clk`, `rst`, `start`, `tx_data`, `miso`, `cpol`, `cpha` → `mosi`, `sclk`, `cs_n`, `busy`, `done`, `rx_data`  
+**Parameter:** `N_BITS` (transfer width, default 8)
+
+**Purpose:** Parameterized master supporting all four SPI modes (CPOL × CPHA combinations)
+and configurable transfer width.
+
+---
+
+**TC-PARAM-01 — Mode 0 (CPOL=0, CPHA=0) transfer**  
+Category: Normal  
+Stimulus: `cpol = 0`, `cpha = 0`, `tx_data = 8'hA5`, pulse `start`  
+Verify: `sclk` idles low before and after transfer  
+Verify: MOSI is stable before first rising SCLK edge  
+Verify: `rx_data === 8'hA5` (MISO loopback to MOSI assumed)  
+Rationale: baseline mode used in spi1–spi4
+
+---
+
+**TC-PARAM-02 — Mode 1 (CPOL=0, CPHA=1) transfer**  
+Category: Mode coverage  
+Stimulus: `cpol = 0`, `cpha = 1`  
+Verify: `sclk` idles low  
+Verify: MOSI changes on the first rising SCLK edge (not before)  
+Verify: data sampled on falling SCLK edge  
+Rationale: some sensors and ADCs require CPHA=1
+
+---
+
+**TC-PARAM-03 — Mode 2 (CPOL=1, CPHA=0) transfer**  
+Category: Mode coverage  
+Stimulus: `cpol = 1`, `cpha = 0`  
+Verify: `sclk` idles high  
+Verify: MOSI stable before first falling SCLK edge  
+Verify: data sampled on falling SCLK edge  
+Rationale: common in some display driver ICs
+
+---
+
+**TC-PARAM-04 — Mode 3 (CPOL=1, CPHA=1) transfer**  
+Category: Mode coverage  
+Stimulus: `cpol = 1`, `cpha = 1`  
+Verify: `sclk` idles high  
+Verify: MOSI changes on first falling SCLK edge  
+Verify: data sampled on rising SCLK edge  
+Rationale: used in some SD card SPI mode variants
+
+---
+
+**TC-PARAM-05 — N_BITS=16 produces 16 SCLK cycles**  
+Category: Parameter  
+Stimulus: recompile with `N_BITS=16`, run a transfer  
+Verify: `sclk` produces exactly 16 rising edges during the transfer  
+Verify: `done` fires after the 16th cycle  
+Rationale: parameterization must scale correctly
+
+---
+
+### Module 8: spi_slave_rx
+
+**Ports:** `clk`, `rst`, `cs_n`, `sclk`, `mosi` → `rx_data[7:0]`, `rx_valid`
+
+**Purpose:** Receive-only SPI slave. Shifts in 8 MOSI bits during a CS_N-framed
+SCLK sequence, then fires a one-clock `rx_valid` pulse with the assembled byte on
+`rx_data`.
+
+---
+
+**TC-SRXR-01 — Receive 0xA5**  
+Category: Normal  
+Stimulus: assert CS_N low, drive 8 SCLK cycles with MOSI = bits of 0xA5 MSB-first, deassert CS_N  
+Verify: `rx_valid` pulses once; at that moment `rx_data === 8'hA5`  
+Rationale: basic receive function
+
+---
+
+**TC-SRXR-02 — Receive 0x37**  
+Category: Normal  
+Stimulus: same procedure with MOSI = bits of 0x37  
+Verify: `rx_data === 8'h37` when `rx_valid` fires  
+Rationale: different value, different bit pattern
+
+---
+
+**TC-SRXR-03 — rx_valid is exactly 1 clock wide**  
+Category: Pulse width  
+Stimulus: run TC-SRXR-01, monitor `rx_valid` with a counter for 4 clocks after CS_N deasserts  
+Verify: counter equals 1  
+Rationale: downstream latch-on-valid logic must not double-capture
+
+---
+
+**TC-SRXR-04 — SCLK ignored when CS_N is high**  
+Category: Gating  
+Precondition: reset complete, `cs_n = 1`  
+Stimulus: drive 8 SCLK pulses with MOSI = 0xFF  
+Verify: `rx_valid` never fires  
+Rationale: activity outside a CS_N frame must be invisible to the slave
+
+---
+
+**TC-SRXR-05 — CS_N deassert mid-frame aborts the byte**  
+Category: Corner  
+Stimulus: assert CS_N, drive 4 SCLK cycles (partial byte), deassert CS_N; then drive a complete fresh frame with MOSI = 0xBB  
+Verify: `rx_data === 8'hBB` when `rx_valid` fires (not a corrupted mix)  
+Rationale: abort recovery — real masters sometimes deframe on error
+
+---
+
+**TC-SRXR-06 — Back-to-back bytes**  
+Category: Back-to-back  
+Stimulus: frame 1 sends 0xA5; frame 2 (after CS_N toggle) sends 0x3C  
+Verify: `rx_valid` fires once per frame; `rx_data` values are correct for each  
+Rationale: confirms no carryover between frames
+
+---
+
+### Module 9: spi_slave_fd
+
+**Ports:** `clk`, `rst`, `cs_n`, `sclk`, `mosi`, `tx_data[7:0]` → `miso`, `rx_data[7:0]`, `rx_valid`
+
+**Purpose:** Full-duplex slave. Pre-loads `tx_data` on CS_N falling edge and shifts it
+out on MISO while simultaneously receiving MOSI bits into `rx_data`. Both directions
+proceed on the same SCLK.
+
+---
+
+**TC-SLFD-01 — MISO returns tx_data correctly**  
+Category: Normal  
+Precondition: `tx_data = 8'hBE` before CS_N fall  
+Stimulus: assert CS_N, run full-duplex transfer, capture MISO bits  
+Verify: MISO bit sequence equals bits of 0xBE MSB-first  
+Verify: assembled MISO byte `=== 8'hBE`  
+Rationale: TX path from pre-load to MISO
+
+---
+
+**TC-SLFD-02 — Slave receives MOSI correctly**  
+Category: Normal  
+Precondition: MOSI driving 0x5A during TC-SLFD-01 transfer  
+Verify: `rx_data === 8'h5A` when `rx_valid` fires  
+Rationale: RX path alongside TX
+
+---
+
+**TC-SLFD-03 — MISO is 0 when CS_N is high**  
+Category: Idle state  
+Precondition: `cs_n = 1` (no active transfer)  
+Verify: `miso === 1'b0`  
+Rationale: MISO must not float or drive stale data while idle
+
+---
+
+**TC-SLFD-04 — tx_data change after CS_N fall is ignored**  
+Category: Corner  
+Precondition: `tx_data = 8'hAA`  
+Stimulus: assert CS_N (pre-load occurs), then change `tx_data = 8'h55` before any SCLK edges, run transfer  
+Verify: first MISO bit (bit 7) is 1 (bit 7 of 0xAA, not 0x55)  
+Rationale: pre-load must latch the value at CS_N fall, not track live `tx_data`
+
+---
+
+**TC-SLFD-05 — Second transfer with different tx_data**  
+Category: Back-to-back  
+Stimulus: after TC-SLFD-01, set `tx_data = 8'hF0`, run second transfer  
+Verify: second transfer MISO byte `=== 8'hF0`  
+Rationale: confirms pre-load refreshes each frame
+
+---
+
+**TC-SLFD-06 — rx_valid fires on 8th SCLK rising edge**  
+Category: Timing  
+Stimulus: run transfer, track which SCLK edge triggers `rx_valid`  
+Verify: `rx_valid` fires on or immediately after the 8th rising edge  
+Verify: `rx_valid` does not fire before the 8th edge  
+Rationale: early rx_valid fires a partial byte
+
+---
+
+### Module 10: spi_loopback
+
+**Ports:** `clk`, `rst`, `start`, `tx_m[7:0]`, `tx_s[7:0]` → `rx_m[7:0]`, `rx_s[7:0]`, `busy`, `done`
+
+**Purpose:** Integrates `spi_master` and `spi_slave_fd` on a shared bus internally.
+Both master-to-slave and slave-to-master paths are verified in a single transfer.
+
+---
+
+**TC-LOOP-01 — Master TX reaches slave RX**  
+Category: Normal  
+Stimulus: `tx_m = 8'hA5`, `tx_s = 8'h3C`, pulse `start`  
+Verify: `rx_s === 8'hA5` after `done` fires  
+Rationale: MOSI path from master shift-out to slave shift-in
+
+---
+
+**TC-LOOP-02 — Slave TX reaches master RX**  
+Category: Normal  
+Precondition: TC-LOOP-01 transfer  
+Verify: `rx_m === 8'h3C` after `done` fires  
+Rationale: MISO path from slave pre-load to master shift-in
+
+---
+
+**TC-LOOP-03 — Both directions simultaneously correct**  
+Category: Combined  
+Stimulus: single transfer with `tx_m = 8'hDE`, `tx_s = 8'hAD`  
+Verify: `rx_s === 8'hDE` AND `rx_m === 8'hAD` both true after `done`  
+Rationale: full-duplex — both paths must work at the same time
+
+---
+
+**TC-LOOP-04 — busy/done handshake**  
+Category: Handshake  
+Stimulus: pulse `start`, monitor `busy` and `done`  
+Verify: `busy = 1` during transfer, `busy = 0` at `done`, `done` is 1 clock wide  
+Rationale: caller uses busy/done to sequence multiple transfers
+
+---
+
+**TC-LOOP-05 — Back-to-back transfers**  
+Category: Back-to-back  
+Stimulus: two transfers with different tx_m and tx_s values  
+Verify: both produce independent correct rx_m and rx_s  
+Rationale: no state leak between transfers
+
+---
+
+### Module 11: spi_regfile
+
+**Ports:** `clk`, `rst`, `cs_n`, `sclk`, `mosi` → `miso`, `wr_valid`, `wr_addr[2:0]`, `wr_data[7:0]`
+
+**Purpose:** Two-phase SPI slave. Each transaction is two bytes: a command byte
+`{rw, 2'b00, addr[2:0]}` followed by a data byte. On write (rw=0), stores data and
+pulses `wr_valid`. On read (rw=1), shifts out the register value on MISO.
+
+**Register map:** 8 independent 8-bit registers, addressed by bits [2:0] of command byte.
+
+---
+
+**TC-RFILE-01 — Read before write returns 0x00**  
+Category: Reset state  
+Stimulus: read transaction to address 0 immediately after reset  
+Verify: MISO byte `=== 8'h00`  
+Rationale: registers must power up / reset to 0
+
+---
+
+**TC-RFILE-02 — wr_valid does not fire on a read transaction**  
+Category: Protocol  
+Precondition: TC-RFILE-01 read transaction  
+Verify: `wr_valid` never asserted during or after the read  
+Rationale: reads must not corrupt the write-valid side-channel
+
+---
+
+**TC-RFILE-03 — Write to register 3 produces correct wr_valid output**  
+Category: Normal  
+Stimulus: write transaction, address=3, data=0xAB  
+Verify: `wr_valid` pulses once; `wr_addr === 3'd3`; `wr_data === 8'hAB`  
+Rationale: write side-channel output is correct
+
+---
+
+**TC-RFILE-04 — Read back register 3 returns 0xAB**  
+Category: Normal  
+Precondition: TC-RFILE-03 complete  
+Stimulus: read transaction to address 3  
+Verify: MISO byte `=== 8'hAB`  
+Rationale: written value survives and is readable
+
+---
+
+**TC-RFILE-05 — Write to all 8 registers, read back all 8**  
+Category: Full coverage  
+Stimulus: 8 write transactions: addr 0→0x11, 1→0x22, 2→0x33, 3→0xAB, 4→0x55, 5→0x7E, 6→0x66, 7→0xFF  
+Verify: 8 subsequent reads return the correct value for each address  
+Rationale: all 8 addresses must be independently addressable
+
+---
+
+**TC-RFILE-06 — Overwrite register, verify new value**  
+Category: Overwrite  
+Stimulus: write 0xAB to address 3; then write 0xCD to address 3  
+Verify: read from address 3 returns 0xCD, not 0xAB  
+Rationale: registers must be overwritable
+
+---
+
+**TC-RFILE-07 — Two writes to different addresses are independent**  
+Category: Independence  
+Stimulus: write 0x11 to address 1; write 0x22 to address 2  
+Verify: read address 1 returns 0x11; read address 2 returns 0x22  
+Rationale: writing one register must not corrupt another
+
+---
+
+### Module 12: spi_adc_slave
+
+**Ports:** `clk`, `rst`, `cs_n`, `sclk`, `adc_val[7:0]` → `miso`
+
+**Purpose:** Emulates an ADC that returns a pre-sampled conversion result over SPI.
+On CS_N falling edge, latches `adc_val` into a shift register and shifts it out MSB-first
+on MISO. No MOSI needed — output only.
+
+---
+
+**TC-ADC-01 — adc_val captured at CS_N fall is shifted out**  
+Category: Normal  
+Precondition: `adc_val = 8'h7F` before CS_N falls  
+Stimulus: assert CS_N, drive 8 SCLK cycles, capture MISO  
+Verify: assembled MISO byte `=== 8'h7F`  
+Rationale: core ADC read function
+
+---
+
+**TC-ADC-02 — adc_val change during transfer is ignored**  
+Category: Corner  
+Precondition: `adc_val = 8'hAA`  
+Stimulus: assert CS_N (latches 0xAA), then change `adc_val = 8'h55` mid-transfer  
+Verify: complete MISO byte after 8 clocks `=== 8'hAA`  
+Rationale: ADC result must be stable throughout the shift-out phase
+
+---
+
+**TC-ADC-03 — MISO = 0 when CS_N is high**  
+Category: Idle state  
+Verify: `miso === 1'b0` with `cs_n = 1` and various `adc_val` values  
+Rationale: bus idle must not drive stale data
+
+---
+
+**TC-ADC-04 — Back-to-back reads with different adc_val**  
+Category: Back-to-back  
+Stimulus: transfer 1 with `adc_val = 8'h3A`; transfer 2 with `adc_val = 8'hC1`  
+Verify: MISO byte 1 `=== 8'h3A`; MISO byte 2 `=== 8'hC1`  
+Rationale: each transfer must snapshot a fresh `adc_val`
+
+---
+
+**TC-ADC-05 — MISO shifts MSB-first**  
+Category: Bit order  
+Stimulus: `adc_val = 8'b1010_0101`, run transfer  
+Verify: MISO sequence across 8 SCLK cycles is `1, 0, 1, 0, 0, 1, 0, 1`  
+Rationale: bit order must match what the master expects
+
+---
+
+### Module 13: spi_flash_slave
+
+**Ports:** `clk`, `rst`, `cs_n`, `sclk`, `mosi` → `miso`, `wr_valid`  
+**Internal memory:** 16 bytes (addresses 0x00–0x0F)
+
+**Purpose:** Emulates an 8-byte flash memory with a 3-byte protocol:
+command byte, address byte, data byte. Supports three commands:
+- `0x03` READ — shifts out `mem[addr]` on MISO
+- `0x02` WRITE — stores received data byte at `mem[addr]`, pulses `wr_valid`
+- `0x05` READ_STATUS — shifts out 0x00 (device ready)
+
+---
+
+**TC-FLASH-01 — WRITE command stores byte at address**  
+Category: Normal  
+Stimulus: 3-byte transaction: command=0x02, address=0x05, data=0xBB  
+Verify: `wr_valid` pulses once after the data byte completes  
+Rationale: write path to memory
+
+---
+
+**TC-FLASH-02 — READ command returns stored byte**  
+Category: Normal  
+Precondition: TC-FLASH-01 complete  
+Stimulus: 3-byte transaction: command=0x03, address=0x05, data=don't-care (send 0x00)  
+Verify: MISO byte during data phase `=== 8'hBB`  
+Rationale: read path from memory
+
+---
+
+**TC-FLASH-03 — READ_STATUS returns 0x00**  
+Category: Command decode  
+Stimulus: transaction: command=0x05, no address or data bytes needed  
+Verify: MISO byte `=== 8'h00`  
+Rationale: status register always reads as ready (no write-in-progress emulation needed)
+
+---
+
+**TC-FLASH-04 — wr_valid fires on WRITE only, not on READ**  
+Category: Protocol  
+Stimulus: READ transaction followed by WRITE transaction  
+Verify: `wr_valid` does not fire during or after the READ  
+Verify: `wr_valid` fires once during the WRITE  
+Rationale: wr_valid is a write-notify signal, must not fire on reads
+
+---
+
+**TC-FLASH-05 — Write to address 0 and address 15 (boundary)**  
+Category: Boundary  
+Stimulus: WRITE to address 0x00 with data 0x11; WRITE to address 0x0F with data 0xFF  
+Verify: READ from 0x00 returns 0x11; READ from 0x0F returns 0xFF  
+Rationale: boundary addresses of the 16-byte memory array
+
+---
+
+**TC-FLASH-06 — Overwrite same address**  
+Category: Overwrite  
+Stimulus: WRITE 0xAA to address 3; WRITE 0x55 to address 3  
+Verify: READ from address 3 returns 0x55  
+Rationale: flash emulator must support in-place overwrite
+
+---
+
+**TC-FLASH-07 — READ does not corrupt stored value**  
+Category: Non-destructive read  
+Precondition: WRITE 0xC3 to address 7  
+Stimulus: READ from address 7 twice  
+Verify: both reads return 0xC3  
+Rationale: reads must be non-destructive
+
+---
+
+**TC-FLASH-08 — Command decode: 0x02 vs 0x03 (differ in bit 0)**  
+Category: Corner  
+Stimulus: send READ command (0x03) then WRITE command (0x02) to same address  
+Verify: READ does not assert `wr_valid`; WRITE does assert `wr_valid`  
+Verify: READ returns the stored value; WRITE updates it  
+Rationale: these two commands are identical except for bit 0 — a common decode mistake
+
+---
+
+### Module 14: spi_bus_ctrl
+
+**Ports:** `clk`, `rst`, `start`, `dev_sel[1:0]`, `tx_data[7:0]`, `miso0`, `miso1`, `miso2` → `mosi`, `sclk`, `cs0_n`, `cs1_n`, `cs2_n`, `miso_in`, `busy`, `done`, `rx_data[7:0]`
+
+**Purpose:** Multi-peripheral SPI bus controller. Routes CS_N and MISO to one of three
+peripheral slaves based on `dev_sel`. The selected slave's CS_N asserts; the others remain
+high. MISO from the selected slave is routed to `miso_in`.
+
+---
+
+**TC-BUSCTRL-01 — dev_sel=0 asserts cs0_n only**  
+Category: Normal  
+Stimulus: `dev_sel = 2'd0`, pulse `start`  
+Verify: `cs0_n` asserts (low) during transfer; `cs1_n` and `cs2_n` stay high throughout  
+Rationale: only the selected peripheral should respond
+
+---
+
+**TC-BUSCTRL-02 — dev_sel=1 asserts cs1_n only**  
+Category: Normal  
+Stimulus: `dev_sel = 2'd1`, pulse `start`  
+Verify: `cs1_n` asserts; `cs0_n` and `cs2_n` stay high  
+Rationale: peripheral 1 selection
+
+---
+
+**TC-BUSCTRL-03 — dev_sel=2 asserts cs2_n only**  
+Category: Normal  
+Stimulus: `dev_sel = 2'd2`, pulse `start`  
+Verify: `cs2_n` asserts; `cs0_n` and `cs1_n` stay high  
+Rationale: peripheral 2 selection
+
+---
+
+**TC-BUSCTRL-04 — MISO from selected slave reaches miso_in**  
+Category: Routing  
+Stimulus: `dev_sel = 2'd1`, slave 1 model drives 0xBE on its MISO, pulse `start`  
+Verify: `rx_data === 8'hBE` after `done`  
+Rationale: MISO multiplexer must select the correct slave output
+
+---
+
+**TC-BUSCTRL-05 — MISO from non-selected slaves is ignored**  
+Category: Isolation  
+Stimulus: `dev_sel = 2'd0`, slaves 1 and 2 driving 0xFF on their MISO, slave 0 driving 0x3C  
+Verify: `rx_data === 8'h3C` (slave 0's response, not 0xFF)  
+Rationale: non-selected MISO inputs must not bleed through
+
+---
+
+**TC-BUSCTRL-06 — dev_sel change between transfers takes effect**  
+Category: Re-select  
+Stimulus: transfer 1 with `dev_sel = 2'd0`; change `dev_sel = 2'd2`; transfer 2  
+Verify: transfer 1 asserts `cs0_n`; transfer 2 asserts `cs2_n`  
+Rationale: dev_sel must be re-evaluated on each new start pulse
+
+---
+
+**TC-BUSCTRL-07 — dev_sel change during active transfer does not cause CS_N glitch**  
+Category: Corner  
+Stimulus: `dev_sel = 2'd0`, start transfer; after 4 SCLK cycles change `dev_sel = 2'd1`  
+Verify: `cs0_n` remains asserted throughout the transfer  
+Verify: `cs1_n` remains deasserted throughout the transfer  
+Rationale: dev_sel is latched at `start`; live changes must not cause mid-transfer crosstalk
+
+---
+
+## Part 6 — Corner Case Reference
+
+The following are the most commonly missed bugs, organised by the failure pattern they produce.
+
+---
 
 ### 6.1 Edge-detection off-by-one
 
-**Symptom:** first bit of a frame is wrong or missing.
-**Cause:** `sclk_prev` not yet valid one cycle after reset or cs_n deassertion.
-**Check:** send a byte immediately after reset with no idle cycles between reset and cs_n fall.
+**Symptom:** First bit of every frame is wrong or missing; all other bits are correct.
+
+**Root cause:** The `sclk_prev` register is not valid on the very first clock after CS_N
+deasserts, because CS_N fall and the first SCLK edge arrive too close together relative
+to the `sclk_prev` pipeline register.
+
+**How to expose:** Send a complete byte with zero idle time between CS_N fall and the
+first SCLK edge. Compare the received byte to the expected value. Introduce even 1–2
+system clock cycles of idle time and verify the byte becomes correct — this confirms
+the diagnosis.
+
+**Fix pattern:** Allow at least 2 system clock cycles between CS_N fall and the first
+SCLK edge in the testbench. Alternatively, initialise `sclk_prev` and `cs_n_prev` to
+their idle values in reset.
+
+---
 
 ### 6.2 byte_done persists multiple clocks
 
-**Symptom:** downstream logic latches the same byte twice.
-**Cause:** missing `else byte_done <= 0` in the always_ff block.
-**Check:** drive a toggle-on-valid register and verify it toggles exactly N times for N bytes.
+**Symptom:** Downstream logic latches the same byte twice, or a toggle-on-valid register
+toggles twice per byte.
 
-### 6.3 rx_data captures the wrong value
+**Root cause:** Missing `else byte_done <= 1'b0` branch in the sequential block. The
+signal asserts and stays high until some other condition clears it.
 
-**Symptom:** rx_data is one bit off, or is the previous byte's value.
-**Cause:** using `shift_reg` instead of `{shift_reg[6:0], mosi}` on the 8th edge.
-**Check:** verify with a known checkerboard pattern (0xAA, 0x55) where every other bit differs.
+**How to expose:** Drive a counter that increments every clock `byte_done` is high.
+After exactly one complete frame, verify the counter equals 1. Values greater than 1
+confirm the bug.
+
+**Fix pattern:** Every output pulse signal must have an unconditional `else signal <= 0`
+path in the always_ff block.
+
+---
+
+### 6.3 rx_data captures the wrong value (off by one bit)
+
+**Symptom:** `rx_data` is off by one bit shift; the last MOSI bit is absent, or the
+first bit appears doubled.
+
+**Root cause:** On the 8th SCLK edge, the module captures `shift_reg` directly instead
+of `{shift_reg[6:0], mosi}`. The last MOSI bit has not yet been shifted in.
+
+**How to expose:** Send the alternating pattern 0xAA (1010_1010) and compare it against
+0x55 (0101_0101). A one-bit shift will transform one into the other, making the error
+immediately visible.
+
+**Fix pattern:** On the 8th SCLK rising edge, capture `{shift_reg[6:0], mosi}`, not
+just `shift_reg`.
+
+---
 
 ### 6.4 MISO pre-load too late
 
-**Symptom:** MISO bit 7 (MSB) is always 0 regardless of tx_data.
-**Cause:** tx_shift loaded after the first sclk_rise instead of on cs_n_fall.
-**Check:** probe tx_shift[7] one clock after cs_n falls; it must equal tx_data[7].
+**Symptom:** Bit 7 (MSB) of every MISO output is always 0, regardless of `tx_data`.
+
+**Root cause:** `tx_shift` is loaded from `tx_data` on the first SCLK rising edge instead
+of on the CS_N falling edge. By the time the first SCLK edge arrives, the slave has already
+driven MISO (from the old shift register value) for the bit-7 window.
+
+**How to expose:** Set `tx_data` to a value with a 1 in bit 7 (e.g., 0x80 = 8'b1000_0000).
+Run a read transfer. If MISO bit 7 reads as 0, the pre-load is late.
+
+**Fix pattern:** Pre-load `tx_shift <= tx_data` in the `cs_n_fall` branch of the
+sequential block, before any SCLK activity.
+
+---
 
 ### 6.5 Multi-peripheral CS_N crosstalk
 
-**Symptom:** wrong slave responds, or two slaves respond simultaneously.
-**Cause:** dev_sel_r not registered — changes mid-transfer affect CS_N routing.
-**Check:** change dev_sel during a transfer and verify cs_n outputs do not glitch.
+**Symptom:** Two CS_N outputs both assert, or the wrong CS_N asserts, during a transfer.
+May also appear as a mid-transfer CS_N glitch when `dev_sel` changes.
 
-### 6.6 Flash command decode error
+**Root cause:** `dev_sel` is used combinationally to drive the CS_N outputs without
+registering. A change to `dev_sel` during a transfer immediately changes the CS_N routing.
 
-**Symptom:** WRITE command triggers a READ or vice versa.
-**Cause:** checking `shift_reg` instead of `{shift_reg[6:0], mosi}` for the full byte.
-**Check:** verify with command 0x03 (READ) and 0x02 (WRITE) — they differ only in bit 0.
+**How to expose:** Start a transfer with `dev_sel = 0`. Partway through, change `dev_sel`
+to 1 and monitor all three CS_N lines with a glitch-detection register. Any transition
+on the non-selected lines during the transfer confirms the bug.
 
----
-
-## 7. Test Execution Checklist
-
-Run this before reporting any module as verified:
-
-```
-[ ] Testbench first line is `timescale 1ns/1ps
-[ ] Module named tb
-[ ] Reset sequence: rst=1, 2 clocks, rst=0
-[ ] All signals declared as logic (no reg, no wire)
-[ ] All PASS/FAIL messages start with "PASS " or "FAIL "
-[ ] Expected[] substrings all appear in a correct run
-[ ] No for loops in testbench — repeat(N) only
-[ ] No ++ operators — use = x + 1
-[ ] No 1'bz — idle MISO driven 1'b0
-[ ] All 8 bits of send8/recv8 are individually unrolled
-[ ] Slave model reacts to cs_n_fall, not to reset
-[ ] Transfer wait uses repeat(N) with safe margin (N >= 100 for 8-bit, 200 for 16-bit)
-[ ] Coverage checklist for this module ticked off (Section 3)
-[ ] Corner cases from Section 6 relevant to this module are covered
-```
+**Fix pattern:** Register `dev_sel` into `dev_sel_r` on the `start` pulse. Use `dev_sel_r`
+(not `dev_sel`) to drive the CS_N ternary mux.
 
 ---
 
-## 8. Known Limitations
+### 6.6 Flash command decode confusion (0x02 vs 0x03)
 
-- **No formal verification.** All tests are directed. Random stimulus would require
-  constrained-random drivers not supported in Verilator's `--no-timing` mode without
-  additional tooling.
-- **Single clock domain only.** SCLK is always driven from the testbench or emulated
-  via edge detection. True multi-clock domain simulation requires `--timing` mode.
-- **No X-propagation checking.** `===` comparisons catch X but testbenches do not
-  actively inject X stimulus (e.g., uninitialized MISO, unknown SCLK).
-- **No back-pressure testing.** Modules that have `busy` are not tested for correct
-  behaviour when `start` is asserted while `busy` is high beyond a single check.
-- **8-bit focused.** The 16-bit master (spi2 L3) and parameterized master (spi2 L4)
-  test cases mirror the 8-bit approach and are not separately documented here.
-  Extend TC-MSTR-01 through TC-MSTR-08 by widening data patterns to 16 bits.
+**Symptom:** A READ command causes a write to memory, or a WRITE command returns stale
+data on MISO instead of storing.
+
+**Root cause:** The command byte is decoded using `shift_reg` instead of
+`{shift_reg[6:0], mosi}` on the 8th clock, so bit 0 is missing from the decode. Since
+READ (0x03) and WRITE (0x02) differ only in bit 0, both decode to the same value.
+
+**How to expose:** Perform a READ followed by a WRITE to the same address. If `wr_valid`
+fires during the READ, the decode is broken. If READ returns wrong data after a WRITE,
+the same bug is present.
+
+**Fix pattern:** Same as corner case 6.3 — always use the full `{shift_reg[6:0], mosi}`
+expression when capturing the final byte value.
+
+---
+
+### 6.7 CS_N toggling between bytes in multi-byte transactions
+
+**Symptom:** A 2-byte or 3-byte transaction (regfile, flash) appears to the slave as two
+or three separate 1-byte transactions because CS_N pulses high between bytes.
+
+**Root cause:** Testbench deasserts CS_N after the first byte (common copy-paste from
+single-byte testbenches) instead of keeping it low for the full multi-byte frame.
+
+**How to expose:** Verify that `cs_n` stays low from the first bit of byte 0 through
+the last bit of the final byte. A logic analyser view of the waveform makes this obvious.
+
+**Fix pattern:** In multi-byte testbench tasks, keep `cs_n = 0` across all `send8`/
+`recv8` calls; only deassert at the very end of the full transaction.
+
+---
+
+## Part 7 — Verification Execution Checklist
+
+Run this checklist before marking any module as fully verified.
+
+### Before writing the testbench
+
+- [ ] Read the module's coverage list in Part 3 end-to-end
+- [ ] Identify which corner cases from Part 6 apply to this module
+- [ ] Confirm the module tier (T1–T5) and match task density to tier
+
+### Structural checks (applies to every testbench)
+
+- [ ] First line is `` `timescale 1ns/1ps ``
+- [ ] Module is named exactly `tb`
+- [ ] All signals declared as `logic` — no `reg`, no `wire`
+- [ ] Clock uses `always #N clk = ~clk` with initialised `logic clk = 0`
+- [ ] Reset: `rst=1`, 2 clock edges, `#1`, `rst=0`
+- [ ] All `$display` assertion lines start with exactly `PASS` or `FAIL` (no leading spaces or other words)
+- [ ] No `for` loops in testbench — use `repeat(N) @(posedge clk)` only
+- [ ] No `++` operators — use `= x + 1`
+- [ ] No `1'bz` — idle MISO driven `1'b0`
+- [ ] All `send8` / `recv8` bits individually unrolled (no loop inside the task)
+
+### Protocol checks
+
+- [ ] Slave model reacts to `cs_n_fall`, not to `rst` or any other signal
+- [ ] Transfer wait uses `repeat(N)` with safe margin (100+ for 8-bit, 200+ for 16-bit, 400+ for 3-byte)
+- [ ] Post-edge `#1` skew present after every `@(posedge clk)` used for stimulus
+- [ ] CS_N stays low for the entire duration of multi-byte transactions
+
+### Coverage checks
+
+- [ ] Every item in the module's Part 3 coverage list is exercised
+- [ ] At least one test exercises the reset state
+- [ ] At least one test exercises back-to-back operation
+- [ ] Relevant corner cases from Part 6 are covered with specific test cases
+- [ ] `expected[]` substrings all appear in a correct simulation run
+
+### Final check
+
+- [ ] All PASS lines printed, no FAIL lines, on a correct DUT
+- [ ] Simulation ends with `$finish` — does not run forever
+
+---
+
+## Part 8 — Module Dependencies
+
+Understanding which modules depend on others prevents wasted debugging time.
+
+| Module | Depends on | Used by |
+|---|---|---|
+| `sipo_shift_reg` | none | `spi_slave_rx`, `spi_slave_fd`, `spi_regfile` |
+| `piso_shift_reg` | none | `spi_master`, `spi_master_16`, `spi_master_param` |
+| `spi_byte_counter` | `sipo_shift_reg` (concept) | `spi_slave_rx`, `spi_regfile` |
+| `spi_clkdiv` | none | `spi_master`, `spi_master_16`, `spi_master_param` |
+| `spi_master` | `spi_clkdiv`, `piso_shift_reg` | `spi_loopback`, `spi_bus_ctrl` |
+| `spi_master_16` | `spi_master` (extended) | standalone |
+| `spi_master_param` | `spi_master` (extended) | standalone |
+| `spi_slave_rx` | `sipo_shift_reg`, `spi_byte_counter` | `spi_slave_fd` |
+| `spi_slave_fd` | `spi_slave_rx` (extended) | `spi_loopback` |
+| `spi_loopback` | `spi_master`, `spi_slave_fd` | standalone |
+| `spi_regfile` | `spi_slave_fd` (extended) | standalone |
+| `spi_adc_slave` | `spi_slave_fd` (concept) | `spi_bus_ctrl` |
+| `spi_flash_slave` | `spi_regfile` (extended) | standalone |
+| `spi_bus_ctrl` | `spi_master` + all slaves | standalone |
+
+Verify lower-level modules first. A failure in `spi_master` will propagate through
+`spi_loopback` and `spi_bus_ctrl`, making those failures look unrelated.
+
+---
+
+## Part 9 — Known Limitations
+
+**No formal verification.** All tests are directed. Random constrained stimulus would
+require a UVM or SystemVerilog constraint-solver framework not available in Verilator's
+`--no-timing` mode.
+
+**Single clock domain.** SCLK is always software-driven from the testbench or emulated
+via edge detection. True asynchronous SCLK (from a different clock domain) requires
+`--timing` mode.
+
+**No X-propagation injection.** `===` comparisons detect X values, but testbenches do
+not actively inject undefined values (uninitialised MISO, unknown SCLK start state) to
+test robustness against X.
+
+**No back-pressure stress testing.** Modules with a `busy` output are checked for
+correct response to one mid-transfer `start` pulse. They are not bombarded with
+continuous `start` pulses.
+
+**16-bit and parameterized masters.** Test cases for `spi_master_16` and
+`spi_master_param` mirror the 8-bit master pattern. Extend TC-MSTR-01 through TC-MSTR-08
+by widening data patterns to 16 bits for complete 16-bit coverage.
+
+**Memory boundary testing.** `spi_flash_slave` memory is 16 bytes (addresses 0x00–0x0F).
+Addresses above 0x0F are not covered; address wrapping behaviour is not specified.
