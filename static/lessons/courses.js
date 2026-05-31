@@ -18,6 +18,6 @@ window.COURSES = [
     title: 'SPI Testbench Engineering',
     icon: '🧪',
     description: 'Write directed testbenches for every SPI module — from shift registers to multi-peripheral controllers',
-    modules: ['spitb1'],
+    modules: ['spitb1', 'spitb2'],
   }
 ];
