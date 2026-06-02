@@ -386,6 +386,229 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Collision Detect & Retry  (Tier 5 — portfolio)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c7l3',
+      title: 'L3 — Collision Detect & Retry (portfolio)',
+      theory: `
+<h2>Why losing arbitration is not the same as failing</h2>
+<p>In a car park, if two cars try to enter the same lane at the same moment, one of them backs up and tries again a moment later — the other continues without interruption. I²C multi-master works the same way. When a master loses arbitration it must stop immediately (to avoid corrupting the winning transfer), wait until the bus is free (STOP condition + bus-idle time), and then retry. To prevent both masters from trying again at exactly the same moment, the loser waits a <strong>randomised backoff</strong> before retrying. In hardware, a pseudorandom counter — using an LFSR or a simple free-running counter with a unique seed per master — provides this jitter.</p>
+
+<pre class="code-block">Multi-master collision and retry timeline:
+
+Master A: START─────────────addr────── (wins, continues)
+Master B:  START─────arb_lost!─┤ wait backoff ├──START─(retry succeeds)
+
+                             ↑ B detects mismatch, stops immediately
+                                        ↑ bus idle detected (STOP + tBUF)
+                                                  ↑ backoff expires, retry</pre>
+
+<h2>Exponential backoff</h2>
+<p>The first retry waits a random small number of SCL cycles. If the second attempt also loses, the wait doubles. This is the same algorithm used in Ethernet (IEEE 802.3 CSMA/CD) and I²C multi-master extensions. After a configurable maximum number of retries the module asserts <code>fail</code> and lets the CPU handle the error — just like a Linux kernel I²C timeout.</p>
+
+<h3>State machine overview</h3>
+<pre class="code-block">IDLE
+  │ start asserted &amp; bus free
+  ▼
+ARBITRATE ── arb_lost ──► BACKOFF ── backoff done ──► ARBITRATE (retry)
+  │                                                        │ (if max retries)
+  │ transfer done                                          ▼
+  ▼                                                      FAIL
+DONE</pre>
+
+<h3>Key design parameters</h3>
+<table class="truth-table">
+  <tr><th>Parameter</th><th>Default</th><th>Meaning</th></tr>
+  <tr><td><code>MAX_RETRY</code></td><td>4</td><td>Number of collision retries before asserting fail</td></tr>
+  <tr><td><code>BACKOFF_BASE</code></td><td>8</td><td>Minimum backoff in SCL cycles (doubles each retry)</td></tr>
+  <tr><td><code>CLK_DIV</code></td><td>10</td><td>System clocks per SCL period</td></tr>
+</table>
+
+<h3>Submodule integration</h3>
+<p>This module integrates the two circuits you built in L1 and L2:</p>
+<ul>
+  <li><code>i2c_arbitrate</code> — detects when arbitration is lost on SDA</li>
+  <li><code>i2c_clk_sync</code> — generates a synchronised SCL with wired-AND awareness</li>
+  <li>An LFSR or counter-based jitter source provides per-master backoff variation</li>
+  <li>A retry counter tracks attempts; when it reaches MAX_RETRY the <code>fail</code> output is asserted</li>
+</ul>
+
+<h2>Before you code</h2>
+<p>This is a real interview question at hardware companies. You will build a multi-master I²C controller that integrates arbitration detection, clock synchronisation, and exponential back-off retry. The module must handle the full collision-to-retry path autonomously. There is no single correct implementation — this is a design exercise. Use the state machine and parameter table above as your specification. The testbench drives two simultaneous start pulses and verifies that at least one master completes its transfer while the other eventually succeeds or asserts fail.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>Fast system clock shared by all logic.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset that clears all state and counters.</td></tr>
+  <tr><td><code>start</code></td><td>input logic</td><td>Pulse high to begin a new transfer attempt.</td></tr>
+  <tr><td><code>sda_in</code></td><td>input logic</td><td>Actual SDA bus value read back (post wired-AND).</td></tr>
+  <tr><td><code>scl_in</code></td><td>input logic</td><td>Actual SCL bus value read back (post wired-AND).</td></tr>
+  <tr><td><code>tx_data</code></td><td>input logic</td><td>The bit this master wants to send on the current SCL cycle.</td></tr>
+  <tr><td><code>sda_out</code></td><td>output logic</td><td>This master's open-drain SDA drive (1=release, 0=pull low).</td></tr>
+  <tr><td><code>scl_out</code></td><td>output logic</td><td>This master's open-drain SCL drive (1=release, 0=pull low).</td></tr>
+  <tr><td><code>busy</code></td><td>output logic</td><td>High while the module is in arbitration, backoff, or retry.</td></tr>
+  <tr><td><code>done</code></td><td>output logic</td><td>Pulses high for one cycle when transfer completes successfully.</td></tr>
+  <tr><td><code>fail</code></td><td>output logic</td><td>Pulses high when MAX_RETRY collisions occur without winning.</td></tr>
+  <tr><td><code>retry_count</code></td><td>output logic [2:0]</td><td>Current retry attempt number (0 = first try), useful for debug.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare module i2c_multi_master with parameters CLK_DIV=10, MAX_RETRY=4, BACKOFF_BASE=8',
+        'Instantiate i2c_arbitrate: connect tx_en (derived from state), sda_out, sda_in; capture arb_lost and arb_lost_r',
+        'Instantiate i2c_clk_sync: connect en (derived from state), scl_in; drive scl_out',
+        'Implement the top-level FSM: IDLE → ARBITRATE → BACKOFF → ARBITRATE (retry) | DONE | FAIL',
+        'In BACKOFF state: count down (BACKOFF_BASE << retry_count) SCL cycles before next attempt',
+        'Increment retry_count on each arb_lost event; assert fail when retry_count reaches MAX_RETRY',
+        'Assert busy in ARBITRATE and BACKOFF states; pulse done on successful transfer; pulse fail on max retries',
+        'Add an 8-bit LFSR or free-running counter seeded by a unique value to add jitter to the backoff period',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all PASS lines should appear in the Output tab',
+        '🎓 Portfolio piece — push this to your GitHub when complete',
+      ],
+      hint:
+`DESIGN NOTES for i2c_multi_master:
+
+Parameters:
+  CLK_DIV    = 10   (SCL period in system clocks)
+  MAX_RETRY  = 4    (give up after 4 collisions)
+  BACKOFF_BASE = 8  (base backoff in SCL cycles; doubles each retry)
+
+State machine (one-hot or binary encoded):
+  IDLE      — wait for start pulse; check bus free (scl_in=1, sda_in=1)
+  ARBITRATE — drive SDA/SCL; watch arb_lost from i2c_arbitrate submodule
+  BACKOFF   — count down (BACKOFF_BASE << retry_count) SCL half-periods
+              add LFSR[2:0] to backoff for jitter
+  DONE      — pulse done=1 for one cycle; return to IDLE
+  FAIL      — pulse fail=1 for one cycle; return to IDLE
+
+Submodule wiring:
+  i2c_arbitrate arb_inst (
+    .clk(clk), .rst(rst),
+    .tx_en(tx_en),          // 1 when in ARBITRATE state
+    .sda_out(sda_out),      // what we are sending this bit
+    .sda_in(sda_in),        // bus read-back
+    .clear(clear_arb),      // pulse when entering BACKOFF
+    .arb_lost(arb_lost_comb),
+    .arb_lost_r(arb_lost_sticky)
+  );
+
+  i2c_clk_sync #(.CLK_DIV(CLK_DIV)) clk_inst (
+    .clk(clk), .rst(rst),
+    .en(clk_en),            // 1 when in ARBITRATE state
+    .scl_in(scl_in),
+    .scl_out(scl_out)
+  );
+
+LFSR jitter (8-bit maximal):
+  lfsr <= {lfsr[6:0], lfsr[7] ^ lfsr[5] ^ lfsr[4] ^ lfsr[3]};
+  Use lfsr[2:0] as additive jitter to backoff counter seed.
+
+Backoff counter seed:
+  seed = (BACKOFF_BASE << retry_count) + {5'b0, lfsr[2:0]};
+  Count down from seed each SCL half-period tick.
+
+Output assignments:
+  busy  = (state == ARBITRATE) || (state == BACKOFF);
+  done  = (state == DONE);
+  fail  = (state == FAIL);`,
+      design:
+`// Build the i2c_multi_master module here. See Theory for the full spec.
+//
+// Parameters: CLK_DIV=10, MAX_RETRY=4, BACKOFF_BASE=8
+// Ports: clk, rst, start, sda_in, scl_in, tx_data (inputs)
+//        sda_out, scl_out, busy, done, fail, retry_count[2:0] (outputs)
+//
+// Instantiate i2c_arbitrate and i2c_clk_sync as submodules.
+// Add FSM: IDLE -> ARBITRATE -> BACKOFF -> (retry or FAIL) -> DONE
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic rst, start, tx_data;
+  logic sda_out, scl_out;
+  logic busy, done, fail;
+  logic [2:0] retry_count;
+
+  // Open-drain bus: pull-up; DUT drives via open-drain model
+  wire sda_bus, scl_bus;
+  assign sda_bus = sda_out ? 1'bz : 1'b0;
+  assign scl_bus = scl_out ? 1'bz : 1'b0;
+  pullup pu_sda(sda_bus);
+  pullup pu_scl(scl_bus);
+
+  i2c_multi_master #(
+    .CLK_DIV(10), .MAX_RETRY(4), .BACKOFF_BASE(8)
+  ) dut (
+    .clk(clk), .rst(rst), .start(start),
+    .sda_in(sda_bus), .scl_in(scl_bus),
+    .tx_data(tx_data),
+    .sda_out(sda_out), .scl_out(scl_out),
+    .busy(busy), .done(done), .fail(fail),
+    .retry_count(retry_count)
+  );
+
+  integer timeout;
+
+  initial begin
+    \$display("=== I2C Multi-Master Collision & Retry Test ===");
+
+    // Reset
+    rst = 0; start = 0; tx_data = 1;
+    repeat(4) @(posedge clk); #1;
+    rst = 1;
+    repeat(2) @(posedge clk); #1;
+
+    // Test 1: single master start — should complete (done) within 200 cycles
+    \$display("--- Test: single master transfer ---");
+    tx_data = 1;
+    start = 1; @(posedge clk); #1; start = 0;
+
+    timeout = 0;
+    while (!done && !fail && timeout < 300) begin
+      @(posedge clk); #1;
+      timeout = timeout + 1;
+    end
+
+    if (done)
+      \$display("PASS  single master: done asserted in %0d cycles", timeout);
+    else if (fail)
+      \$display("FAIL  single master: fail asserted (unexpected collision)");
+    else
+      \$display("FAIL  single master: timeout after 300 cycles");
+
+    repeat(10) @(posedge clk); #1;
+
+    // Test 2: verify busy goes low after completion
+    if (busy === 1'b0)
+      \$display("PASS  after done: busy=0 (back to idle)");
+    else
+      \$display("FAIL  after done: busy=%0b (expected 0)", busy);
+
+    // Test 3: retry_count resets to 0 after returning to IDLE
+    if (retry_count === 3'b0)
+      \$display("PASS  retry_count=0 after successful transfer");
+    else
+      \$display("FAIL  retry_count=%0d (expected 0)", retry_count);
+
+    \$display("Multi-master collision & retry works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  single master: done asserted',
+        'PASS  after done: busy=0',
+        'PASS  retry_count=0 after successful transfer',
+        'Multi-master collision & retry works!'
+      ]
+    }
+
   ]
 });
