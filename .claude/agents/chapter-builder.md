@@ -134,18 +134,16 @@ git pull --rebase origin develop && git push -u origin develop
 
 ## Step 3 — Register the module (fourth commit)
 
+> **index.html is auto-generated from courses.js — do NOT edit index.html.**
+> The dynamic loader in index.html reads `window.COURSES` at page load and injects
+> all module scripts automatically. You only need to update `courses.js`.
+
 After all three lesson commits are pushed, do the registration as one atomic step.
 
 ```bash
-# Fetch the latest remote state before editing shared files
+# Fetch the latest remote state of courses.js before editing
 git fetch origin develop
-git checkout origin/develop -- static/index.html static/lessons/courses.js
-```
-
-### index.html — add script tag
-Find the last `<script>` tag for this course's modules (e.g. the last `i2ctb` module tag, or after `i2c1.js` if this is the first i2ctb module). Insert after it:
-```html
-<script src="/lessons/modules/i2ctb2.js"></script>
+git checkout origin/develop -- static/lessons/courses.js
 ```
 
 ### courses.js — add to the course modules array
@@ -165,14 +163,14 @@ If the course entry doesn't exist yet (first chapter of a new course), add it:
 },
 ```
 
-After editing both files:
+After editing:
 ```bash
-git add static/index.html static/lessons/courses.js
-git commit -m "feat(<moduleId>): register module in index.html and courses.js"
+git add static/lessons/courses.js
+git commit -m "feat(<moduleId>): register module in courses.js"
 git pull --rebase origin develop && git push -u origin develop
 ```
 
-If `git pull --rebase` produces a conflict on `index.html` or `courses.js`: keep **both** sets of additions (yours + theirs), then `git rebase --continue && git push -u origin develop`.
+If `git pull --rebase` produces a conflict on `courses.js`: keep **both** sets of module ID additions (yours + theirs — the modules array should contain all IDs), then `git rebase --continue && git push -u origin develop`.
 
 ---
 
@@ -318,7 +316,6 @@ Array of 2–4 substrings that all appear in correct simulation output.
 [ ] Testbench: `pullup` present whenever inout wire used
 [ ] expected[]: all strings appear in correct simulation output
 [ ] Verilator timing task in every lesson
-[ ] index.html script tag added in correct position
-[ ] courses.js course modules array updated
+[ ] courses.js course modules array updated (index.html is auto-generated — do NOT edit it)
 [ ] Four commits pushed to develop (L1, L2, L3, registration)
 ```

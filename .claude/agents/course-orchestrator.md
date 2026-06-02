@@ -116,9 +116,9 @@ Steps:
 7. Commit 3: git add static/lessons/modules/<ID>.js && git commit -m "feat(<ID>): L3 — <L3 title>" && git pull --rebase origin develop && git push -u origin develop
 8. Registration step (atomic):
    a. git fetch origin develop && git checkout origin/develop -- static/index.html static/lessons/courses.js
-   b. Edit static/index.html: add <script src="/lessons/modules/<ID>.js"></script> after the last <coursePrefix> script tag
+   b. DO NOT edit static/index.html — it auto-loads modules from courses.js dynamically
    c. Edit static/lessons/courses.js: append '<ID>' to the <coursePrefix> course modules array
-   d. git add static/index.html static/lessons/courses.js && git commit -m "feat(<ID>): register in index.html and courses.js"
+   d. git add static/lessons/courses.js && git commit -m "feat(<ID>): register in courses.js"
    e. git pull --rebase origin develop && git push -u origin develop
    If rebase conflict: keep BOTH sets of additions, git rebase --continue, git push
 
