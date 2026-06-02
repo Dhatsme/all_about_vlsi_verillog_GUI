@@ -342,6 +342,182 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Auto-increment Pointer  (Tier 4)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c6l3',
+      title: 'L3 — Auto-increment Pointer',
+      theory: `
+<h2>Where this circuit lives in the real world</h2>
+<p>When a phone reads its accelerometer over I²C, it does not want to separately address X, Y, and Z registers — that would triple the bus traffic. Instead, it sends one register address and then keeps reading. The sensor's <strong>auto-increment pointer</strong> advances to the next register after each byte, so three consecutive reads return X, Y, Z automatically. This is the "burst read" feature listed in every I²C sensor datasheet. The ST LIS3DH, MPU-6050, and BME280 all implement exactly this mechanism.</p>
+
+<pre class="code-block">Burst read — reading 4 bytes starting at register 0x02:
+
+  START → [Addr+R] → ACK
+    ↓ reg_ptr = 0x02
+  [byte 0x02] → ACK   reg_ptr++ → 0x03
+  [byte 0x03] → ACK   reg_ptr++ → 0x04
+  [byte 0x04] → ACK   reg_ptr++ → 0x05
+  [byte 0x05] → NACK
+  STOP
+
+  Without auto-increment, each byte would need its own START + address frame.
+  Auto-increment turns 4 transactions into 1.</pre>
+
+<h2>What an auto-increment pointer is — and why it works</h2>
+<p>Think of a vinyl record player: you drop the needle at track 3, and it plays 3, 4, 5, 6 automatically without you moving the arm. The pointer starts at the address the I²C master wrote, and after each byte access it advances by one. A "load" signal lets the master set the starting position; the "advance" signal (one pulse per byte transferred) increments it. The pointer wraps at the end of the address space — just like the record player going back to the start.</p>
+
+<pre class="code-block">// Pointer behaviour
+always_ff @(posedge clk) begin
+  if (!rst)
+    ptr &lt;= '0;
+  else if (load)
+    ptr &lt;= addr_load;    // master sets starting address
+  else if (advance)
+    ptr &lt;= ptr + 1;      // wraps automatically at 4-bit boundary
+end
+
+assign current_addr = ptr;</pre>
+
+<table class="truth-table">
+  <tr><th>rst</th><th>load</th><th>advance</th><th>Effect on ptr</th></tr>
+  <tr><td>0</td><td>x</td><td>x</td><td>ptr resets to 0x0</td></tr>
+  <tr><td>1</td><td>1</td><td>x</td><td>ptr &lt;= addr_load (load overrides advance)</td></tr>
+  <tr><td>1</td><td>0</td><td>1</td><td>ptr &lt;= ptr + 1 (wraps 0xF → 0x0)</td></tr>
+  <tr><td>1</td><td>0</td><td>0</td><td>ptr holds its current value</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>What you are about to build is a 4-bit auto-incrementing address pointer. A synchronous active-low reset clears the pointer to zero. The <code>load</code> signal (higher priority) captures <code>addr_load</code> as the new starting address — this is how the I²C master sets the initial register offset. The <code>advance</code> signal (lower priority) bumps the pointer by one on the next clock edge — this fires once per byte successfully transferred. The current pointer value is always visible on <code>current_addr</code> as a combinational output. The pointer wraps from 0xF to 0x0 naturally from 4-bit arithmetic overflow.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>System clock that advances the pointer synchronously on each rising edge.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset that clears the pointer to 0x0 on the next clock edge.</td></tr>
+  <tr><td><code>load</code></td><td>input logic</td><td>When high, captures addr_load as the new pointer value on the next clock edge (higher priority than advance).</td></tr>
+  <tr><td><code>addr_load</code></td><td>input logic [3:0]</td><td>4-bit starting address to load into the pointer when load is asserted — set by the I²C controller at the start of a burst.</td></tr>
+  <tr><td><code>advance</code></td><td>input logic</td><td>When high (and load is low), increments the pointer by one on the next clock edge — pulsed once per completed byte transfer.</td></tr>
+  <tr><td><code>current_addr</code></td><td>output logic [3:0]</td><td>Current value of the pointer — the register address that will be accessed for the next byte transfer, available combinationally every cycle.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare module i2c_autoincr with ports: clk, rst, load, addr_load [3:0], advance, current_addr [3:0]',
+        'Declare an internal 4-bit register: logic [3:0] ptr',
+        'Write an always_ff block: on !rst clear ptr to 0; else if load set ptr <= addr_load; else if advance set ptr <= ptr + 1',
+        'Drive the output combinationally: assign current_addr = ptr',
+        'Verify wrap-around behaviour: ptr at 0xF should advance to 0x0 — 4-bit arithmetic does this automatically, no special case needed',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 4 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`DESIGN NOTES for i2c_autoincr:
+
+  Internal state:
+    logic [3:0] ptr;   // holds the current register pointer
+
+  Sequential logic (always_ff):
+    Priority order — reset > load > advance > hold:
+
+    if (!rst)          ptr <= 4'h0;
+    else if (load)     ptr <= addr_load;   // master sets start address
+    else if (advance)  ptr <= ptr + 1;     // auto-advances after each byte
+    // else: ptr holds value
+
+  Combinational output:
+    assign current_addr = ptr;
+
+  Wrap-around:
+    4'hF + 1 overflows to 4'h0 automatically — no special case needed.
+    This mirrors how real I²C targets wrap their burst access pointer.
+
+  Key design points:
+  - load has HIGHER priority than advance (checked first in if/else chain)
+  - current_addr is combinational — the consumer sees the updated value
+    immediately after reset or load, without waiting an extra cycle
+  - This module pairs with i2c_regfile: feed current_addr into addr_out`,
+      design:
+`// Build the i2c_autoincr module here. See Theory for the full spec.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       rst, load, advance;
+  logic [3:0] addr_load, current_addr;
+
+  i2c_autoincr dut (
+    .clk         (clk),
+    .rst         (rst),
+    .load        (load),
+    .addr_load   (addr_load),
+    .advance     (advance),
+    .current_addr(current_addr)
+  );
+
+  initial begin
+    \$display("=== Auto-increment Pointer Test ===");
+
+    // Reset — pointer should clear to 0
+    rst = 0; load = 0; advance = 0; addr_load = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+    @(posedge clk); #1;
+    if (current_addr === 4'h0)
+      \$display("PASS  reset: ptr=0x%0h", current_addr);
+    else
+      \$display("FAIL  reset: ptr=0x%0h (expected 0x0)", current_addr);
+
+    // Load starting address 0x5
+    load = 1; addr_load = 4'h5;
+    @(posedge clk); #1;
+    load = 0;
+    if (current_addr === 4'h5)
+      \$display("PASS  load: ptr=0x%0h", current_addr);
+    else
+      \$display("FAIL  load: ptr=0x%0h (expected 0x5)", current_addr);
+
+    // Advance three times: should go 5 → 6 → 7 → 8
+    advance = 1;
+    @(posedge clk); #1;
+    @(posedge clk); #1;
+    @(posedge clk); #1;
+    advance = 0;
+    if (current_addr === 4'h8)
+      \$display("PASS  advance x3: ptr=0x%0h", current_addr);
+    else
+      \$display("FAIL  advance x3: ptr=0x%0h (expected 0x8)", current_addr);
+
+    // Wrap-around: load 0xE, advance twice → 0xE → 0xF → 0x0
+    load = 1; addr_load = 4'hE;
+    @(posedge clk); #1;
+    load = 0;
+    advance = 1;
+    @(posedge clk); #1;
+    @(posedge clk); #1;
+    advance = 0;
+    if (current_addr === 4'h0)
+      \$display("PASS  wrap: ptr=0x%0h", current_addr);
+    else
+      \$display("FAIL  wrap: ptr=0x%0h (expected 0x0)", current_addr);
+
+    \$display("Auto-increment pointer works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  reset: ptr=0x0',
+        'PASS  load: ptr=0x5',
+        'PASS  advance x3: ptr=0x8',
+        'PASS  wrap: ptr=0x0',
+        'Auto-increment pointer works!'
+      ]
+    }
+
   ]
 });
