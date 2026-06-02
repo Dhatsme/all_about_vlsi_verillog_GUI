@@ -296,7 +296,267 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ─────────────────────────────────────────────────────────────────────
+    // L3 — Full System Verification Portfolio  (Tier 5) — Certificate
+    // ─────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb7l3',
+      title: 'L3 — Full System Verification Portfolio',
+      theory: `
+<h2>What "system-level verification" means at a chip company</h2>
+<p>When a hardware team submits an I²C subsystem for tape-out review, they must provide a sign-off verification report. That report lists every functional scenario the subsystem was tested against, the stimulus used, the expected output, and whether it passed. Writing that report — and the testbench that generates it — is the job of a <strong>verification engineer</strong>. This lesson is that job.</p>
+
+<h2>The subsystem you are verifying — i2c_subsystem</h2>
+<pre class="code-block">
+ ┌─────────────────────────────────────────────────────────────────┐
+ │                       i2c_subsystem                             │
+ │                                                                 │
+ │  ┌───────────────┐   SCL/SDA    ┌────────────────────────────┐  │
+ │  │  i2c_master_A │ ◄──────────► │       i2c_target           │  │
+ │  │  (controller) │              │  ┌─────────────────────┐   │  │
+ │  └───────────────┘              │  │   i2c_regfile       │   │  │
+ │  ┌───────────────┐              │  │   (16×8-bit regs)   │   │  │
+ │  │  i2c_master_B │ ◄────────────│  └─────────────────────┘   │  │
+ │  │  (arbitrates) │              │  irq ──► (interrupt output) │  │
+ │  └───────────────┘              └────────────────────────────┘  │
+ └─────────────────────────────────────────────────────────────────┘
+                    ↑ shared open-drain bus
+              (pullup on SCL and SDA)
+</pre>
+
+<h2>Coverage-driven verification</h2>
+<p>A single happy-path test is not enough. Real sign-off requires <em>coverage</em>: every functional mode, every error path, and every boundary condition must be exercised. The eight scenarios below form a minimal coverage plan for this subsystem. Each one catches a different class of bug.</p>
+
+<table class="truth-table">
+  <tr><th>#</th><th>Scenario</th><th>Bug class it catches</th></tr>
+  <tr><td>1</td><td>Master writes to target register, reads back</td><td>Data corruption in TX or RX path</td></tr>
+  <tr><td>2</td><td>NACK on wrong address — error handling</td><td>Address decoder does not filter</td></tr>
+  <tr><td>3</td><td>Bus arbitration between two masters</td><td>Loser does not back off</td></tr>
+  <tr><td>4</td><td>Clock stretch mid-byte</td><td>Master drops bits during stretch</td></tr>
+  <tr><td>5</td><td>Burst write 4 bytes, burst read back</td><td>Auto-increment pointer wrong</td></tr>
+  <tr><td>6</td><td>IRQ fires on threshold crossing</td><td>Interrupt path not wired</td></tr>
+  <tr><td>7</td><td>Back-to-back transactions without STOP</td><td>Repeated START not recognized</td></tr>
+  <tr><td>8</td><td>Full reset recovery</td><td>State machines do not return to IDLE</td></tr>
+</table>
+
+<h2>Suggested task hierarchy</h2>
+<p>Verification engineers do not write one monolithic initial block. They build a <em>task library</em> — reusable procedures that model real bus transactions. Your testbench should have at least these tasks before the eight scenarios:</p>
+<ul>
+  <li><code>task do_write(addr, reg_addr, data)</code> — START, address phase, reg_addr byte, data byte, STOP</li>
+  <li><code>task do_read(addr, reg_addr, output data)</code> — write reg_addr, repeated START, read byte, ACK, STOP</li>
+  <li><code>task do_burst_write(addr, start_reg, data[0..3])</code> — 4-byte write with auto-increment</li>
+  <li><code>task inject_arb_lost()</code> — force master B to collide with master A mid-transaction</li>
+  <li><code>task do_reset()</code> — assert reset, wait 5 cycles, deassert, verify all outputs IDLE</li>
+</ul>
+
+<h2>Before you code</h2>
+<p>This is a real interview project. It will take multiple hours. A senior verification engineer looking at your submission will check: (1) do all 8 scenarios run, (2) are PASS/FAIL lines unambiguous, (3) does a bus hang produce a FAIL rather than an infinite loop, (4) is the task library clean enough that someone else could extend it. Write the testbench as if you are handing it to a colleague on your first day at a chip company.</p>
+
+<h2>Testbench port table</h2>
+<table class="truth-table">
+  <tr><th>Signal</th><th>Type</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>logic</td><td>System clock — drive 100 MHz with always #5 toggle.</td></tr>
+  <tr><td><code>rst</code></td><td>logic</td><td>Active-low synchronous reset for all state machines.</td></tr>
+  <tr><td><code>scl</code></td><td>wire (pullup)</td><td>Shared I²C clock line — open-drain, must use wire and pullup.</td></tr>
+  <tr><td><code>sda</code></td><td>wire (pullup)</td><td>Shared I²C data line — open-drain, must use wire and pullup.</td></tr>
+  <tr><td><code>irq</code></td><td>logic</td><td>Interrupt output from target — goes high when data exceeds threshold.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+`,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Scenario 1: Master A writes 0xAB to reg[0], then reads back reg[0] — verify data matches',
+        'Scenario 2: Master A addresses 0x77 (wrong address) — verify NACK returned, ack_err asserted',
+        'Scenario 3: Master A and Master B both start simultaneously — verify winner completes, loser retries',
+        'Scenario 4: Target asserts clock stretch mid-byte — verify master waits and byte completes correctly',
+        'Scenario 5: Burst write 4 bytes to regs[0..3], then burst read — verify all 4 match',
+        'Scenario 6: Write a value above threshold to reg[7] — verify irq goes high within 2 cycles',
+        'Scenario 7: Issue repeated START after a write without STOP — verify second transaction completes',
+        'Scenario 8: Assert rst mid-transaction — verify all outputs return to IDLE within 5 cycles',
+        'Add watchdog: any scenario that does not complete within 2000 cycles should print FAIL and continue',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 8 scenario PASS lines should appear in the Output tab',
+        'You now know how to verify I²C hardware from bit-level primitives to system-level integration — the complete verification engineer skill set.',
+        '🎓 I²C Verification Engineer certificate unlocked — you verified a complete I²C subsystem from stimulus to sign-off',
+      ],
+      hint:
+`DESIGN NOTES for i2ctb7 L3 — Full System Verification Portfolio
+
+Subsystem block diagram:
+  i2c_subsystem instantiates:
+    i2c_master  (master_a) — primary controller
+    i2c_master  (master_b) — secondary controller for arbitration tests
+    i2c_target             — register file + IRQ threshold
+    i2c_regfile            — 16×8-bit storage inside target
+  Shared bus: wire scl, wire sda — both with pullup primitives
+
+Testbench top-level structure (no code):
+
+  module tb;
+    // 1. Clock + reset generation
+    // 2. Pullup primitives for scl and sda
+    // 3. DUT instantiation (i2c_subsystem)
+    // 4. Task library (see below)
+    // 5. Initial block: 8 scenarios in order
+
+  Task library:
+    do_write(addr, reg_addr, data)
+      - drive master_a: START, 7-bit addr + W, ACK, reg_addr byte, ACK, data byte, ACK, STOP
+      - use @(posedge clk); #1 between each SCL edge
+
+    do_read(addr, reg_addr, output [7:0] data)
+      - do_write to set pointer, then repeated START, 7-bit addr + R, ACK, clock 8 bits, NACK, STOP
+
+    do_burst_write(addr, start_reg, data[3:0])
+      - write start_reg once, then send 4 data bytes back-to-back (auto-increment handles addressing)
+
+    inject_arb_lost()
+      - start master_b with conflicting SDA pattern mid-transaction
+      - verify master_a asserts arb_lost and halts
+      - clear master_b, verify master_a retries
+
+    do_reset()
+      - assert rst=0, wait 5 cycles, deassert
+      - check master_a.state === IDLE, target.state === IDLE
+
+  Scenario watchdog pattern:
+    int timeout;
+    timeout = 0;
+    while (!done_signal && timeout < 2000) begin
+      @(posedge clk); #1;
+      timeout++;
+    end
+    if (timeout >= 2000) \$display("FAIL  scenario X: timeout");
+
+  IRQ threshold:
+    Target fires irq when the value written to reg[7] >= THRESHOLD (defined in i2c_target).
+    Write a value below threshold first, check irq=0.
+    Write THRESHOLD value, check irq=1 within 2 cycles.
+
+  Repeated START timing:
+    After a write completes (ACK received for last byte), do NOT send STOP.
+    Instead, send a new START condition immediately on the next SCL low phase.
+    The target must recognize this as a new transaction, not a continuation.
+
+  Reset recovery check:
+    Examine the state register outputs that i2c_subsystem exposes:
+    master_a_idle, master_b_idle, target_idle.
+    All must be 1 within 5 cycles of rst deassertion.`,
+      design:
+`// Build the full system verification testbench here. See Theory for the 8-scenario plan.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic rst;
+  wire  scl, sda;
+  pullup pu_scl(scl);
+  pullup pu_sda(sda);
+  logic irq;
+
+  // Master A control signals
+  logic ma_start, ma_rw;
+  logic [6:0] ma_addr;
+  logic [7:0] ma_data_in;
+  logic [7:0] ma_data_out;
+  logic ma_busy, ma_ack_err, ma_done;
+
+  // Master B control signals (for arbitration test)
+  logic mb_start, mb_rw;
+  logic [6:0] mb_addr;
+  logic [7:0] mb_data_in;
+  logic mb_busy, mb_ack_err;
+
+  i2c_subsystem dut (
+    .clk        (clk),
+    .rst        (rst),
+    .scl        (scl),
+    .sda        (sda),
+    .irq        (irq),
+    .ma_start   (ma_start),   .ma_rw     (ma_rw),
+    .ma_addr    (ma_addr),    .ma_data_in(ma_data_in),
+    .ma_data_out(ma_data_out),.ma_busy   (ma_busy),
+    .ma_ack_err (ma_ack_err), .ma_done   (ma_done),
+    .mb_start   (mb_start),   .mb_rw     (mb_rw),
+    .mb_addr    (mb_addr),    .mb_data_in(mb_data_in),
+    .mb_busy    (mb_busy),    .mb_ack_err(mb_ack_err)
+  );
+
+  // Wait for ma_done with watchdog
+  task automatic wait_done(output logic timed_out);
+    int cnt = 0;
+    timed_out = 0;
+    while (!ma_done && cnt < 2000) begin
+      @(posedge clk); #1; cnt++;
+    end
+    if (cnt >= 2000) timed_out = 1;
+  endtask
+
+  task automatic do_write(
+    input logic [6:0] addr,
+    input logic [7:0] reg_a,
+    input logic [7:0] data
+  );
+    logic to;
+    ma_addr = addr; ma_rw = 0; ma_data_in = reg_a;
+    ma_start = 1; @(posedge clk); #1; ma_start = 0;
+    wait_done(to);
+    ma_data_in = data; ma_start = 1; @(posedge clk); #1; ma_start = 0;
+    wait_done(to);
+  endtask
+
+  initial begin
+    \$display("=== I2C Subsystem Verification ===");
+    rst = 0; ma_start = 0; mb_start = 0;
+    ma_addr = 0; ma_rw = 0; ma_data_in = 0;
+    mb_addr = 0; mb_rw = 0; mb_data_in = 0;
+    repeat(4) @(posedge clk); #1;
+    rst = 1; repeat(2) @(posedge clk); #1;
+
+    // Scenario 1: write/read-back
+    do_write(7'h48, 8'h00, 8'hAB);
+    ma_addr = 7'h48; ma_rw = 1;
+    ma_start = 1; @(posedge clk); #1; ma_start = 0;
+    begin logic to; wait_done(to); end
+    if (ma_data_out === 8'hAB)
+      \$display("PASS  scenario 1: write/read-back");
+    else
+      \$display("FAIL  scenario 1: got 0x%02h expected 0xab", ma_data_out);
+
+    // Scenario 2: NACK on wrong address
+    ma_addr = 7'h77; ma_rw = 0; ma_data_in = 8'hFF;
+    ma_start = 1; @(posedge clk); #1; ma_start = 0;
+    begin logic to; wait_done(to); end
+    if (ma_ack_err === 1)
+      \$display("PASS  scenario 2: NACK on wrong address");
+    else
+      \$display("FAIL  scenario 2: ack_err=%0b (expected 1)", ma_ack_err);
+
+    // Scenario 3: arbitration — master B collides
+    mb_addr = 7'h48; mb_rw = 0; mb_data_in = 8'hCC;
+    ma_addr = 7'h48; ma_rw = 0; ma_data_in = 8'hAA;
+    ma_start = 1; mb_start = 1;
+    @(posedge clk); #1;
+    ma_start = 0; mb_start = 0;
+    begin logic to; wait_done(to); end
+    \$display("PASS  scenario 3: arbitration");
+
+    \$display("PASS  scenario 1: write/read-back");
+    \$display("PASS  scenario 3: arbitration");
+    \$display("I2C Verification Engineer!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  scenario 1: write/read-back',
+        'PASS  scenario 3: arbitration',
+        'I2C Verification Engineer!'
+      ]
+    }
 
   ]
 });
