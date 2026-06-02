@@ -507,8 +507,227 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Target with IRQ  (Tier 4)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c5l3',
+      title: 'L3 — Target with IRQ',
+      theory: `
+<h2>Why sensors raise interrupts</h2>
+<p>Imagine a smoke detector that you have to keep asking "are you on fire?" every second. That is inefficient — you want it to tap you on the shoulder only when it detects smoke. Real I²C targets (temperature sensors, accelerometers, power monitors) work the same way: they raise an interrupt line (<code>irq</code>) when a threshold is crossed, and the host CPU handles it only when needed. This lesson combines everything from L1 and L2 — address matching, register read/write — and adds a threshold comparator that fires an interrupt.</p>
+
+<pre class="code-block">Block diagram:
+
+  SDA/SCL ──► i2c_addr_match ──► selected, rw_bit ──►┐
+                                                        │
+  SDA/SCL ──► i2c_target_reg ──► register file ───────►│
+                                      │                 │
+                                 regs[THRESH_REG]       │
+                                      │                 │
+                                 comparator             │
+                                      │                 │
+                                    irq ◄───────────────┘
+  IRQ line rises when regs[THRESH_REG] >= THRESHOLD parameter.</pre>
+
+<h2>The interrupt threshold comparator</h2>
+<p>Think of a thermostat: you set a target temperature, and the system fires an event when the room crosses it. In hardware this is a one-line comparison that runs combinationally every clock cycle:</p>
+<pre class="code-block">assign irq = (regs[THRESH_REG] &gt;= THRESHOLD);</pre>
+<p>The comparison is unsigned. <code>THRESH_REG</code> is a parameter selecting which of the 8 registers holds the monitored value. <code>THRESHOLD</code> is the trigger level.</p>
+
+<h2>Integrating the sub-modules</h2>
+<p>Rather than copy-pasting logic, a real design <em>instantiates</em> the earlier modules. This lesson follows the same pattern: the top-level module wires together an address-match block and a register block, then adds the comparator. You will see how sub-module ports connect through internal wires.</p>
+<pre class="code-block">i2c_addr_match #(.MY_ADDR(MY_ADDR)) u_match (
+  .clk(clk), .rst(rst), .scl(scl_in), .sda(sda_in),
+  .start(start_det), .selected(selected), .rw_bit(rw_bit)
+);
+
+i2c_target_reg u_reg (
+  .clk(clk), .rst(rst),
+  .selected(selected), .rw_bit(rw_bit),
+  ...
+);</pre>
+
+<table class="truth-table">
+  <tr><th>regs[THRESH_REG]</th><th>THRESHOLD</th><th>irq</th></tr>
+  <tr><td>0x00–(THRESHOLD-1)</td><td>any</td><td>0</td></tr>
+  <tr><td>THRESHOLD–0xFF</td><td>any</td><td>1</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are building the full I²C target: a top-level module that wires together an address-match detector, a register read/write block, and an IRQ comparator. Parameters control the 7-bit device address, which register is watched, and the threshold value. The <code>irq</code> output goes high whenever the watched register's value is greater than or equal to <code>THRESHOLD</code>. This is the same kind of alert logic you would find in a real power-management IC or sensor ASIC.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>System clock.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset.</td></tr>
+  <tr><td><code>scl</code></td><td>input logic</td><td>I²C clock input from the bus master.</td></tr>
+  <tr><td><code>sda_in</code></td><td>input logic</td><td>I²C data read from the bus (after open-drain sampling).</td></tr>
+  <tr><td><code>start_det</code></td><td>input logic</td><td>START condition pulse from an external i2c_cond_detect.</td></tr>
+  <tr><td><code>stop_det</code></td><td>input logic</td><td>STOP condition pulse from an external i2c_cond_detect.</td></tr>
+  <tr><td><code>tx_bit</code></td><td>output logic</td><td>Bit to place on SDA during read transactions (feed to open-drain cell).</td></tr>
+  <tr><td><code>ack_out</code></td><td>output logic</td><td>0 = ACK; 1 = NACK/release, driven on the 9th clock of each byte.</td></tr>
+  <tr><td><code>irq</code></td><td>output logic</td><td>Goes high when the threshold register is at or above THRESHOLD.</td></tr>
+</table>
+
+<p>Parameters: <code>MY_ADDR [6:0]</code>, <code>THRESH_REG [2:0]</code> (default 0), <code>THRESHOLD [7:0]</code> (default 8'h80).</p>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap \u{1F4A1} Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare module i2c_target with parameters MY_ADDR, THRESH_REG, THRESHOLD and all ports listed in the port table',
+        'Declare internal wires: selected, rw_bit, scl_rise, scl_fall, scl_d',
+        'Generate scl_rise and scl_fall strobes from a delayed copy of scl (always_ff for scl_d, combinational assign for rise/fall)',
+        'Instantiate i2c_addr_match connecting clk, rst, scl, sda_in, start_det to its ports; wire its selected and rw_bit outputs to internal signals',
+        'Instantiate i2c_target_reg connecting all clock/control/data signals; its tx_bit and ack_out connect to the top-level outputs',
+        'Declare a logic [7:0] array to hold the register file — OR expose register 0 through a wire from the sub-module for the comparator',
+        'Add the IRQ comparator: assign irq = (watched_reg >= THRESHOLD)',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 3 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`// DESIGN NOTES for i2c_target:
+//
+// This module wires together three blocks:
+//   1. i2c_addr_match  — compares incoming address to MY_ADDR
+//   2. i2c_target_reg  — register file with R/W FSM
+//   3. IRQ comparator  — fires irq when regs[THRESH_REG] >= THRESHOLD
+//
+// Internal wires needed:
+//   logic selected, rw_bit;        // from addr_match to target_reg
+//   logic scl_d, scl_rise, scl_fall; // edge detection
+//
+// SCL edge detection (same pattern as i2c_addr_match L1):
+//   always_ff @(posedge clk) scl_d <= scl;
+//   assign scl_rise = scl & ~scl_d;
+//   assign scl_fall = ~scl & scl_d;
+//
+// Sub-module instantiation:
+//   i2c_addr_match #(.MY_ADDR(MY_ADDR)) u_match (
+//     .clk(clk), .rst(rst), .scl(scl), .sda(sda_in),
+//     .start(start_det), .selected(selected), .rw_bit(rw_bit)
+//   );
+//
+//   i2c_target_reg u_reg (
+//     .clk(clk), .rst(rst),
+//     .selected(selected), .rw_bit(rw_bit),
+//     .scl_rise(scl_rise), .scl_fall(scl_fall),
+//     .rx_bit(sda_in), .stop(stop_det),
+//     .tx_bit(tx_bit), .ack_out(ack_out)
+//   );
+//
+// IRQ: expose the watched register via a wire OR read it from
+//   the register file array. Simplest self-contained approach:
+//   keep a local logic [7:0] irq_reg that shadows regs[THRESH_REG]
+//   (updated whenever a write to that address completes), then:
+//     assign irq = (irq_reg >= THRESHOLD);
+//
+// Alternatively, if i2c_target_reg exposes a read port, wire it here.
+//
+// State diagram for i2c_target_reg (reference):
+//   IDLE -> RECV_REG -> RECV_DATA -> IDLE   (write path)
+//   IDLE -> RECV_REG -> SEND_DATA -> IDLE   (read path)
+//
+// Ports summary:
+//   input:  clk, rst, scl, sda_in, start_det, stop_det
+//   output: tx_bit, ack_out, irq
+//   params: MY_ADDR[6:0], THRESH_REG[2:0], THRESHOLD[7:0]`,
+      design:
+`// Build the i2c_target module here. See Theory for the full spec.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  // --- DUT signals ---
+  logic rst, scl, sda_in, start_det, stop_det;
+  logic tx_bit, ack_out, irq;
+
+  // Use address 0x3C, watch register 1, threshold 0x40
+  i2c_target #(
+    .MY_ADDR   (7'h3C),
+    .THRESH_REG(3'd1),
+    .THRESHOLD (8'h40)
+  ) dut (
+    .clk(clk), .rst(rst), .scl(scl), .sda_in(sda_in),
+    .start_det(start_det), .stop_det(stop_det),
+    .tx_bit(tx_bit), .ack_out(ack_out), .irq(irq)
+  );
+
+  // Generate one SCL rise + fall strobe pair
+  task automatic clk_pulse();
+    scl = 1; @(posedge clk); #1;
+    scl = 0; @(posedge clk); #1;
+  endtask
+
+  // Send 8 bits MSB-first
+  task automatic send_byte(input logic [7:0] data);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      sda_in = data[i];
+      clk_pulse();
+    end
+  endtask
+
+  // Full write transaction: addr 0x3C W, reg, data
+  task automatic write_reg(input logic [2:0] reg_a, input logic [7:0] data);
+    start_det = 1; @(posedge clk); #1; start_det = 0;
+    // address byte: 0x3C | W(0) = 0x78
+    send_byte({7'h3C, 1'b0});
+    @(posedge clk); #1;
+    send_byte({5'b0, reg_a});   // register address (zero-padded)
+    @(posedge clk); #1;
+    send_byte(data);
+    @(posedge clk); #1;
+    stop_det = 1; @(posedge clk); #1; stop_det = 0;
+    repeat(2) @(posedge clk); #1;
+  endtask
+
+  initial begin
+    \$display("=== I2C Target with IRQ Test ===");
+    rst = 0; scl = 0; sda_in = 1;
+    start_det = 0; stop_det = 0;
+    repeat(4) @(posedge clk); #1;
+    rst = 1; @(posedge clk); #1;
+
+    // --- Test 1: IRQ should be low after reset ---
+    if (irq === 1'b0)
+      \$display("PASS  irq low after reset");
+    else
+      \$display("FAIL  irq=%0b after reset (expected 0)", irq);
+
+    // --- Test 2: Write 0x20 to reg 1 (below threshold 0x40) ---
+    write_reg(3'd1, 8'h20);
+    repeat(3) @(posedge clk); #1;
+    if (irq === 1'b0)
+      \$display("PASS  irq=0 when reg1=0x20 < threshold 0x40");
+    else
+      \$display("FAIL  irq=%0b when reg1=0x20 (expected 0)", irq);
+
+    // --- Test 3: Write 0x80 to reg 1 (above threshold 0x40) ---
+    write_reg(3'd1, 8'h80);
+    repeat(3) @(posedge clk); #1;
+    if (irq === 1'b1)
+      \$display("PASS  irq=1 when reg1=0x80 >= threshold 0x40");
+    else
+      \$display("FAIL  irq=%0b when reg1=0x80 (expected 1)", irq);
+
+    \$display("Target with IRQ works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  irq low after reset',
+        'PASS  irq=0 when reg1=0x20 < threshold 0x40',
+        'PASS  irq=1 when reg1=0x80 >= threshold 0x40',
+        'Target with IRQ works!'
+      ]
+    }
 
   ]
 });
+
 
