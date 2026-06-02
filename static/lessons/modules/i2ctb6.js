@@ -387,6 +387,206 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Testing the Auto-increment Pointer  (Tier 4)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb6l3',
+      title: 'L3 — Testing the Auto-increment Pointer',
+      theory: `
+<h2>Burst writes in the real world</h2>
+<p>Every I²C EEPROM and sensor you have ever used supports burst writes: you send the starting register address once, then clock out byte after byte without re-sending the address. A hardware pointer inside the device increments automatically after each byte is stored. This is called <em>auto-increment</em>. If the pointer does not advance — or fails to wrap around at the end of the address space — the entire burst is silently corrupted. Verification engineers catch this with a dedicated burst-write testbench.</p>
+
+<h2>How the auto-increment pointer works</h2>
+<pre class="code-block">  I²C transaction on wire:
+  [START][ADDR+W][ACK][reg_ptr=0][ACK]
+                     [byte0][ACK]   ← ptr advances to 1
+                     [byte1][ACK]   ← ptr advances to 2
+                     [byte2][ACK]   ← ptr advances to 3
+                     [byte3][ACK]   ← ptr advances to 4
+  [STOP]
+
+  Inside i2c_autoincr:
+  ┌─────────────────────────────────────────────┐
+  │  ptr_reg [3:0]  →  current write address    │
+  │  on each data_valid pulse: reg[ptr] = data  │
+  │                             ptr = ptr + 1   │
+  │  wrap: if ptr == MAX then ptr = 0           │
+  └─────────────────────────────────────────────┘</pre>
+
+<h2>What burst verification must prove</h2>
+<p>Verifying a burst pointer is like checking that an odometer advances correctly: write 4 bytes starting at address 0, then read back addresses 0, 1, 2, and 3 individually. Every register must hold the correct value — if the pointer stalled, multiple registers hold the first byte; if it skipped, some registers were never written. The wrap-around test checks the odometer rolls over from 15 back to 0 correctly.</p>
+
+<table class="truth-table">
+  <tr><th>Test scenario</th><th>What to verify</th><th>Failure symptom</th></tr>
+  <tr><td>Burst write 4 bytes at ptr=0</td><td>reg[0]=byte0, reg[1]=byte1, reg[2]=byte2, reg[3]=byte3</td><td>Pointer stalled — all regs hold byte0</td></tr>
+  <tr><td>Pointer starts from non-zero</td><td>reg[10]=byte0, reg[11]=byte1 after burst from ptr=10</td><td>Pointer offset bug — wrote wrong registers</td></tr>
+  <tr><td>Wrap-around at end of range</td><td>Burst starting at ptr=14 writes reg[14], reg[15], then reg[0], reg[1]</td><td>Pointer stops at 15 instead of wrapping</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are writing a testbench for <code>i2c_autoincr</code>, a register file with a built-in auto-incrementing write pointer. You set the initial pointer address once, then clock in data bytes one at a time. Each clock cycle with <code>data_valid=1</code> writes the current byte to the register at the current pointer address and advances the pointer. Your testbench must run a 4-byte burst starting at address 0, read all four registers back individually, and then verify the wrap-around behaviour starting near the end of the address range.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>System clock — all writes are synchronous on the rising edge.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset — clears pointer and all registers.</td></tr>
+  <tr><td><code>load_ptr</code></td><td>input logic</td><td>When high for one clock cycle, loads start_addr into the internal pointer register.</td></tr>
+  <tr><td><code>start_addr</code></td><td>input logic [3:0]</td><td>Initial pointer value loaded when load_ptr is asserted.</td></tr>
+  <tr><td><code>data_valid</code></td><td>input logic</td><td>When high on a rising edge, writes data_in to reg[ptr] and increments ptr.</td></tr>
+  <tr><td><code>data_in</code></td><td>input logic [7:0]</td><td>8-bit data byte to write to the current pointer address.</td></tr>
+  <tr><td><code>rd_addr</code></td><td>input logic [3:0]</td><td>Read address for the register file — combinational, independent of the write pointer.</td></tr>
+  <tr><td><code>rd_data</code></td><td>output logic [7:0]</td><td>Data at rd_addr — updates combinationally whenever rd_addr changes.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare a clocked testbench with clock, reset, and all i2c_autoincr ports',
+        'Write a task that loads the pointer to a given start address (assert load_ptr for one clock cycle)',
+        'Write a task that bursts N bytes: for each byte, drive data_in and assert data_valid for one clock cycle',
+        'After a 4-byte burst from address 0, read reg[0]–reg[3] individually and verify each matches its expected value — print PASS  burst write: 4 registers updated',
+        'Run a wrap-around test: burst 4 bytes starting at address 14 (ptr goes 14→15→0→1); verify reg[14], reg[15], reg[0], reg[1] — print PASS  pointer wrap-around',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 2 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`DESIGN NOTES for i2ctb6 L3 — Auto-increment Pointer Testbench
+
+Pointer load task:
+  task load_pointer(input logic [3:0] addr):
+    start_addr = addr; load_ptr = 1;
+    @(posedge clk); #1;
+    load_ptr = 0;
+
+Burst write task:
+  task burst_write(input logic [7:0] bytes[], input int count):
+    for each byte in 0..count-1:
+      data_in = bytes[i]; data_valid = 1;
+      @(posedge clk); #1;
+      data_valid = 0;
+      (optional: 1 idle cycle between bytes)
+
+Read-back helper:
+  task read_reg(input logic [3:0] addr, output logic [7:0] data):
+    rd_addr = addr; #1;
+    data = rd_data;
+
+Test 1 — 4-byte burst from ptr=0:
+  Load ptr=0
+  Burst bytes: 0xAA, 0xBB, 0xCC, 0xDD
+  Read reg[0]: expect 0xAA
+  Read reg[1]: expect 0xBB
+  Read reg[2]: expect 0xCC
+  Read reg[3]: expect 0xDD
+  -> PASS  burst write: 4 registers updated
+
+Test 2 — wrap-around from ptr=14:
+  Load ptr=14
+  Burst bytes: 0x11, 0x22, 0x33, 0x44
+  Read reg[14]: expect 0x11
+  Read reg[15]: expect 0x22
+  Read reg[0]:  expect 0x33   <- wrapped
+  Read reg[1]:  expect 0x44   <- wrapped
+  -> PASS  pointer wrap-around
+
+Pointer wraps: ptr = (ptr + 1) % 16  (4-bit natural overflow)`,
+      design:
+`// Build the i2c_autoincr testbench here. See Theory for the full spec.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       rst;
+  logic       load_ptr;
+  logic [3:0] start_addr;
+  logic       data_valid;
+  logic [7:0] data_in;
+  logic [3:0] rd_addr;
+  logic [7:0] rd_data;
+
+  i2c_autoincr dut (
+    .clk       (clk),
+    .rst       (rst),
+    .load_ptr  (load_ptr),
+    .start_addr(start_addr),
+    .data_valid(data_valid),
+    .data_in   (data_in),
+    .rd_addr   (rd_addr),
+    .rd_data   (rd_data)
+  );
+
+  task automatic load_pointer(input logic [3:0] addr);
+    start_addr = addr; load_ptr = 1;
+    @(posedge clk); #1;
+    load_ptr = 0;
+  endtask
+
+  task automatic burst_byte(input logic [7:0] bdata);
+    data_in = bdata; data_valid = 1;
+    @(posedge clk); #1;
+    data_valid = 0;
+  endtask
+
+  task automatic read_reg(input logic [3:0] addr, output logic [7:0] data);
+    rd_addr = addr; #1;
+    data = rd_data;
+  endtask
+
+  logic [7:0] rval;
+  logic all_ok;
+
+  initial begin
+    \$display("=== Auto-increment Pointer Test ===");
+    rst = 0; load_ptr = 0; data_valid = 0;
+    start_addr = 0; data_in = 0; rd_addr = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+
+    // Test 1: burst 4 bytes starting at ptr=0
+    load_pointer(4'd0);
+    burst_byte(8'hAA);
+    burst_byte(8'hBB);
+    burst_byte(8'hCC);
+    burst_byte(8'hDD);
+
+    all_ok = 1;
+    read_reg(4'd0, rval); if (rval !== 8'hAA) begin \$display("FAIL  reg[0]=0x%02h expected 0xaa", rval); all_ok = 0; end
+    read_reg(4'd1, rval); if (rval !== 8'hBB) begin \$display("FAIL  reg[1]=0x%02h expected 0xbb", rval); all_ok = 0; end
+    read_reg(4'd2, rval); if (rval !== 8'hCC) begin \$display("FAIL  reg[2]=0x%02h expected 0xcc", rval); all_ok = 0; end
+    read_reg(4'd3, rval); if (rval !== 8'hDD) begin \$display("FAIL  reg[3]=0x%02h expected 0xdd", rval); all_ok = 0; end
+    if (all_ok)
+      \$display("PASS  burst write: 4 registers updated");
+
+    // Test 2: wrap-around from ptr=14
+    load_pointer(4'd14);
+    burst_byte(8'h11);
+    burst_byte(8'h22);
+    burst_byte(8'h33);
+    burst_byte(8'h44);
+
+    all_ok = 1;
+    read_reg(4'd14, rval); if (rval !== 8'h11) begin \$display("FAIL  reg[14]=0x%02h expected 0x11", rval); all_ok = 0; end
+    read_reg(4'd15, rval); if (rval !== 8'h22) begin \$display("FAIL  reg[15]=0x%02h expected 0x22", rval); all_ok = 0; end
+    read_reg(4'd0,  rval); if (rval !== 8'h33) begin \$display("FAIL  reg[0]=0x%02h expected 0x33 (wrap)", rval); all_ok = 0; end
+    read_reg(4'd1,  rval); if (rval !== 8'h44) begin \$display("FAIL  reg[1]=0x%02h expected 0x44 (wrap)", rval); all_ok = 0; end
+    if (all_ok)
+      \$display("PASS  pointer wrap-around");
+
+    \$display("Auto-increment testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  burst write: 4 registers updated',
+        'PASS  pointer wrap-around',
+        'Auto-increment testbench works!'
+      ]
+    }
+
   ]
 });
