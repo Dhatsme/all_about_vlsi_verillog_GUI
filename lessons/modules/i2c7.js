@@ -180,6 +180,212 @@ endmodule`,
       ]
     },
 
-    // L2 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L2 — Clock Synchronisation  (Tier 4)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c7l2',
+      title: 'L2 — Clock Synchronisation',
+      theory: `
+<h2>The problem of two clocks on one wire</h2>
+<p>When two I²C masters are both active, each one drives its own SCL clock. Because both are open-drain, the physical SCL wire becomes the wired-AND of every master's output — if any one master drives 0, the entire bus sees 0, no matter what the others drive. The I²C spec turns this electrical accident into a feature called <strong>clock synchronisation</strong>. It lets the slowest master set the pace, enabling clock stretching without any central coordinator.</p>
+
+<pre class="code-block">Two-master clock synchronisation:
+
+Master A SCL out: ‾‾‾‾|____|‾‾‾‾|____|‾‾‾‾   (fast, period = 8 cycles)
+Master B SCL out: ‾‾‾‾‾‾‾‾|________|‾‾‾‾‾‾‾  (slow, period = 16 cycles)
+Bus SCL (AND):    ‾‾‾‾|_________|‾‾‾|_____|‾  wired-AND stretches lows
+
+                      ↑         ↑
+              A wants to go high, B still low → bus stays low
+              Both release → bus goes high</pre>
+
+<h2>The wired-AND rule</h2>
+<p>Think of two people holding the same rope. Either person can pull it down; the rope only rises when <em>both</em> let go. On an open-drain bus, the real SCL voltage at any instant is the AND of every master's internal SCL signal. The designer does not need extra glue logic for this — it is a consequence of the open-drain topology. But the synthesised module must still track when the bus has actually gone high so it can restart its own counter correctly.</p>
+
+<h3>Clock synchronisation algorithm</h3>
+<table class="truth-table">
+  <tr><th>Condition</th><th>Action</th><th>Reason</th></tr>
+  <tr><td>Any master drives SCL = 0</td><td>Bus = 0, all counters reset</td><td>Wired-AND forces low period to extend to slowest master</td></tr>
+  <tr><td>All masters release SCL = 1</td><td>Bus = 1, all counters restart high-phase</td><td>Only when every master has finished its low phase does the bus rise</td></tr>
+  <tr><td>A target stretches clock</td><td>Bus stays 0, master waits</td><td>Same mechanism — target holds SCL low to buy processing time</td></tr>
+</table>
+
+<h3>The registered rising-edge detect</h3>
+<pre class="code-block">// Detect when bus SCL rises (0 -> 1): used to restart the high-phase counter
+always_ff @(posedge clk) begin
+  scl_in_d &lt;= scl_in;            // 1-cycle delay
+end
+assign scl_rising = ~scl_in_d &amp;&amp; scl_in;   // rose this cycle</pre>
+
+<p>Once the high-phase counter expires, this master drives SCL low. Once its low-phase counter expires and the bus SCL is actually seen high (from the wired-AND), the cycle repeats. This is the essence of the I²C clock synchronisation protocol.</p>
+
+<h2>Before you code</h2>
+<p>You are about to build a clock synchronisation cell. It has its own internal divide-by-N counter just like the clock generator from i2c2, but it also monitors the real bus SCL line (<code>scl_in</code>). It drives <code>scl_out</code> with its local value. When the bus is held low by any other master or target, this master's counter pauses — it waits until the bus actually rises before counting the high phase. The open-drain wiring in the testbench does the AND for you; your job is to implement the wait logic.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>Fast system clock that drives all internal counters.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset — resets counters and drives SCL high.</td></tr>
+  <tr><td><code>en</code></td><td>input logic</td><td>Enable: 1 = run the clock generator and synchronisation logic.</td></tr>
+  <tr><td><code>scl_in</code></td><td>input logic</td><td>The actual voltage on the bus SCL wire (read-back after wired-AND).</td></tr>
+  <tr><td><code>scl_out</code></td><td>output logic</td><td>This master's open-drain SCL contribution (1 = release, 0 = drive low).</td></tr>
+</table>
+<p>Parameter: <code>CLK_DIV = 10</code>. Internally: a state machine with two states HIGH_PHASE and LOW_PHASE, and a counter that pauses the high phase if scl_in is not yet 1.</p>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare module i2c_clk_sync with parameter CLK_DIV=10 and ports: clk, rst, en, scl_in (inputs); scl_out (output)',
+        'Declare internal signals: a half-period counter, a state register (HIGH_PHASE / LOW_PHASE), and scl_in_d for edge detect',
+        'Add always_ff block: sample scl_in into scl_in_d each cycle (1-cycle delay for rising edge detect)',
+        'Add always_ff block for the counter/state FSM:',
+        '  On reset or !en: set scl_out=1, counter=0, state=HIGH_PHASE',
+        '  In HIGH_PHASE: count up; when counter reaches CLK_DIV/2-1 switch to LOW_PHASE and drive scl_out=0',
+        '  In LOW_PHASE: count up; when counter reaches CLK_DIV/2-1 check scl_in — only switch back to HIGH_PHASE (and release scl_out=1) when scl_in=1 (bus is actually high)',
+        'Close blocks and add endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 3 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`module i2c_clk_sync #(parameter CLK_DIV = 10) (
+  input  logic clk,
+  input  logic rst,      // synchronous active-low reset
+  input  logic en,       // 1 = run
+  input  logic scl_in,   // bus SCL read-back (wired-AND of all masters)
+  output logic scl_out   // this master's open-drain SCL drive
+);
+  localparam HALF = CLK_DIV / 2;
+  localparam CNT_W = $clog2(HALF + 1);
+
+  typedef enum logic {HIGH_PHASE, LOW_PHASE} phase_t;
+
+  phase_t              phase;
+  logic [CNT_W-1:0]   cnt;
+  logic                scl_in_d;
+
+  // 1-cycle delay for bus SCL (rising edge detection)
+  always_ff @(posedge clk) begin
+    if (!rst) scl_in_d <= 1'b1;
+    else      scl_in_d <= scl_in;
+  end
+
+  always_ff @(posedge clk) begin
+    if (!rst || !en) begin
+      scl_out <= 1'b1;       // release (bus idles high)
+      cnt     <= '0;
+      phase   <= HIGH_PHASE;
+    end else begin
+      case (phase)
+        HIGH_PHASE: begin
+          if (cnt == HALF - 1) begin
+            cnt     <= '0;
+            phase   <= LOW_PHASE;
+            scl_out <= 1'b0;   // pull SCL low
+          end else begin
+            cnt <= cnt + 1;
+          end
+        end
+        LOW_PHASE: begin
+          if (cnt == HALF - 1 && scl_in) begin
+            // only rise when bus SCL is actually high (wired-AND)
+            cnt     <= '0;
+            phase   <= HIGH_PHASE;
+            scl_out <= 1'b1;   // release SCL
+          end else if (cnt < HALF - 1) begin
+            cnt <= cnt + 1;    // keep counting low phase
+            // if cnt reached HALF-1 but scl_in still 0, pause (don't increment)
+          end
+        end
+      endcase
+    end
+  end
+
+endmodule`,
+      design:
+`// Build the i2c_clk_sync module here. See Theory for the full spec.
+//
+// Parameter: CLK_DIV = 10
+// Ports: clk, rst, en, scl_in (inputs); scl_out (output)
+//
+// Internal:
+//   phase: HIGH_PHASE or LOW_PHASE
+//   cnt: half-period counter
+//   scl_in_d: 1-cycle delayed scl_in for edge detection
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic rst, en;
+  logic scl_out_a;   // master A's drive
+  wire  scl_bus;     // wired-AND of all drivers
+
+  // Open-drain: pull-up; master A drives scl_bus via tristate
+  // scl_out_a=1 means release (high-Z), 0 means drive low
+  // Use a simple model: scl_bus = scl_out_a (single master, no other driver)
+  assign scl_bus = scl_out_a ? 1'bz : 1'b0;
+  pullup pu_scl(scl_bus);
+
+  i2c_clk_sync #(.CLK_DIV(10)) dut_a (
+    .clk(clk), .rst(rst), .en(en),
+    .scl_in(scl_bus), .scl_out(scl_out_a)
+  );
+
+  integer edges;
+  logic   prev;
+  integer i;
+
+  initial begin
+    \$display("=== I2C Clock Sync Test ===");
+
+    // Test 1: reset — scl_out must be 1 (released)
+    rst = 0; en = 0;
+    repeat(4) @(posedge clk); #1;
+    if (scl_out_a === 1'b1)
+      \$display("PASS  reset: scl_out=1 (idle high)");
+    else
+      \$display("FAIL  reset: scl_out=%0b (expected 1)", scl_out_a);
+
+    // Test 2: disabled, en=0 — still high
+    rst = 1; en = 0;
+    repeat(6) @(posedge clk); #1;
+    if (scl_out_a === 1'b1)
+      \$display("PASS  disabled: scl_out=1 (held high)");
+    else
+      \$display("FAIL  disabled: scl_out=%0b (expected 1)", scl_out_a);
+
+    // Test 3: enabled — count transitions in 60 cycles (CLK_DIV=10 => 6 edges expected)
+    en = 1;
+    prev  = scl_out_a;
+    edges = 0;
+    for (i = 0; i < 60; i++) begin
+      @(posedge clk); #1;
+      if (scl_out_a !== prev) begin
+        edges = edges + 1;
+        prev  = scl_out_a;
+      end
+    end
+    if (edges >= 5 && edges <= 7)
+      \$display("PASS  running: %0d SCL edges in 60 cycles (expected ~6)", edges);
+    else
+      \$display("FAIL  running: %0d SCL edges in 60 cycles (expected ~6)", edges);
+
+    \$display("Clock sync works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  reset: scl_out=1 (idle high)',
+        'PASS  disabled: scl_out=1 (held high)',
+        'PASS  running:',
+        'Clock sync works!'
+      ]
+    },
+
+    // L3 added next
   ]
 });
