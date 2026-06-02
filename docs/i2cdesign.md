@@ -13,8 +13,8 @@ This file is the build-agent's source of truth for the I²C Design course (i2c1�
 
 | # | Module ID | Title | Lessons | Status |
 |---|---|---|---|---|
-| 1 | `i2c1` | Open-Drain Fundamentals | i2c1l1–i2c1l6 (6 lessons) | ❌ **build this next** |
-| 2 | `i2c2` | Clock and Data Timing | i2c2l1–i2c2l6 (6 lessons) | ❌ |
+| 1 | `i2c1` | Open-Drain Fundamentals | i2c1l1–i2c1l6 (6 lessons) | ✅ done |
+| 2 | `i2c2` | Clock and Data Timing | i2c2l1–i2c2l6 (6 lessons) | ❌ **build this next** |
 | 3 | `i2c3` | Byte Transmission | i2c3l1–i2c3l6 (6 lessons) | ❌ |
 | 4 | `i2c4` | ACK/NACK and Error Handling | i2c4l1–i2c4l5 (5 lessons) | ❌ |
 | 5 | `i2c5` | Master Controller FSM | i2c5l1–i2c5l6 (6 lessons) | ❌ |
