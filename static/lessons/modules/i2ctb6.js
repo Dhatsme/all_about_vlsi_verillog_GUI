@@ -223,6 +223,170 @@ endmodule`,
       ]
     },
 
-    // L2 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L2 — Testing the Address Decoder  (Tier 4)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb6l2',
+      title: 'L2 — Testing the Address Decoder',
+      theory: `
+<h2>Why address decoder bugs are catastrophic</h2>
+<p>An address decoder maps a binary address to a one-hot select signal — exactly one output wire goes high for each valid input. At chip companies, a decoder bug is considered a P0 (showstopper) defect. If two addresses fire the same select, two registers fight on the data bus and corrupt each other's data silently. The fix is a systematic select-line coverage sweep: for every possible input address, exactly one select must be active — and outside the valid range, none must fire.</p>
+
+<h2>What the address decoder looks like</h2>
+<pre class="code-block">  addr [3:0]
+      │
+      ▼
+  ┌───────────────────┐
+  │  i2c_addr_decode  │
+  │  4-bit → 16-bit   │
+  │  one-hot output   │
+  └───────┬───────────┘
+          │
+  sel[15:0]   ← exactly one bit high per valid address</pre>
+
+<h2>One-hot select verification</h2>
+<p>Think of the one-hot check like a light panel with 16 switches: you want exactly one light on at a time. First count how many bits are set in sel — if the count is not 1, something is broken. Then verify the lit bit matches the address you provided. For out-of-range addresses (if the decoder has an enable or valid range), all 16 bits must be zero.</p>
+
+<pre class="code-block">// Count bits set in a 16-bit word
+function automatic int popcount16(input logic [15:0] v);
+  int c = 0;
+  for (int b = 0; b &lt; 16; b++) c += v[b];
+  return c;
+endfunction
+
+// Check: one-hot for address i
+// popcount(sel) === 1  AND  sel[i] === 1</pre>
+
+<table class="truth-table">
+  <tr><th>Test</th><th>Input</th><th>Expected sel</th><th>What it proves</th></tr>
+  <tr><td>In-range sweep</td><td>addr 0–15</td><td>sel[addr] = 1, all others = 0</td><td>Correct one-hot decode for every address</td></tr>
+  <tr><td>Out-of-range</td><td>addr with enable=0</td><td>sel = 16'h0000</td><td>Decoder gates off when not selected</td></tr>
+  <tr><td>Simultaneous decode</td><td>same addr twice</td><td>Same sel each time</td><td>Decode is deterministic — no glitch</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are writing a testbench for <code>i2c_addr_decode</code>, a combinational 4-to-16 one-hot decoder. The testbench must sweep all 16 in-range addresses and verify that for each address, exactly one select line goes high and it is the correct one. It must also verify that when the decoder is disabled (enable=0 or out-of-range input), all selects are zero. A correct run prints two PASS lines and a success message.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>addr</code></td><td>input logic [3:0]</td><td>4-bit address input — selects one of 16 outputs to assert.</td></tr>
+  <tr><td><code>en</code></td><td>input logic</td><td>Enable signal — when low, all select outputs are forced to zero regardless of addr.</td></tr>
+  <tr><td><code>sel</code></td><td>output logic [15:0]</td><td>One-hot select bus — exactly one bit is high when en=1; all zeros when en=0.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Instantiate i2c_addr_decode with ports: addr [3:0], en, sel [15:0]',
+        'Sweep all 16 in-range addresses (en=1, addr=0 to 15): for each, verify sel has exactly one bit set and sel[addr]===1 — report PASS or FAIL per address',
+        'After the sweep, if all 16 passed print PASS  in-range: one select active',
+        'Set en=0 and verify sel === 16\'h0000 for several addresses — report PASS  out-of-range: no select',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 2 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`DESIGN NOTES for i2ctb6 L2 — Address Decoder Testbench
+
+One-hot sweep (en=1):
+  For addr = 0 to 15:
+    drive en=1, addr=i
+    #1 (combinational settle)
+    count = number of bits set in sel (popcount)
+    if count != 1       -> FAIL "multiple selects or none fired"
+    if sel[i] != 1      -> FAIL "wrong select fired for addr i"
+  If all 16 pass -> print PASS  in-range: one select active
+
+Out-of-range / disabled check (en=0):
+  drive en=0, addr=0; #1; verify sel === 0
+  drive en=0, addr=7; #1; verify sel === 0
+  drive en=0, addr=15; #1; verify sel === 0
+  If all pass -> print PASS  out-of-range: no select
+
+Key structure:
+  logic [3:0] addr;
+  logic       en;
+  logic [15:0] sel;
+
+  i2c_addr_decode dut (.addr(addr), .en(en), .sel(sel));
+
+  // popcount helper (use a function or an integer loop)
+  function automatic int popcount16(input logic [15:0] v);
+    int c = 0;
+    for (int b = 0; b < 16; b++) c += v[b];
+    return c;
+  endfunction
+
+Combinational DUT — use #1 after changing inputs, NOT @(posedge clk)`,
+      design:
+`// Build the i2c_addr_decode testbench here. See Theory for the full spec.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic [3:0]  addr;
+  logic        en;
+  logic [15:0] sel;
+
+  i2c_addr_decode dut (
+    .addr(addr),
+    .en  (en),
+    .sel (sel)
+  );
+
+  function automatic int popcount16(input logic [15:0] v);
+    int c = 0;
+    for (int b = 0; b < 16; b = b + 1) c += int'(v[b]);
+    return c;
+  endfunction
+
+  integer i;
+  logic all_ok;
+
+  initial begin
+    \$display("=== Address Decoder Test ===");
+
+    // In-range sweep: en=1, addr 0..15
+    all_ok = 1;
+    en = 1;
+    for (i = 0; i < 16; i = i + 1) begin
+      addr = i[3:0]; #1;
+      if (popcount16(sel) !== 1) begin
+        \$display("FAIL  addr=%0d: %0d select lines active (expected 1)", i, popcount16(sel));
+        all_ok = 0;
+      end else if (sel[i] !== 1'b1) begin
+        \$display("FAIL  addr=%0d: wrong select fired (sel=0x%04h)", i, sel);
+        all_ok = 0;
+      end
+    end
+    if (all_ok)
+      \$display("PASS  in-range: one select active");
+
+    // Disabled: en=0 -> all selects must be zero
+    all_ok = 1;
+    en = 0;
+    for (i = 0; i < 16; i = i + 1) begin
+      addr = i[3:0]; #1;
+      if (sel !== 16'h0000) begin
+        \$display("FAIL  en=0 addr=%0d: sel=0x%04h (expected 0)", i, sel);
+        all_ok = 0;
+      end
+    end
+    if (all_ok)
+      \$display("PASS  out-of-range: no select");
+
+    \$display("Address decoder testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  in-range: one select active',
+        'PASS  out-of-range: no select',
+        'Address decoder testbench works!'
+      ]
+    },
+
+    // L3 added next
   ]
 });
