@@ -399,7 +399,214 @@ endmodule`,
       ]
     },
 
-    // L3 added in next commit
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Testing the Serial Shift Register  (Tier 2)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb1l3',
+      title: 'L3 — Testing the Serial Shift Register',
+      theory: `
+<h2>Why shift-register testing matters in industry</h2>
+<p>Every byte received over I&sup2;C passes through a shift register. In chip bring-up, engineers trace each bit individually to confirm the byte is assembled MSB-first and that the reset path works. A misaligned shift register delivers the right byte only one out of 256 times — hard to spot without systematic testing.</p>
+
+<h2>What can go wrong</h2>
+<p>Two common bugs: (1) bits are shifted LSB-first instead of MSB-first — byte appears byte-reversed, (2) reset doesn't clear all 8 bits — garbage value lurks in the high bits. Both are invisible in a single-value spot-check but show up when you test a known full byte like 0xA5.</p>
+
+<h2>ASCII trace — shifting in 0xA5 = 8'b10100101 MSB first</h2>
+<pre class="code-block">Reset:          byte_out = 0x00  (00000000)
+After bit 7=1:  byte_out = 0x01  (00000001)
+After bit 6=0:  byte_out = 0x02  (00000010)
+After bit 5=1:  byte_out = 0x05  (00000101)
+After bit 4=0:  byte_out = 0x0A  (00001010)
+After bit 3=0:  byte_out = 0x14  (00010100)
+After bit 2=1:  byte_out = 0x29  (00101001)
+After bit 1=0:  byte_out = 0x52  (01010010)
+After bit 0=1:  byte_out = 0xA5  (10100101)  ← correct!</pre>
+
+<h2>The task automatic pattern</h2>
+<p>Repeating eight separate stimulus blocks would be tedious and error-prone. Instead, we define a <code>task automatic</code> that encapsulates the single-bit shift stimulus. Think of it like a function call: describe the action once, then call it eight times. The keyword <code>automatic</code> makes the task use fresh local storage on each call — important in simulation.</p>
+
+<pre class="code-block">task automatic shift_bit(input logic b);
+  sda = b;       // put bit on the data line
+  shift_en = 1;  // tell DUT to sample and shift
+  @(posedge clk); #1;   // wait one clock cycle
+  shift_en = 0;  // deassert enable
+endtask</pre>
+
+<h2>Using the task to drive 0xA5</h2>
+<p>Once the task is defined, driving 0xA5 MSB-first is eight readable calls:</p>
+
+<pre class="code-block">// 0xA5 = 8'b1010_0101  MSB first:
+shift_bit(1); shift_bit(0); shift_bit(1); shift_bit(0);
+shift_bit(0); shift_bit(1); shift_bit(0); shift_bit(1);
+if (byte_out === 8'hA5) ...</pre>
+
+<h2>Before you code</h2>
+<p>You will write a testbench with a <code>task automatic shift_bit</code> that drives one bit into the DUT. Then in the <code>initial</code> block you will: (1) reset the DUT and verify byte_out is 0x00, (2) call shift_bit eight times to shift in 0xA5, (3) check byte_out === 8'hA5. A correct run prints two PASS lines followed by a success message.</p>
+
+<h2>Testbench signal declarations</h2>
+<table class="truth-table">
+  <tr><th>Signal</th><th>Type</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>logic</td><td>100 MHz testbench clock — drives the DUT's always_ff block.</td></tr>
+  <tr><td><code>rst</code></td><td>logic</td><td>Active-low synchronous reset — drive low then release to clear the shift register.</td></tr>
+  <tr><td><code>shift_en</code></td><td>logic</td><td>Enable signal — pulse high for one clock cycle inside shift_bit to shift one bit.</td></tr>
+  <tr><td><code>sda</code></td><td>logic</td><td>Serial data input — set this to each bit value before pulsing shift_en.</td></tr>
+  <tr><td><code>byte_out</code></td><td>logic [7:0]</td><td>Assembled parallel byte from DUT — verify this after all 8 bits are shifted in.</td></tr>
+</table>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap \u{1F4A1} Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        '── Line 1 ──  `timescale 1ns/1ps',
+        '── Line 2 ──  module tb;',
+        '── Line 3 ──  logic clk = 0;  always #5 clk = ~clk;   ← 100 MHz clock',
+        '── Line 4 ──  (blank line)',
+        '── Line 5 ──  logic rst, shift_en, sda;               ← DUT inputs',
+        '── Line 6 ──  logic [7:0] byte_out;                   ← DUT output, 8-bit bus',
+        '── Line 7 ──  (blank line)',
+        '── Line 8 ──  i2c_rx_shift dut (                      ← instantiate DUT',
+        '── Line 9 ──  .clk(clk), .rst(rst), .shift_en(shift_en),',
+        '── Line 10 ── .sda(sda), .byte_out(byte_out)',
+        '── Line 11 ── );',
+        '── Line 12 ── (blank line)',
+        '── Line 13 ── task automatic shift_bit(input logic b); ← reusable single-bit shift task',
+        '── Line 14 ──   sda = b; shift_en = 1;                ← set data, assert enable',
+        '── Line 15 ──   @(posedge clk); #1;                   ← wait one clock cycle',
+        '── Line 16 ──   shift_en = 0;                         ← deassert enable',
+        '── Line 17 ── endtask',
+        '── Line 18 ── (blank line)',
+        '── Line 19 ── initial begin',
+        '── Line 20 ── $display("=== I2C RX Shift Register Testbench ===");',
+        '── Line 21 ── rst = 0; shift_en = 0; sda = 0;',
+        '── Line 22 ── repeat(2) @(posedge clk); rst = 1; @(posedge clk); #1;  ← apply then release reset',
+        '── Line 23 ── if (byte_out === 8\'h00)  $display("PASS  reset: byte_out=0x00");',
+        '── Line 24 ── else  $display("FAIL  reset: byte_out=0x%02h", byte_out);',
+        '── Line 25 ── // Shift in 0xA5 = 8\'b10100101 MSB first',
+        '── Line 26 ── shift_bit(1); shift_bit(0); shift_bit(1); shift_bit(0);',
+        '── Line 27 ── shift_bit(0); shift_bit(1); shift_bit(0); shift_bit(1);',
+        '── Line 28 ── if (byte_out === 8\'hA5)  $display("PASS  received byte: 0x%02h", byte_out);',
+        '── Line 29 ── else  $display("FAIL  received byte: 0x%02h (expected 0xa5)", byte_out);',
+        '── Line 30 ── $display("Shift register testbench works!");',
+        '── Line 31 ── $finish;',
+        '── Line 32 ── end',
+        '── Line 33 ── endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 2 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;  // 100 MHz
+
+  logic rst, shift_en, sda;   // DUT inputs -- all logic, no inout here
+  logic [7:0] byte_out;        // DUT output -- 8-bit parallel result
+
+  i2c_rx_shift dut (
+    .clk(clk), .rst(rst), .shift_en(shift_en),
+    .sda(sda), .byte_out(byte_out)
+  );
+
+  // task automatic: reusable single-bit shift stimulus
+  // 'automatic' gives each call its own storage -- important in simulation
+  task automatic shift_bit(input logic b);
+    sda = b;              // put the bit on the serial data line
+    shift_en = 1;         // tell the DUT to sample and shift this cycle
+    @(posedge clk); #1;  // wait one full clock, then sample 1 ns after edge
+    shift_en = 0;         // deassert enable between bits
+  endtask
+
+  initial begin
+    \$display("=== I2C RX Shift Register Testbench ===");
+
+    // Step 1: apply reset (active-low), then release
+    rst = 0; shift_en = 0; sda = 0;
+    repeat(2) @(posedge clk);   // hold reset for 2 cycles
+    rst = 1; @(posedge clk); #1;
+    if (byte_out === 8'h00)
+      \$display("PASS  reset: byte_out=0x00");
+    else
+      \$display("FAIL  reset: byte_out=0x%02h (expected 0x00)", byte_out);
+
+    // Step 2: shift in 0xA5 = 8'b10100101 MSB first
+    // bit 7 first, bit 0 last
+    shift_bit(1); shift_bit(0); shift_bit(1); shift_bit(0);
+    shift_bit(0); shift_bit(1); shift_bit(0); shift_bit(1);
+
+    if (byte_out === 8'hA5)
+      \$display("PASS  received byte: 0x%02h", byte_out);
+    else
+      \$display("FAIL  received byte: 0x%02h (expected 0xa5)", byte_out);
+
+    \$display("Shift register testbench works!");
+    \$finish;
+  end
+endmodule`,
+      design:
+`// Type the i2c_rx_shift testbench here. See Theory for the concept.
+//
+// Signals to declare:
+//   logic clk          -- 100 MHz clock (always #5 clk = ~clk)
+//   logic rst          -- active-low synchronous reset
+//   logic shift_en     -- enable: pulse high for one cycle per bit
+//   logic sda          -- serial data input
+//   logic [7:0] byte_out  -- assembled byte from DUT
+//
+// Write a task automatic shift_bit(input logic b):
+//   set sda, assert shift_en, wait one clock, deassert shift_en
+//
+// In initial block:
+//   1. Reset and verify byte_out === 8'h00
+//   2. Call shift_bit 8 times for 0xA5 (10100101 MSB first)
+//   3. Verify byte_out === 8'hA5
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic rst, shift_en, sda;
+  logic [7:0] byte_out;
+
+  i2c_rx_shift dut (
+    .clk(clk), .rst(rst), .shift_en(shift_en),
+    .sda(sda), .byte_out(byte_out)
+  );
+
+  task automatic shift_bit(input logic b);
+    sda = b; shift_en = 1;
+    @(posedge clk); #1;
+    shift_en = 0;
+  endtask
+
+  initial begin
+    \$display("=== I2C RX Shift Register Testbench ===");
+    rst = 0; shift_en = 0; sda = 0;
+    repeat(2) @(posedge clk);
+    rst = 1; @(posedge clk); #1;
+    if (byte_out === 8'h00)
+      \$display("PASS  reset: byte_out=0x00");
+    else
+      \$display("FAIL  reset: byte_out=0x%02h (expected 0x00)", byte_out);
+    shift_bit(1); shift_bit(0); shift_bit(1); shift_bit(0);
+    shift_bit(0); shift_bit(1); shift_bit(0); shift_bit(1);
+    if (byte_out === 8'hA5)
+      \$display("PASS  received byte: 0x%02h", byte_out);
+    else
+      \$display("FAIL  received byte: 0x%02h (expected 0xa5)", byte_out);
+    \$display("Shift register testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  reset: byte_out=0x00',
+        'PASS  received byte: 0xa5',
+        'Shift register testbench works!'
+      ]
+    }
 
   ]
 });
