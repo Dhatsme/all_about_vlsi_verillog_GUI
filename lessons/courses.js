@@ -19,5 +19,12 @@ window.COURSES = [
     icon: '🧪',
     description: 'Write directed testbenches for every SPI module — from shift registers to multi-peripheral controllers',
     modules: ['spitb1', 'spitb2', 'spitb3', 'spitb4', 'spitb5', 'spitb6', 'spitb7'],
+  },
+  {
+    id: 'i2c',
+    title: 'I²C Design',
+    icon: '🔗',
+    description: 'Master open-drain I/O, START/STOP conditions, byte transfer, and full I²C controller design',
+    modules: ['i2c1'],
   }
 ];
