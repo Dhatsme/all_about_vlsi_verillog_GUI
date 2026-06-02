@@ -213,6 +213,202 @@ endmodule`,
       ]
     },
 
-    // L2 added in next commit
+    // ────────────────────────────────────────────────────────────────────
+    // L2 — Testing the Data Bit Transmitter  (Tier 2)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb2l2',
+      title: 'L2 — Testing the Data Bit Transmitter',
+      theory: `
+<h2>Why setup and hold violations cause silent data corruption</h2>
+<p>At chip companies, one of the most feared bugs is a setup-time violation on the I²C bus. The target device samples SDA on the rising edge of SCL. If SDA changes too close to that rising edge — or worse, while SCL is already high — the sample is unreliable. The target might latch a 1 instead of a 0. Your data is wrong, but no error flag fires. The write "succeeds" and you find the corruption hours later when a readback fails. This testbench catches that class of bug before a single transistor is manufactured.</p>
+
+<h2>Setup and hold windows around the SCL rising edge</h2>
+<p>Think of the SCL rising edge as the closing of a camera shutter. For the photo to be sharp, the subject (SDA) must be perfectly still before the shutter closes (setup time) and stay still for a moment after (hold time). If SDA moves during exposure — blurry photo, wrong bit.</p>
+
+<pre class="code-block">// Setup/hold window around SCL rising edge
+//
+// SDA:  ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+//                   ↑ must be stable here ↑
+// SCL:  ____________|‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾|___
+//                   ↑ rising edge         ↑ falling edge
+//       SDA must not change while SCL is high</pre>
+
+<h2>How to check stability in a testbench</h2>
+<p>Sample SDA once when SCL goes high, then sample it again just before SCL goes low. If the two samples match, SDA was stable. The testbench uses the open-drain model: <code>sda_out</code> is an inout wire with a pullup, so released = 1 and driven-low = 0, exactly as on a real bus.</p>
+
+<pre class="code-block">// SCL-edge-aligned sampling pattern
+logic sda_at_rise, sda_at_fall;
+
+// After SCL goes high:
+@(posedge scl); #1;
+sda_at_rise = sda_out;   // capture SDA shortly after rising edge
+
+// Just before SCL goes low:
+@(negedge scl); #1;
+sda_at_fall = sda_out;   // capture SDA shortly after falling edge
+
+// Stability check: both samples must match
+if (sda_at_rise === sda_at_fall) ... // SDA was stable during SCL high</pre>
+
+<table class="truth-table">
+  <tr><th>bit_in</th><th>Expected sda_out during SCL high</th><th>What to check</th></tr>
+  <tr><td>0</td><td>0 (driven low)</td><td>sda_out === 0 at both rise and fall samples</td></tr>
+  <tr><td>1</td><td>1 (released, pullup wins)</td><td>sda_out === 1 at both rise and fall samples</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are writing a testbench for <code>i2c_bit_tx</code>. The DUT takes <code>clk</code>, <code>rst</code>, <code>scl</code>, and <code>bit_in</code>, and drives <code>sda_out</code> as an open-drain inout. Your testbench supplies SCL manually (toggle it yourself — you control timing here), asserts a bit value, then samples SDA at the SCL rising edge and falling edge to verify it was stable throughout. Two scenarios: send bit=0 and verify SDA is low during SCL high; send bit=1 and verify SDA is high during SCL high.</p>
+
+<table class="truth-table">
+  <tr><th>Port/Signal</th><th>Direction</th><th>Declare as</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>driven by TB</td><td><code>logic</code></td><td>System clock; free-running 100 MHz oscillator in the TB</td></tr>
+  <tr><td><code>rst</code></td><td>driven by TB</td><td><code>logic</code></td><td>Active-low reset; assert for 2 cycles then release before test starts</td></tr>
+  <tr><td><code>scl</code></td><td>driven by TB</td><td><code>logic</code></td><td>SCL line driven manually by the TB to control the sampling window</td></tr>
+  <tr><td><code>bit_in</code></td><td>driven by TB</td><td><code>logic</code></td><td>The data bit the DUT should transmit on the next SCL cycle</td></tr>
+  <tr><td><code>sda_out</code></td><td>inout from DUT</td><td><code>wire</code></td><td>Open-drain SDA — must be wire so the pullup primitive can drive it</td></tr>
+  <tr><td><code>pu</code></td><td>pullup primitive</td><td><code>pullup</code></td><td>Simulates the external I²C pull-up resistor; releases sda_out to 1</td></tr>
+</table>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        '── Line 1 ──  `timescale 1ns/1ps',
+        '── Line 2 ──  module tb;',
+        '── Line 4 ──  wire  sda_out;          ← inout must be wire, not logic',
+        '── Line 5 ──  pullup pu(sda_out);     ← simulates external pull-up resistor',
+        '── Line 7 ──  logic clk = 0;  always #5 clk = ~clk;   ← 100 MHz clock',
+        '── Line 8 ──  logic rst, scl, bit_in;   ← driven signals are logic',
+        '── Line 10 ── i2c_bit_tx dut instantiation with all four ports',
+        '── Line 12 ── task automatic check_bit — takes expected value, drives SCL high then low, samples SDA',
+        '── Line 13 ──   inside task: scl=0 first (SDA changes while SCL low)',
+        '── Line 14 ──   scl=1; @(posedge clk); #1; — sample SDA at rise',
+        '── Line 15 ──   scl=0; @(posedge clk); #1; — done with this bit',
+        '── Line 16 ──   compare sda_out with expected, display PASS or FAIL',
+        '── Line 19 ── initial begin — reset, then check_bit(0,0), check_bit(1,1)',
+        '── Line 25 ── $display("Bit TX testbench works!"); $finish;',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 2 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`\`timescale 1ns/1ps
+module tb;
+
+  wire  sda_out;          // inout: must be wire so pullup can drive it
+  pullup pu(sda_out);     // external pull-up resistor — released = 1
+
+  logic clk = 0;
+  always #5 clk = ~clk;  // 100 MHz system clock
+
+  logic rst, scl, bit_in;
+
+  i2c_bit_tx dut (
+    .clk    (clk),
+    .rst    (rst),
+    .scl    (scl),
+    .bit_in (bit_in),
+    .sda_out(sda_out)
+  );
+
+  // Sample SDA while SCL is high — check it matches expected value
+  task automatic check_bit(input logic b, input logic exp);
+    bit_in = b;
+    scl = 0;                         // SCL low: DUT sets up SDA now
+    @(posedge clk); #1;
+    scl = 1;                         // SCL rising edge: sample window opens
+    @(posedge clk); #1;
+    if (sda_out === exp)
+      $display("PASS  bit=%0b: sda=%0b during SCL high", b, sda_out);
+    else
+      $display("FAIL  bit=%0b: sda=%0b during SCL high (expected %0b)", b, sda_out, exp);
+    scl = 0;                         // SCL falling edge: bit done
+    @(posedge clk); #1;
+  endtask
+
+  initial begin
+    $display("=== I2C Bit TX Test ===");
+    rst = 0; scl = 0; bit_in = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1; @(posedge clk); #1;
+
+    check_bit(0, 0);   // send 0 -> SDA should be driven low
+    check_bit(1, 1);   // send 1 -> SDA should be released (pullup = 1)
+
+    $display("Bit TX testbench works!");
+    $finish;
+  end
+endmodule`,
+      design:
+`// Type the i2c_bit_tx testbench here.
+// Read Theory first — it explains the setup/hold window check.
+//
+// Ports to connect to i2c_bit_tx:
+//   clk     — system clock (logic)
+//   rst     — active-low reset (logic)
+//   scl     — SCL line driven by TB (logic)
+//   bit_in  — bit to transmit (logic)
+//   sda_out — open-drain output (wire + pullup)
+//
+// Scenarios:
+//   1. Send bit=0 => sda_out must be 0 while SCL is high
+//   2. Send bit=1 => sda_out must be 1 while SCL is high
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+
+  wire  sda_out;
+  pullup pu(sda_out);
+
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic rst, scl, bit_in;
+
+  i2c_bit_tx dut (
+    .clk    (clk),
+    .rst    (rst),
+    .scl    (scl),
+    .bit_in (bit_in),
+    .sda_out(sda_out)
+  );
+
+  task automatic check_bit(input logic b, input logic exp);
+    bit_in = b;
+    scl = 0;
+    @(posedge clk); #1;
+    scl = 1;
+    @(posedge clk); #1;
+    if (sda_out === exp)
+      \$display("PASS  bit=%0b: sda=%0b during SCL high", b, sda_out);
+    else
+      \$display("FAIL  bit=%0b: sda=%0b during SCL high (expected %0b)", b, sda_out, exp);
+    scl = 0;
+    @(posedge clk); #1;
+  endtask
+
+  initial begin
+    \$display("=== I2C Bit TX Test ===");
+    rst = 0; scl = 0; bit_in = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1; @(posedge clk); #1;
+
+    check_bit(0, 0);
+    check_bit(1, 1);
+
+    \$display("Bit TX testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  bit=0: sda=0 during SCL high',
+        'PASS  bit=1: sda=1 during SCL high',
+        'Bit TX testbench works!'
+      ]
+    },
+
+    // L3 added in next commit
   ]
 });
