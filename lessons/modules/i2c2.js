@@ -188,6 +188,189 @@ endmodule`,
       ]
     },
 
-    // L2 added next
+
+    // ────────────────────────────────────────────────────────────────────
+    // L2 — Data Bit Transmitter  (Tier 2)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c2l2',
+      title: 'L2 — Data Bit Transmitter',
+      theory: `
+<h2>Where this rule matters in the real world</h2>
+<p>Every I²C device ever made — from the humidity sensor on a drone to the EEPROM inside your SSD — obeys one cardinal rule: <strong>SDA must only change while SCL is LOW</strong>. If SDA moves while SCL is high, every device on the bus interprets it as a START or STOP condition, corrupting the current transfer. The bit transmitter you are about to build enforces that rule in hardware, making it physically impossible to violate.</p>
+
+<h2>Setup and hold — visualised</h2>
+<pre class="code-block">SCL:    _____|‾‾‾‾‾‾‾‾‾‾‾|_____
+SDA:  XXXXX|‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾|XXX
+             ↑                 ↑
+        SDA stable         SDA may
+        before rising      change only
+        edge               after falling edge</pre>
+
+<h2>The latch-on-falling-edge trick</h2>
+<p>The safest moment to update SDA is right after SCL falls low — the receiver has already sampled the previous bit, and there is a full half-period before SCL rises again. We detect the falling edge of SCL with a 1-clock delay register (the same pattern you saw in i2c1 L2) and latch the new data bit at that instant:</p>
+<pre class="code-block">logic scl_d;   // SCL from previous clock cycle
+
+always_ff @(posedge clk) begin
+  scl_d &lt;= scl;
+  if (scl_d &amp;&amp; !scl)      // SCL just fell
+    sda_reg &lt;= tx_data;   // safe to update SDA now
+end</pre>
+
+<h2>Open-drain reminder</h2>
+<p>SDA is open-drain. The transmitter never drives it to 1 — it either pulls it low (0) or releases it (high-Z). To send a 1, release the wire and let the pull-up resistor do the work.</p>
+<pre class="code-block">assign sda_out = sda_reg ? 1'bz : 1'b0;
+//                   ↑ bit=1: release    ↑ bit=0: pull low</pre>
+
+<table class="truth-table">
+  <tr><th>SCL edge</th><th>sda_reg update</th><th>sda_out</th></tr>
+  <tr><td>rising</td><td>no change (receiver samples here)</td><td>stable</td></tr>
+  <tr><td>falling</td><td>latch tx_data</td><td>updates after latch</td></tr>
+  <tr><td>rst=0</td><td>sda_reg = 1 (released)</td><td>1'bz</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>What you are about to build is a one-bit transmitter that watches SCL and only updates SDA at the safe moment — immediately after SCL falls low. It stores the current bit in an internal register so SDA stays stable for the entire SCL high phase.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>Fast system clock used to detect the SCL falling edge.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset — releases SDA high (bus idle).</td></tr>
+  <tr><td><code>scl</code></td><td>input logic</td><td>The I²C clock input — the transmitter watches this for falling edges.</td></tr>
+  <tr><td><code>tx_data</code></td><td>input logic</td><td>The bit you want to send — latched onto SDA at the next SCL falling edge.</td></tr>
+  <tr><td><code>sda_out</code></td><td>output logic</td><td>The open-drain SDA value: 0 to pull low, 1'bz to release (send a 1).</td></tr>
+</table>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        '── Line 1 ──  module i2c_bit_tx (',
+        '── Line 2 ──  input  logic clk,      ← comma',
+        '── Line 3 ──  input  logic rst,      ← comma (synchronous active-low reset)',
+        '── Line 4 ──  input  logic scl,      ← comma (I²C clock to watch for falling edge)',
+        '── Line 5 ──  input  logic tx_data,  ← comma (bit to transmit)',
+        '── Line 6 ──  output logic sda_out   ← NO comma (last port)',
+        '── Line 7 ──  );',
+        '── Line 8 ──  Declare two internal logic signals: scl_d and sda_reg',
+        '── Line 9 ──  always_ff @(posedge clk) begin',
+        '── Line 10 ──   if (!rst) begin  ← reset: release bus',
+        '── Line 11 ──     scl_d   <= 1;   sda_reg <= 1;',
+        '── Line 12 ──   end else begin',
+        '── Line 13 ──     scl_d <= scl;                    ← delay register for SCL',
+        '── Line 14 ──     if (scl_d && !scl)               ← SCL just fell?',
+        '── Line 15 ──       sda_reg <= tx_data;            ← latch new bit now',
+        '── Line 16 ──   end',
+        '── Line 17 ──  end',
+        '── Line 18 ──  assign sda_out = sda_reg ? 1\'bz : 1\'b0;  ← open-drain driver',
+        '── Line 19 ──  endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 3 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`module i2c_bit_tx (
+  input  logic clk,       // system clock
+  input  logic rst,       // synchronous active-low reset
+  input  logic scl,       // I2C clock (generated externally)
+  input  logic tx_data,   // bit to transmit
+  output logic sda_out    // open-drain SDA output
+);
+  logic scl_d;    // SCL delayed one cycle (for falling-edge detect)
+  logic sda_reg;  // registered bit value, holds SDA stable
+
+  always_ff @(posedge clk) begin
+    if (!rst) begin
+      scl_d   <= 1;
+      sda_reg <= 1;   // release bus on reset
+    end else begin
+      scl_d <= scl;
+      if (scl_d && !scl)       // SCL fell: safe window to change SDA
+        sda_reg <= tx_data;    // latch the new bit
+    end
+  end
+
+  // Open-drain: pull low for 0, release (high-Z) for 1
+  assign sda_out = sda_reg ? 1'bz : 1'b0;
+
+endmodule`,
+      design:
+`// Type the i2c_bit_tx module here.
+// Read Theory first -- it explains the I2C SDA timing rule.
+//
+// Ports: clk, rst, scl, tx_data (inputs), sda_out (output)
+// Internal: logic scl_d   -- SCL delayed one cycle
+//           logic sda_reg -- holds current SDA bit stable
+//
+// Logic:
+//   Detect SCL falling edge: scl_d && !scl
+//   On falling edge: sda_reg <= tx_data
+//   Open-drain output: assign sda_out = sda_reg ? 1'bz : 1'b0
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  wire  sda_out;          // inout-style: observe as wire
+  pullup pu(sda_out);     // simulate external pull-up
+
+  logic rst, scl, tx_data;
+
+  i2c_bit_tx dut (
+    .clk(clk), .rst(rst), .scl(scl),
+    .tx_data(tx_data), .sda_out(sda_out)
+  );
+
+  // Drive one falling SCL edge and wait a couple of system clocks
+  task automatic scl_fall;
+    scl = 1; @(posedge clk); #1;
+    scl = 0; @(posedge clk); #1;
+    @(posedge clk); #1;   // let latch settle
+  endtask
+
+  initial begin
+    \$display("=== I2C Bit TX Test ===");
+
+    // Reset: SDA should be released (1 via pull-up)
+    rst = 0; scl = 1; tx_data = 0;
+    repeat(3) @(posedge clk); #1;
+    if (sda_out === 1)
+      \$display("PASS  reset: sda_out=1 (released)");
+    else
+      \$display("FAIL  reset: sda_out=%0b (expected 1)", sda_out);
+
+    rst = 1;
+
+    // Transmit 0: after SCL falling edge, SDA should go low
+    tx_data = 0;
+    scl_fall();
+    if (sda_out === 0)
+      \$display("PASS  tx_data=0: sda_out=0 (pulled low)");
+    else
+      \$display("FAIL  tx_data=0: sda_out=%0b (expected 0)", sda_out);
+
+    // Transmit 1: after next SCL falling edge, SDA should be released (1)
+    tx_data = 1;
+    scl_fall();
+    if (sda_out === 1)
+      \$display("PASS  tx_data=1: sda_out=1 (released)");
+    else
+      \$display("FAIL  tx_data=1: sda_out=%0b (expected 1)", sda_out);
+
+    \$display("Bit TX works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  reset: sda_out=1 (released)',
+        'PASS  tx_data=0: sda_out=0 (pulled low)',
+        'PASS  tx_data=1: sda_out=1 (released)',
+        'Bit TX works!'
+      ]
+    },
+
+    // L3 added next
   ]
 });
