@@ -254,7 +254,222 @@ endmodule`,
       ]
     },
 
-    // L2 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L2 — Testing RX Byte + ACK  (Tier 3)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb3l2',
+      title: 'L2 — Testing RX Byte + ACK',
+      theory: `
+<h2>Verifying the receiver — the master plays a different role</h2>
+<p>In a real I²C system, a temperature sensor sits quietly on the bus waiting for a read command. When the master sends a READ, the <em>target</em> drives SDA for 8 cycles while the master clocks SCL. The target's RX path is never exercised until a real master asks for data. In simulation you are that master. If you do not drive the SCL pulses and the data bits yourself, the RX byte module never moves out of IDLE — and a silent hang is indistinguishable from a passing test.</p>
+
+<h2>The 9-clock receive sequence</h2>
+<pre class="code-block">  SCL:  ___|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|_|‾|___|‾|___
+  SDA:   B7  B6  B5  B4  B3  B2  B1  B0    ACK
+         ↑ sample on rising SCL edge           ↑ master drives ACK</pre>
+
+<p>Each bit is sampled by the DUT on the <strong>rising edge of SCL</strong>. The testbench drives SDA before raising SCL, holds it stable through the high phase, then lowers SCL again. After 8 data bits, the master drives SDA low for one more SCL cycle to signal ACK, or leaves it high for NACK.</p>
+
+<h2>The drive_byte task</h2>
+<p>Rather than copying 8 blocks of SCL stimulus, you write it once as a task. The task accepts a byte value and loops from bit 7 down to bit 0, driving SDA then toggling SCL:</p>
+
+<pre class="code-block">task automatic drive_byte(input logic [7:0] data);
+  integer i;
+  for (i = 7; i &gt;= 0; i--) begin
+    sda_tb = data[i];          // put the bit on the bus
+    @(posedge clk); #1; scl = 1;
+    @(posedge clk); #1; scl = 0;
+  end
+  // testbench drives ACK after the loop
+endtask</pre>
+
+<h2>What to check</h2>
+<table class="truth-table">
+  <tr><th>Test scenario</th><th>Input byte</th><th>ACK driven</th><th>Expected outputs</th></tr>
+  <tr><td>Normal receive</td><td>0xB6</td><td>low (ACK)</td><td>byte_out = 0xB6, valid pulses</td></tr>
+  <tr><td>All-zero receive</td><td>0x00</td><td>high (NACK)</td><td>byte_out = 0x00, valid pulses; ack_out = 1</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are writing a testbench that acts as the I2C master: driving SDA bit by bit while toggling SCL, then checking that the DUT assembled the correct byte and pulsed <code>valid</code> at the right time. The NACK check confirms the DUT reports the correct acknowledgement state. A passing run shows three PASS lines and "RX byte testbench works!".</p>
+
+<h2>Testbench port table</h2>
+<table class="truth-table">
+  <tr><th>Signal</th><th>Type in TB</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>logic, clock gen</td><td>System clock that drives all flip-flops in the DUT.</td></tr>
+  <tr><td><code>rst</code></td><td>logic</td><td>Active-low synchronous reset; assert for two cycles before each test.</td></tr>
+  <tr><td><code>scl</code></td><td>logic</td><td>I2C clock driven by the testbench; one rising edge per data bit.</td></tr>
+  <tr><td><code>sda_tb</code></td><td>logic</td><td>Serial data driven by the testbench (master side); connects to DUT's sda_in.</td></tr>
+  <tr><td><code>byte_out</code></td><td>logic [7:0]</td><td>Assembled byte output from the DUT; checked after the 8th bit.</td></tr>
+  <tr><td><code>valid</code></td><td>logic</td><td>DUT pulses this high for one cycle when a complete byte has been received.</td></tr>
+  <tr><td><code>ack_out</code></td><td>logic</td><td>DUT drives this on the ACK slot: 0 = ACK driven, 1 = NACK driven.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare module tb; with system clock generation (always #5 clk = ~clk)',
+        'Declare scl as logic and sda_tb as logic (master-driven SDA)',
+        'Declare output signals from DUT: byte_out [7:0], valid, ack_out',
+        'Instantiate i2c_rx_byte dut connecting clk, rst, scl, sda_in (← sda_tb), byte_out, valid, ack_out',
+        'Write drive_byte task: loop bit 7..0, drive sda_tb = data[i], pulse SCL high then low each iteration',
+        'After the loop: drive ack_out clock (sda_tb low for ACK, high for NACK), pulse SCL, then wait one extra clk cycle',
+        'In initial block: reset DUT, call drive_byte(8\'hB6) with ACK; verify byte_out === 8\'hB6 and valid pulsed',
+        'Second test: reset, call drive_byte(8\'h00) with NACK; verify byte_out === 8\'h00 and valid pulsed',
+        'Check NACK driven correctly: ack_out === 1 in the NACK scenario',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 3 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       scl    = 0;
+  logic       rst;
+  logic       sda_tb;      // testbench drives SDA (master role)
+  logic [7:0] byte_out;
+  logic       valid;
+  logic       ack_out;
+
+  i2c_rx_byte dut (
+    .clk    (clk),
+    .rst    (rst),
+    .scl    (scl),
+    .sda_in (sda_tb),
+    .byte_out(byte_out),
+    .valid  (valid),
+    .ack_out(ack_out)
+  );
+
+  // drive_byte: clock 8 bits onto SDA MSB-first, then drive ACK/NACK slot
+  task automatic drive_byte(input logic [7:0] data, input logic send_ack);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      sda_tb = data[i];          // set bit before raising SCL
+      @(posedge clk); #1; scl = 1;
+      @(posedge clk); #1; scl = 0;
+    end
+    // 9th SCL cycle: master drives ACK (low) or NACK (high)
+    sda_tb = send_ack ? 1'b0 : 1'b1;
+    @(posedge clk); #1; scl = 1;
+    @(posedge clk); #1; scl = 0;
+    @(posedge clk); #1;   // one extra cycle for valid/ack_out to settle
+  endtask
+
+  initial begin
+    \$display("=== RX Byte + ACK Test ===");
+
+    // --- Test 1: receive 0xB6 with ACK ---
+    rst = 0; sda_tb = 1; scl = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+    drive_byte(8'hB6, 1);
+    if (byte_out === 8'hB6)
+      \$display("PASS  received 0xb6");
+    else
+      \$display("FAIL  received 0x%02h (expected 0xb6)", byte_out);
+
+    if (valid === 1)
+      \$display("PASS  valid pulsed");
+    else
+      \$display("FAIL  valid did not pulse");
+
+    // --- Test 2: receive 0x00 with NACK ---
+    rst = 0; repeat(2) @(posedge clk); #1; rst = 1;
+    drive_byte(8'h00, 0);
+    if (ack_out === 1)
+      \$display("PASS  NACK driven correctly");
+    else
+      \$display("FAIL  NACK: ack_out=%0b (expected 1)", ack_out);
+
+    \$display("RX byte testbench works!");
+    \$finish;
+  end
+endmodule`,
+      design:
+`// Type the i2c_rx_byte testbench here. See Theory for the concept.
+//
+// Ports: clk, rst, scl, sda_tb (inputs to DUT), byte_out [7:0], valid, ack_out (outputs)
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       scl    = 0;
+  logic       rst;
+  logic       sda_tb;
+  logic [7:0] byte_out;
+  logic       valid;
+  logic       ack_out;
+
+  i2c_rx_byte dut (
+    .clk    (clk),
+    .rst    (rst),
+    .scl    (scl),
+    .sda_in (sda_tb),
+    .byte_out(byte_out),
+    .valid  (valid),
+    .ack_out(ack_out)
+  );
+
+  task automatic drive_byte(input logic [7:0] data, input logic send_ack);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      sda_tb = data[i];
+      @(posedge clk); #1; scl = 1;
+      @(posedge clk); #1; scl = 0;
+    end
+    sda_tb = send_ack ? 1'b0 : 1'b1;
+    @(posedge clk); #1; scl = 1;
+    @(posedge clk); #1; scl = 0;
+    @(posedge clk); #1;
+  endtask
+
+  initial begin
+    \$display("=== RX Byte + ACK Test ===");
+    rst = 0; sda_tb = 1; scl = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+
+    drive_byte(8'hB6, 1);
+    if (byte_out === 8'hB6)
+      \$display("PASS  received 0xb6");
+    else
+      \$display("FAIL  received 0x%02h (expected 0xb6)", byte_out);
+
+    if (valid === 1)
+      \$display("PASS  valid pulsed");
+    else
+      \$display("FAIL  valid did not pulse");
+
+    rst = 0; repeat(2) @(posedge clk); #1; rst = 1;
+    drive_byte(8'h00, 0);
+    if (ack_out === 1)
+      \$display("PASS  NACK driven correctly");
+    else
+      \$display("FAIL  NACK: ack_out=%0b", ack_out);
+
+    \$display("RX byte testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  received 0xb6',
+        'PASS  valid pulsed',
+        'PASS  NACK driven correctly',
+        'RX byte testbench works!'
+      ]
+    },
+
+    // L3 added next
 
   ]
 });
