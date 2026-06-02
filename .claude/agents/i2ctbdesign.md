@@ -24,13 +24,13 @@ The student already knows the hardware — now they learn to **verify** it.
 
 | # | Module ID | Title | Lessons | Tier | Status |
 |---|---|---|---|---|---|
-| 1 | `i2ctb1` | I²C Fundamentals Testbench | L1 Testing Open-Drain IO, L2 Testing START/STOP Detector, L3 Testing Serial Shift Register | 1–2 | ❌ **build this next** |
-| 2 | `i2ctb2` | Bit-Banging Testbenches | L1 Testing SCL Clock Generator, L2 Testing Data Bit TX, L3 Testing Data Bit RX + Clock Stretch | 2 | ❌ |
-| 3 | `i2ctb3` | Byte Transfer Testbenches | L1 Testing TX Byte FSM, L2 Testing RX Byte + ACK, L3 Testing Combined TX/RX Controller | 2–3 | ❌ |
-| 4 | `i2ctb4` | Controller FSM Testbenches | L1 Testing Address Phase, L2 Testing Data Phase, L3 Testing Full Master Controller | 3 | ❌ |
-| 5 | `i2ctb5` | Target Device Testbenches | L1 Testing Address Match, L2 Testing Register Read/Write, L3 Testing Target with IRQ | 3–4 | ❌ |
-| 6 | `i2ctb6` | Register Map Testbenches | L1 Testing Register File, L2 Testing Address Decoder, L3 Testing Auto-increment Pointer | 4 | ❌ |
-| 7 | `i2ctb7` | System-Level Verification | L1 Testing Bus Arbitration, L2 Testing Multi-Master Scenarios, L3 Full System Verification Portfolio | 4–5 | ❌ |
+| 1 | `i2ctb1` | I²C Fundamentals Testbench | L1 Testing Open-Drain IO, L2 Testing START/STOP Detector, L3 Testing Serial Shift Register | 1–2 | ✅ done |
+| 2 | `i2ctb2` | Bit-Banging Testbenches | L1 Testing SCL Clock Generator, L2 Testing Data Bit TX, L3 Testing Data Bit RX + Clock Stretch | 2 | ✅ done |
+| 3 | `i2ctb3` | Byte Transfer Testbenches | L1 Testing TX Byte FSM, L2 Testing RX Byte + ACK, L3 Testing Combined TX/RX Controller | 2–3 | ✅ done |
+| 4 | `i2ctb4` | Controller FSM Testbenches | L1 Testing Address Phase, L2 Testing Data Phase, L3 Testing Full Master Controller | 3 | ✅ done |
+| 5 | `i2ctb5` | Target Device Testbenches | L1 Testing Address Match, L2 Testing Register Read/Write, L3 Testing Target with IRQ | 3–4 | ✅ done |
+| 6 | `i2ctb6` | Register Map Testbenches | L1 Testing Register File, L2 Testing Address Decoder, L3 Testing Auto-increment Pointer | 4 | ✅ done |
+| 7 | `i2ctb7` | System-Level Verification | L1 Testing Bus Arbitration, L2 Testing Multi-Master Scenarios, L3 Full System Verification Portfolio | 4–5 | ✅ done |
 
 ---
 
