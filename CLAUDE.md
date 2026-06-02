@@ -9,7 +9,7 @@ Read this file completely before doing anything else.
 ## Mission
 
 Build the next unchecked chapter in the curriculum table below.
-One chapter = one JS file + two registration edits.
+One chapter = one JS file + two registration edits, pushed in **two separate commits** to stay within output token limits.
 Push to `develop` when done. Then mark the chapter done in this file (replace `❌` with `✅`).
 Repeat for the next chapter.
 
@@ -43,8 +43,8 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 2. Find the first ❌ row — that is the target chapter
 3. Read agent.md for full schema, difficulty tiers, and testbench patterns
 4. Build the lesson file  →  static/lessons/modules/<moduleId>.js
-5. Register it            →  two edits (index.html + curriculum.js)
-6. Push all three files in one commit to develop branch
+5. Commit 1: push ONLY the lesson JS file to develop branch
+6. Commit 2: push ONLY the two registration files (index.html + curriculum.js) to develop branch
 7. Edit this CLAUDE.md: change ❌ to ✅ for the chapter just built
 8. Push this file to main
 9. Stop — do not build the next chapter in the same session
@@ -386,18 +386,32 @@ Fetch this file first. Add the new module id into the CURRICULUM array in the co
 
 ---
 
-## Step 6 — push
+## Step 6 — push (TWO commits to stay within token limits)
 
-Use `mcp__github__push_files` with ALL changed files in one commit:
+### Commit 1 — lesson content only
+Use `mcp__github__push_files` with just the JS file:
 ```
 files: [
   { path: 'static/lessons/modules/msv3.js',  content: '...' },
-  { path: 'static/index.html',               content: '...' },
-  { path: 'static/lessons/curriculum.js',    content: '...' },
 ]
 message: 'feat(msv3): arithmetic circuits chapter — 5 lessons'
 branch: 'develop'
 ```
+
+### Commit 2 — registration only
+Use `mcp__github__push_files` with just the two small registration files:
+```
+files: [
+  { path: 'static/index.html',               content: '...' },
+  { path: 'static/lessons/curriculum.js',    content: '...' },
+]
+message: 'feat(msv3): register module in index.html and curriculum.js'
+branch: 'develop'
+```
+
+**Why two commits?** The JS lesson file is ~30 KB of content. Composing it plus both
+registration files in a single response exceeds the output token limit and kills the session.
+Splitting into content-first then registration keeps each push well within limits.
 
 ---
 
