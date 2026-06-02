@@ -409,6 +409,261 @@ endmodule`,
       ]
     },
 
-    // L3 added in next commit
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Testing the Data Bit Receiver + Clock Stretch  (Tier 2)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb2l3',
+      title: 'L3 — Testing the Data Bit Receiver and Clock Stretch',
+      theory: `
+<h2>Clock stretching — a target's way of buying time</h2>
+<p>Imagine you are in a conversation and you need a moment to think before you answer. On I²C, a target device (a sensor, a memory chip) does exactly that: it physically holds the SCL wire low, preventing the master from clocking the next bit until the target is ready. This is called <strong>clock stretching</strong>. The master tries to release SCL high, but the target's open-drain driver keeps pulling it to ground. The master notices SCL didn't go high and waits. When the target is done, it releases SCL and the conversation resumes.</p>
+
+<p>Testing this in a testbench is the most complex scenario so far — you need two open-drain inout wires (SCL and SDA), each with its own pullup, and a way to force SCL low from outside the DUT to simulate stretching.</p>
+
+<pre class="code-block">// Normal receive (SCL free-running from testbench):
+//
+// SDA:  ‾‾‾ 0 ‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾
+//            ↑ testbench drives SDA
+// SCL:  _____|‾‾‾‾‾‾‾‾‾|___________
+//            ↑ TB releases SCL ↑ TB pulls SCL low
+//            DUT samples SDA here (posedge SCL)
+
+// Clock stretch (DUT holds SCL low):
+//
+// SCL:  _____|  DUT holds low  |‾‾‾‾
+//            ↑ TB releases SCL, DUT overrides to 0
+//            ↑ stretch_en=1 tells DUT to stretch</pre>
+
+<h2>Dual-pullup pattern for SCL and SDA</h2>
+<p>When both SCL and SDA are inout wires on the bus, each needs its own pullup primitive. Both the testbench and the DUT can drive either line low — the wired-AND rule applies to each wire independently. If any driver pulls the wire to 0, it goes to 0. When everyone releases (high-Z), the pullup restores 1.</p>
+
+<pre class="code-block">wire scl, sda;
+pullup pu_scl(scl);   // external pull-up for SCL
+pullup pu_sda(sda);   // external pull-up for SDA
+
+logic scl_drive;      // testbench drives SCL through a tristate
+logic sda_drive;      // testbench drives SDA through a tristate
+
+assign scl = scl_drive ? 1'b0 : 1'bz;  // TB drives SCL low or releases
+assign sda = sda_drive ? 1'b0 : 1'bz;  // TB drives SDA low or releases</pre>
+
+<table class="truth-table">
+  <tr><th>Test scenario</th><th>sda_drive</th><th>Expected rx_data</th><th>stretch_en</th><th>Expected SCL after release</th></tr>
+  <tr><td>Receive bit=0</td><td>1 (drive SDA low)</td><td>0</td><td>0</td><td>1 (free-running)</td></tr>
+  <tr><td>Receive bit=1</td><td>0 (release SDA)</td><td>1</td><td>0</td><td>1 (free-running)</td></tr>
+  <tr><td>Clock stretch</td><td>&times;</td><td>&times;</td><td>1</td><td>0 (DUT holds SCL low)</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are writing a testbench for <code>i2c_bit_rx</code>. The DUT samples SDA on the rising edge of SCL and outputs the captured bit on <code>rx_data</code>. When <code>stretch_en=1</code>, the DUT holds SCL low after sampling to stall the master. Your testbench drives SCL and SDA as open-drain outputs through tristate assigns (drive-0 or high-Z), with one pullup each. Three test scenarios: receive 0, receive 1, and trigger a clock stretch then verify SCL stays low.</p>
+
+<table class="truth-table">
+  <tr><th>Port/Signal</th><th>Direction</th><th>Declare as</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>driven by TB</td><td><code>logic</code></td><td>System clock, free-running; DUT uses this for synchronous logic</td></tr>
+  <tr><td><code>rst</code></td><td>driven by TB</td><td><code>logic</code></td><td>Active-low reset; hold for 2 cycles then release before test</td></tr>
+  <tr><td><code>scl</code></td><td>inout (both)</td><td><code>wire</code></td><td>Open-drain SCL; TB drives via tristate assign, DUT can hold low</td></tr>
+  <tr><td><code>sda</code></td><td>inout (both)</td><td><code>wire</code></td><td>Open-drain SDA; TB drives via tristate assign to set bit value</td></tr>
+  <tr><td><code>stretch_en</code></td><td>driven by TB</td><td><code>logic</code></td><td>Tells the DUT to hold SCL low after sampling (simulate busy target)</td></tr>
+  <tr><td><code>rx_data</code></td><td>output from DUT</td><td><code>logic</code></td><td>The bit the DUT captured from SDA at the last SCL rising edge</td></tr>
+  <tr><td><code>scl_drive</code></td><td>internal TB</td><td><code>logic</code></td><td>1 = TB drives SCL low; 0 = TB releases SCL (pullup takes over)</td></tr>
+  <tr><td><code>sda_drive</code></td><td>internal TB</td><td><code>logic</code></td><td>1 = TB drives SDA low; 0 = TB releases SDA (pullup takes over)</td></tr>
+</table>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        '── Line 1 ──  `timescale 1ns/1ps',
+        '── Line 2 ──  module tb;',
+        '── Line 4 ──  wire scl, sda;         ← both inout — must be wire',
+        '── Line 5 ──  pullup pu_scl(scl);    ← first pullup: for SCL',
+        '── Line 6 ──  pullup pu_sda(sda);    ← second pullup: for SDA',
+        '── Line 8 ──  logic clk = 0;  always #5 clk = ~clk;',
+        '── Line 9 ──  logic rst, stretch_en, rx_data;',
+        '── Line 10 ── logic scl_drive, sda_drive;   ← tristate control signals',
+        '── Line 12 ── assign scl = scl_drive ? 1\'b0 : 1\'bz;   ← open-drain driver for SCL',
+        '── Line 13 ── assign sda = sda_drive ? 1\'b0 : 1\'bz;   ← open-drain driver for SDA',
+        '── Line 15 ── i2c_bit_rx dut instantiation — connect clk, rst, scl, sda, stretch_en, rx_data',
+        '── Line 17 ── task automatic receive_bit — sets sda_drive, pulses SCL, checks rx_data',
+        '── Line 24 ── task automatic test_stretch — sets stretch_en=1, releases SCL, checks scl===0',
+        '── Line 31 ── initial begin — reset, then receive_bit(0), receive_bit(1), test_stretch',
+        '── Line 38 ── $display("Bit RX testbench works!"); $finish;',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 3 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`\`timescale 1ns/1ps
+module tb;
+
+  wire scl, sda;          // both inout — must be wire
+  pullup pu_scl(scl);     // pull-up for SCL line
+  pullup pu_sda(sda);     // pull-up for SDA line
+
+  logic clk = 0;
+  always #5 clk = ~clk;  // 100 MHz system clock
+
+  logic rst, stretch_en, rx_data;
+  logic scl_drive = 0;    // 1 = TB pulls SCL low; 0 = TB releases
+  logic sda_drive = 0;    // 1 = TB pulls SDA low; 0 = TB releases
+
+  // Open-drain drives: assert 0 or release (high-Z)
+  assign scl = scl_drive ? 1'b0 : 1'bz;
+  assign sda = sda_drive ? 1'b0 : 1'bz;
+
+  i2c_bit_rx dut (
+    .clk       (clk),
+    .rst       (rst),
+    .scl       (scl),
+    .sda       (sda),
+    .stretch_en(stretch_en),
+    .rx_data   (rx_data)
+  );
+
+  // Drive one SDA bit, pulse SCL, check sampled result
+  task automatic receive_bit(input logic bit_val, input logic exp);
+    sda_drive = !bit_val;    // drive SDA low for 0, release for 1
+    scl_drive = 1;           // hold SCL low (setup time)
+    @(posedge clk); #1;
+    scl_drive = 0;           // release SCL — pullup takes it to 1 (rising edge)
+    @(posedge clk); #1;      // DUT samples SDA here
+    scl_drive = 1;           // pull SCL back low (end of bit)
+    @(posedge clk); #1;
+    if (rx_data === exp)
+      $display("PASS  rx_data=%0b when sda=%0b", rx_data, bit_val);
+    else
+      $display("FAIL  rx_data=%0b when sda=%0b (expected %0b)", rx_data, bit_val, exp);
+    sda_drive = 0;           // release SDA for next bit
+  endtask
+
+  // Enable stretch: DUT should hold SCL low even after TB releases it
+  task automatic test_stretch;
+    stretch_en = 1;
+    scl_drive = 1;           // TB holds SCL low
+    @(posedge clk); #1;
+    scl_drive = 0;           // TB releases — DUT should now hold it low
+    @(posedge clk); #2;
+    if (scl === 0)
+      $display("PASS  SCL stretched low");
+    else
+      $display("FAIL  SCL not stretched: scl=%0b (expected 0)", scl);
+    stretch_en = 0;          // release stretch so DUT lets SCL go
+    @(posedge clk); #1;
+  endtask
+
+  initial begin
+    $display("=== I2C Bit RX Test ===");
+    rst = 0; stretch_en = 0; scl_drive = 1; sda_drive = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1; @(posedge clk); #1;
+
+    receive_bit(0, 0);   // SDA low  -> rx_data should be 0
+    receive_bit(1, 1);   // SDA high -> rx_data should be 1
+    test_stretch;        // DUT holds SCL low when stretch_en=1
+
+    $display("Bit RX testbench works!");
+    $finish;
+  end
+endmodule`,
+      design:
+`// Type the i2c_bit_rx testbench here.
+// Read Theory first — it explains the dual-pullup pattern and clock stretch.
+//
+// Ports to connect to i2c_bit_rx:
+//   clk        — system clock (logic)
+//   rst        — active-low reset (logic)
+//   scl        — open-drain SCL (wire + pullup pu_scl)
+//   sda        — open-drain SDA (wire + pullup pu_sda)
+//   stretch_en — 1 = DUT holds SCL low after sampling (logic)
+//   rx_data    — captured bit output (logic)
+//
+// TB tristate drivers (assign pattern):
+//   logic scl_drive; assign scl = scl_drive ? 1'b0 : 1'bz;
+//   logic sda_drive; assign sda = sda_drive ? 1'b0 : 1'bz;
+//
+// Scenarios:
+//   1. Receive bit=0 (sda driven low)  => rx_data === 0
+//   2. Receive bit=1 (sda released)    => rx_data === 1
+//   3. stretch_en=1, release SCL       => scl stays 0 (DUT holds it)
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+
+  wire scl, sda;
+  pullup pu_scl(scl);
+  pullup pu_sda(sda);
+
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic rst, stretch_en, rx_data;
+  logic scl_drive = 0;
+  logic sda_drive = 0;
+
+  assign scl = scl_drive ? 1'b0 : 1'bz;
+  assign sda = sda_drive ? 1'b0 : 1'bz;
+
+  i2c_bit_rx dut (
+    .clk       (clk),
+    .rst       (rst),
+    .scl       (scl),
+    .sda       (sda),
+    .stretch_en(stretch_en),
+    .rx_data   (rx_data)
+  );
+
+  task automatic receive_bit(input logic bit_val, input logic exp);
+    sda_drive = !bit_val;
+    scl_drive = 1;
+    @(posedge clk); #1;
+    scl_drive = 0;
+    @(posedge clk); #1;
+    scl_drive = 1;
+    @(posedge clk); #1;
+    if (rx_data === exp)
+      \$display("PASS  rx_data=%0b when sda=%0b", rx_data, bit_val);
+    else
+      \$display("FAIL  rx_data=%0b when sda=%0b (expected %0b)", rx_data, bit_val, exp);
+    sda_drive = 0;
+  endtask
+
+  task automatic test_stretch;
+    stretch_en = 1;
+    scl_drive = 1;
+    @(posedge clk); #1;
+    scl_drive = 0;
+    @(posedge clk); #2;
+    if (scl === 0)
+      \$display("PASS  SCL stretched low");
+    else
+      \$display("FAIL  SCL not stretched: scl=%0b (expected 0)", scl);
+    stretch_en = 0;
+    @(posedge clk); #1;
+  endtask
+
+  initial begin
+    \$display("=== I2C Bit RX Test ===");
+    rst = 0; stretch_en = 0; scl_drive = 1; sda_drive = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1; @(posedge clk); #1;
+
+    receive_bit(0, 0);
+    receive_bit(1, 1);
+    test_stretch;
+
+    \$display("Bit RX testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  rx_data=0 when sda=0',
+        'PASS  rx_data=1 when sda=1',
+        'PASS  SCL stretched low',
+        'Bit RX testbench works!'
+      ]
+    }
+
   ]
 });
