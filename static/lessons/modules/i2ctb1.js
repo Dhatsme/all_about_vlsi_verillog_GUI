@@ -197,7 +197,209 @@ endmodule`,
       ]
     },
 
-    // L2 added in next commit
+    // ────────────────────────────────────────────────────────────────────
+    // L2 — Testing the START/STOP Detector  (Tier 1)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb1l2',
+      title: 'L2 — Testing the START/STOP Detector',
+      theory: `
+<h2>Why the condition detector matters</h2>
+<p>Every I&sup2;C controller — in a smartphone, a car ECU, a satellite — must reliably detect START and STOP conditions to know when a transaction begins and ends. A bug here means the controller misses the beginning of a byte, corrupts address bits, or holds the bus hostage. Industry sign-off requires testing idle, START, and STOP in every regression run.</p>
+
+<h2>What can go wrong</h2>
+<p>The three classic failures are: (1) the detector fires START during idle, (2) it misses a real START edge, or (3) it confuses START for STOP. The three test scenarios in this lesson cover all three.</p>
+
+<h2>ASCII stimulus — what the testbench drives</h2>
+<pre class="code-block">Test 1 — idle (no transition on SDA while SCL=1):
+  SCL: 0 ──────────────────────────────────────────
+  SDA: 1 ──────────────────────────────────────────
+  start_det / stop_det: should stay 0
+
+Test 2 — START condition (SDA falls while SCL=1):
+  SCL: ──────── 1 ──────────────────────────────────
+  SDA: ── 1 ────┐ 0 ──────────────────────────────
+                ↑ SDA falls here
+  start_det: pulses 1 one clock after the fall
+
+Test 3 — STOP condition (SDA rises while SCL=1):
+  SCL: ──────────────── 1 ─────────────────────────
+  SDA: ─────────── 0 ──┐ 1 ────────────────────────
+                        ↑ SDA rises here
+  stop_det: pulses 1 one clock after the rise</pre>
+
+<h2>The @(posedge clk); #1; sampling pattern</h2>
+<p>After every stimulus change, we wait for the next rising clock edge and then delay 1 ns before sampling. This ensures we read the DUT output <em>after</em> it has settled in response to the clock, avoiding a race condition between the testbench and the DUT's always_ff block.</p>
+
+<pre class="code-block">scl = 1; sda = 1; @(posedge clk); #1;  // set inputs, wait one clock
+sda = 0;          @(posedge clk); #1;  // SDA falls -- START should fire
+if (start_det === 1) ...               // sample after clock + 1ns</pre>
+
+<h2>Clock generation</h2>
+<p>Generate a 100 MHz testbench clock with a single line. The <code>always #5</code> toggles every 5 ns, giving a 10 ns period (100 MHz). This clock drives the DUT's clk port.</p>
+
+<pre class="code-block">logic clk = 0;
+always #5 clk = ~clk;  // 100 MHz -- toggles every 5 ns</pre>
+
+<h2>Before you code</h2>
+<p>You will write a clocked testbench that drives SCL and SDA in three scenarios. In scenario 1 you leave both lines idle and verify no outputs fire. In scenario 2 you raise SCL then drop SDA, then wait one clock and check start_det. In scenario 3 you raise SDA while SCL is still high and check stop_det. A correct run prints four PASS lines and a success message.</p>
+
+<h2>Testbench signal declarations</h2>
+<table class="truth-table">
+  <tr><th>Signal</th><th>Type</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>logic</td><td>Testbench clock — drives the DUT's synchronous always_ff block.</td></tr>
+  <tr><td><code>scl</code></td><td>logic</td><td>I&sup2;C clock line stimulus — driven by the testbench to create test conditions.</td></tr>
+  <tr><td><code>sda</code></td><td>logic</td><td>I&sup2;C data line stimulus — transitions here trigger START and STOP detection.</td></tr>
+  <tr><td><code>start_det</code></td><td>logic</td><td>Output from DUT — should pulse 1 one clock after a START condition.</td></tr>
+  <tr><td><code>stop_det</code></td><td>logic</td><td>Output from DUT — should pulse 1 one clock after a STOP condition.</td></tr>
+</table>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap \u{1F4A1} Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        '── Line 1 ──  `timescale 1ns/1ps',
+        '── Line 2 ──  module tb;',
+        '── Line 3 ──  logic clk = 0;                       ← initialise clk to 0',
+        '── Line 4 ──  always #5 clk = ~clk;               ← 100 MHz clock toggle',
+        '── Line 5 ──  (blank line)',
+        '── Line 6 ──  logic scl, sda, start_det, stop_det; ← all logic (no inout here)',
+        '── Line 7 ──  (blank line)',
+        '── Line 8 ──  i2c_cond_detect dut (               ← instantiate DUT',
+        '── Line 9 ──  .clk(clk), .scl(scl), .sda(sda),',
+        '── Line 10 ── .start_det(start_det), .stop_det(stop_det)',
+        '── Line 11 ── );',
+        '── Line 12 ── (blank line)',
+        '── Line 13 ── initial begin',
+        '── Line 14 ── $display("=== I2C Condition Detector Testbench ===");',
+        '── Line 15 ── // Test 1: idle — hold SCL=0, SDA=1, wait 3 clocks',
+        '── Line 16 ── scl = 0; sda = 1;  repeat(3) @(posedge clk); #1;',
+        '── Line 17 ── if (start_det===0 && stop_det===0)  $display("PASS  idle: no condition");',
+        '── Line 18 ── else  $display("FAIL  idle: start=%0b stop=%0b", start_det, stop_det);',
+        '── Line 19 ── // Test 2: START — raise SCL then drop SDA',
+        '── Line 20 ── scl = 1; sda = 1; @(posedge clk); #1;',
+        '── Line 21 ── sda = 0;          @(posedge clk); #1;',
+        '── Line 22 ── if (start_det===1)  $display("PASS  START detected");',
+        '── Line 23 ── else  $display("FAIL  START not detected: start_det=%0b", start_det);',
+        '── Line 24 ── // Test 3: STOP — raise SDA while SCL still high',
+        '── Line 25 ── @(posedge clk); #1;',
+        '── Line 26 ── sda = 1; @(posedge clk); #1;',
+        '── Line 27 ── if (stop_det===1)  $display("PASS  STOP detected");',
+        '── Line 28 ── else  $display("FAIL  STOP not detected: stop_det=%0b", stop_det);',
+        '── Line 29 ── $display("Condition detector testbench works!");',
+        '── Line 30 ── $finish;',
+        '── Line 31 ── end',
+        '── Line 32 ── endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 4 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;   // 100 MHz -- toggles every 5 ns
+
+  logic scl, sda, start_det, stop_det;  // all logic -- no inout in this module
+
+  i2c_cond_detect dut (
+    .clk(clk), .scl(scl), .sda(sda),
+    .start_det(start_det), .stop_det(stop_det)
+  );
+
+  initial begin
+    \$display("=== I2C Condition Detector Testbench ===");
+
+    // Test 1: idle -- no transitions on SDA while SCL low, outputs must be 0
+    scl = 0; sda = 1;
+    repeat(3) @(posedge clk); #1;    // wait 3 clocks, then sample 1 ns after edge
+    if (start_det === 0 && stop_det === 0)
+      \$display("PASS  idle: no condition");
+    else
+      \$display("FAIL  idle: start=%0b stop=%0b", start_det, stop_det);
+
+    // Test 2: START condition -- raise SCL, then drop SDA from 1 to 0
+    scl = 1; sda = 1; @(posedge clk); #1;  // SCL high, SDA still high
+    sda = 0;          @(posedge clk); #1;  // SDA falls -- detector latches on next edge
+    if (start_det === 1)
+      \$display("PASS  START detected");
+    else
+      \$display("FAIL  START not detected: start_det=%0b", start_det);
+
+    // Test 3: STOP condition -- raise SDA from 0 to 1 while SCL still high
+    @(posedge clk); #1;               // give detector one idle cycle
+    sda = 1; @(posedge clk); #1;     // SDA rises -- detector latches stop on next edge
+    if (stop_det === 1)
+      \$display("PASS  STOP detected");
+    else
+      \$display("FAIL  STOP not detected: stop_det=%0b", stop_det);
+
+    \$display("Condition detector testbench works!");
+    \$finish;
+  end
+endmodule`,
+      design:
+`// Type the i2c_cond_detect testbench here.
+// Read Theory first -- it explains the @(posedge clk); #1; sampling pattern.
+//
+// Signals to declare:
+//   logic clk        -- 100 MHz testbench clock (always #5 clk = ~clk)
+//   logic scl        -- I2C clock stimulus from testbench
+//   logic sda        -- I2C data stimulus -- transition this to create START/STOP
+//   logic start_det  -- DUT output: pulses 1 one clock after START
+//   logic stop_det   -- DUT output: pulses 1 one clock after STOP
+//
+// Three test scenarios:
+//   1. Idle:  scl=0, sda=1 for 3 clocks -> start_det===0, stop_det===0
+//   2. START: scl=1; sda falls 1->0     -> start_det===1 one clock later
+//   3. STOP:  sda rises 0->1 (scl=1)   -> stop_det===1 one clock later
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic scl, sda, start_det, stop_det;
+
+  i2c_cond_detect dut (
+    .clk(clk), .scl(scl), .sda(sda),
+    .start_det(start_det), .stop_det(stop_det)
+  );
+
+  initial begin
+    \$display("=== I2C Condition Detector Testbench ===");
+    scl = 0; sda = 1;
+    repeat(3) @(posedge clk); #1;
+    if (start_det === 0 && stop_det === 0)
+      \$display("PASS  idle: no condition");
+    else
+      \$display("FAIL  idle: start=%0b stop=%0b", start_det, stop_det);
+    scl = 1; sda = 1; @(posedge clk); #1;
+    sda = 0;          @(posedge clk); #1;
+    if (start_det === 1)
+      \$display("PASS  START detected");
+    else
+      \$display("FAIL  START not detected: start_det=%0b", start_det);
+    @(posedge clk); #1;
+    sda = 1; @(posedge clk); #1;
+    if (stop_det === 1)
+      \$display("PASS  STOP detected");
+    else
+      \$display("FAIL  STOP not detected: stop_det=%0b", stop_det);
+    \$display("Condition detector testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  idle: no condition',
+        'PASS  START detected',
+        'PASS  STOP detected',
+        'Condition detector testbench works!'
+      ]
+    },
+
+    // L3 added in next commit
 
   ]
 });
