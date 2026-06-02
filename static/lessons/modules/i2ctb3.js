@@ -469,7 +469,264 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Testing the Combined TX/RX Controller  (Tier 3)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb3l3',
+      title: 'L3 — Testing the Combined TX/RX Controller',
+      theory: `
+<h2>Why a combined controller needs its own testbench</h2>
+<p>Real I²C transactions alternate directions. A master writes a register address (TX), then immediately reads back the register value (RX) — often switching mode without releasing the bus. A TX testbench and an RX testbench each working in isolation give you no information about whether the mode-switch handshake works. Integration failures live exactly at the seam between two separately-verified sub-modules. This is why the combined controller gets a dedicated test.</p>
+
+<h2>The byte controller interface</h2>
+<p>The <code>i2c_byte_ctrl</code> module wraps the TX FSM and the RX datapath behind a single mode-select port. When <code>mode = 0</code> the controller is in TX mode; when <code>mode = 1</code> it is in RX mode. Both paths share the SCL and SDA buses:</p>
+
+<pre class="code-block">mode=0 (TX):
+  load_en ──&gt; FSM loads tx_data ──&gt; shifts 8 bits onto sda_out ──&gt; waits ACK
+
+mode=1 (RX):
+  8 SCL pulses with sda_in driven ──&gt; byte_out assembled ──&gt; valid pulses</pre>
+
+<h2>Two independent test sequences</h2>
+<table class="truth-table">
+  <tr><th>Test</th><th>mode</th><th>Stimulus</th><th>What to verify</th></tr>
+  <tr><td>TX path</td><td>0</td><td>load 0xC3, clock 8 SCL cycles, drive ACK</td><td>done=1, ack_err=0 after the 9th SCL</td></tr>
+  <tr><td>RX path</td><td>1</td><td>drive 0x7E bit-by-bit on sda_in, clock 8 SCL cycles, drive ACK</td><td>byte_out=0x7E, valid=1 after the 8th SCL</td></tr>
+</table>
+
+<h2>Reusing your tasks</h2>
+<p>You already wrote <code>send_byte</code> in L1 and <code>drive_byte</code> in L2. In this lesson you bring both into a single testbench and add the <code>mode</code> signal as a switch between them. The key structural insight: set <code>mode</code> before asserting <code>load_en</code> or starting SCL pulses, then verify the correct outputs for that mode.</p>
+
+<pre class="code-block">// Structural outline of your test sequence
+mode = 0;              // select TX path
+send_byte(8'hC3, 1);   // transmit with ACK
+check done, ack_err;
+
+mode = 1;              // select RX path
+drive_byte(8'h7E, 1);  // receive with ACK
+check byte_out, valid;</pre>
+
+<h2>Before you code</h2>
+<p>You are writing a single testbench that exercises both paths of the byte controller. The TX path verifies bit transmission and ACK handling. The RX path verifies byte assembly and valid signalling. Together they prove the mode-select logic routes signals correctly in both directions. A passing run shows two PASS lines and "Byte controller testbench works!".</p>
+
+<h2>Testbench port table</h2>
+<table class="truth-table">
+  <tr><th>Signal</th><th>Type in TB</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>logic, clock gen</td><td>System clock shared by both TX FSM and RX datapath.</td></tr>
+  <tr><td><code>rst</code></td><td>logic</td><td>Active-low reset; clears both TX and RX state machines.</td></tr>
+  <tr><td><code>mode</code></td><td>logic</td><td>0 = TX path active, 1 = RX path active; set before stimulus.</td></tr>
+  <tr><td><code>scl</code></td><td>logic</td><td>I2C clock driven by testbench; used by both TX and RX paths.</td></tr>
+  <tr><td><code>load_en</code></td><td>logic</td><td>TX-path: pulse high for one cycle to latch tx_data into the FSM.</td></tr>
+  <tr><td><code>tx_data</code></td><td>logic [7:0]</td><td>TX-path: byte to transmit; stable before load_en.</td></tr>
+  <tr><td><code>sda_in</code></td><td>logic</td><td>RX-path: testbench drives each bit here; also carries ACK in TX path.</td></tr>
+  <tr><td><code>sda_out</code></td><td>logic</td><td>TX-path output: the bit the DUT is placing on the bus.</td></tr>
+  <tr><td><code>byte_out</code></td><td>logic [7:0]</td><td>RX-path output: assembled byte from 8 serial bits.</td></tr>
+  <tr><td><code>valid</code></td><td>logic</td><td>RX-path: pulses high for one cycle when byte_out is ready.</td></tr>
+  <tr><td><code>done</code></td><td>logic</td><td>TX-path: pulses high for one cycle after the 9-bit sequence completes.</td></tr>
+  <tr><td><code>ack_err</code></td><td>logic</td><td>TX-path: high when a NACK was received in the ACK slot.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare module tb; with 100 MHz clock generation',
+        'Declare mode, scl, rst, load_en, tx_data [7:0], sda_in as logic inputs to DUT',
+        'Declare sda_out, byte_out [7:0], valid, done, ack_err as logic outputs from DUT',
+        'Instantiate i2c_byte_ctrl dut connecting all ports by name',
+        'Write task send_byte(data, ack): pulse load_en, 8 SCL toggles, drive sda_in for ACK slot',
+        'Write task drive_byte(data, send_ack): loop bit 7..0 driving sda_in + SCL pulses, then ACK slot',
+        'TX test: set mode=0, reset DUT, call send_byte(8\'hC3, 1), check done===1 && ack_err===0',
+        'RX test: set mode=1, reset DUT, call drive_byte(8\'h7E, 1), check byte_out===8\'h7E && valid===1',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 2 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       mode;
+  logic       scl    = 0;
+  logic       rst;
+  logic       load_en;
+  logic [7:0] tx_data;
+  logic       sda_in;
+  logic       sda_out;
+  logic [7:0] byte_out;
+  logic       valid;
+  logic       done;
+  logic       ack_err;
+
+  i2c_byte_ctrl dut (
+    .clk    (clk),
+    .rst    (rst),
+    .mode   (mode),
+    .scl    (scl),
+    .load_en(load_en),
+    .tx_data(tx_data),
+    .sda_in (sda_in),
+    .sda_out(sda_out),
+    .byte_out(byte_out),
+    .valid  (valid),
+    .done   (done),
+    .ack_err(ack_err)
+  );
+
+  // TX path: load byte, clock 8 bits out, drive ACK slot
+  task automatic send_byte(input logic [7:0] data, input logic ack);
+    integer i;
+    tx_data = data;
+    load_en = 1; @(posedge clk); #1;
+    load_en = 0;
+    for (i = 7; i >= 0; i--) begin
+      @(posedge clk); #1; scl = 1;
+      @(posedge clk); #1; scl = 0;
+    end
+    sda_in = ack ? 1'b0 : 1'b1;   // low = ACK, high = NACK
+    @(posedge clk); #1; scl = 1;
+    @(posedge clk); #1; scl = 0;
+    @(posedge clk); #1;
+  endtask
+
+  // RX path: drive 8 data bits then ACK/NACK slot
+  task automatic drive_byte(input logic [7:0] data, input logic send_ack);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      sda_in = data[i];
+      @(posedge clk); #1; scl = 1;
+      @(posedge clk); #1; scl = 0;
+    end
+    sda_in = send_ack ? 1'b0 : 1'b1;
+    @(posedge clk); #1; scl = 1;
+    @(posedge clk); #1; scl = 0;
+    @(posedge clk); #1;
+  endtask
+
+  initial begin
+    \$display("=== Byte Controller TX/RX Test ===");
+
+    // --- TX path: transmit 0xC3 with ACK ---
+    mode = 0; rst = 0; load_en = 0; sda_in = 1; tx_data = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+    send_byte(8'hC3, 1);
+    if (done === 1 && ack_err === 0)
+      \$display("PASS  TX mode: byte transmitted");
+    else
+      \$display("FAIL  TX mode: done=%0b ack_err=%0b", done, ack_err);
+
+    // --- RX path: receive 0x7E with ACK ---
+    mode = 1; rst = 0; sda_in = 1;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+    drive_byte(8'h7E, 1);
+    if (byte_out === 8'h7E && valid === 1)
+      \$display("PASS  RX mode: byte received");
+    else
+      \$display("FAIL  RX mode: byte_out=0x%02h valid=%0b", byte_out, valid);
+
+    \$display("Byte controller testbench works!");
+    \$finish;
+  end
+endmodule`,
+      design:
+`// Build the i2c_byte_ctrl testbench here. See Theory for the full spec.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       mode;
+  logic       scl    = 0;
+  logic       rst;
+  logic       load_en;
+  logic [7:0] tx_data;
+  logic       sda_in;
+  logic       sda_out;
+  logic [7:0] byte_out;
+  logic       valid;
+  logic       done;
+  logic       ack_err;
+
+  i2c_byte_ctrl dut (
+    .clk    (clk),
+    .rst    (rst),
+    .mode   (mode),
+    .scl    (scl),
+    .load_en(load_en),
+    .tx_data(tx_data),
+    .sda_in (sda_in),
+    .sda_out(sda_out),
+    .byte_out(byte_out),
+    .valid  (valid),
+    .done   (done),
+    .ack_err(ack_err)
+  );
+
+  task automatic send_byte(input logic [7:0] data, input logic ack);
+    integer i;
+    tx_data = data;
+    load_en = 1; @(posedge clk); #1;
+    load_en = 0;
+    for (i = 7; i >= 0; i--) begin
+      @(posedge clk); #1; scl = 1;
+      @(posedge clk); #1; scl = 0;
+    end
+    sda_in = ack ? 1'b0 : 1'b1;
+    @(posedge clk); #1; scl = 1;
+    @(posedge clk); #1; scl = 0;
+    @(posedge clk); #1;
+  endtask
+
+  task automatic drive_byte(input logic [7:0] data, input logic send_ack);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      sda_in = data[i];
+      @(posedge clk); #1; scl = 1;
+      @(posedge clk); #1; scl = 0;
+    end
+    sda_in = send_ack ? 1'b0 : 1'b1;
+    @(posedge clk); #1; scl = 1;
+    @(posedge clk); #1; scl = 0;
+    @(posedge clk); #1;
+  endtask
+
+  initial begin
+    \$display("=== Byte Controller TX/RX Test ===");
+
+    mode = 0; rst = 0; load_en = 0; sda_in = 1; tx_data = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+    send_byte(8'hC3, 1);
+    if (done === 1 && ack_err === 0)
+      \$display("PASS  TX mode: byte transmitted");
+    else
+      \$display("FAIL  TX mode: done=%0b ack_err=%0b", done, ack_err);
+
+    mode = 1; rst = 0; sda_in = 1;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+    drive_byte(8'h7E, 1);
+    if (byte_out === 8'h7E && valid === 1)
+      \$display("PASS  RX mode: byte received");
+    else
+      \$display("FAIL  RX mode: byte_out=0x%02h valid=%0b", byte_out, valid);
+
+    \$display("Byte controller testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  TX mode: byte transmitted',
+        'PASS  RX mode: byte received',
+        'Byte controller testbench works!'
+      ]
+    }
 
   ]
 });
