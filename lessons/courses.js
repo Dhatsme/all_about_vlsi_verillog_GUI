@@ -25,6 +25,6 @@ window.COURSES = [
     title: 'I²C Design',
     icon: '🔗',
     description: 'Master open-drain I/O, START/STOP conditions, byte transfer, and full I²C controller design',
-    modules: ['i2c1', 'i2c2', 'i2c3', 'i2c4', 'i2c5', 'i2c6', 'i2c7'],
+    modules: ['i2c1', 'i2c2', 'i2c3', 'i2c4', 'i2c5', 'i2c6', 'i2c7', 'i2c8'],
   }
 ];
