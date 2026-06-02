@@ -487,6 +487,308 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Combined TX/RX Controller  (Tier 3) + I²C Fundamentals cert
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c3l3',
+      title: 'L3 — Combined TX/RX Controller',
+      theory: `
+<h2>Where this circuit lives in the real world</h2>
+<p>Every I²C peripheral driver — whether reading a gyroscope, writing a DAC, or talking to a real-time clock — must handle both directions on the same transaction. A write starts with address bytes (TX), while a read ends with data bytes (RX). The combined byte controller you build in this lesson is the layer that sits between the raw bit logic below and the full transaction FSM above. It appears in nearly every production I²C IP block as the "byte engine".</p>
+
+<pre class="code-block">Block diagram — i2c_byte_ctrl:
+
+          ┌─────────────────────────────────────────┐
+  mode ──▶│                                         │
+  start──▶│           i2c_byte_ctrl                 │──▶ sda_out
+  data ──▶│                                         │──▶ busy
+  scl  ──▶│   mode=0: i2c_tx_byte logic (TX path)  │──▶ done
+  sda  ──▶│   mode=1: i2c_rx_byte logic (RX path)  │──▶ byte_out
+send_ack──▶│                                         │──▶ valid
+           └─────────────────────────────────────────┘
+
+mode=0 (TX): drives sda_out from data[7:0], MSB first, waits for ACK
+mode=1 (RX): samples sda into byte_out[7:0], drives ACK/NACK via send_ack
+
+Signal flow:
+  TX path: start → LOAD → SHIFT[7:0 on scl_fall] → ACK_WAIT → done
+  RX path: start → SHIFT[7:0 on scl_rise] → ACK → valid + byte_out</pre>
+
+<h2>Unifying two FSMs with a mode bit</h2>
+<p>Think of a duplex walkie-talkie: you press a button to switch between talking and listening. Here the <code>mode</code> signal is that button. When <code>mode=0</code> the controller is in TX mode — it takes parallel <code>data</code> and shifts it out. When <code>mode=1</code> it switches to RX mode — it collects bits from <code>sda</code> and assembles them into <code>byte_out</code>. Both modes share the same SCL clock; only the direction of SDA changes.</p>
+
+<h3>One unified FSM — mode-gated transitions</h3>
+<pre class="code-block">// In SHIFT state, gate on mode:
+if (mode == 0) begin       // TX
+  if (scl_fall) begin
+    sda_out &lt;= shift_reg[7];
+    shift_reg &lt;= {shift_reg[6:0], 1'b0};
+    ...
+  end
+end else begin             // RX
+  if (scl_rise) begin
+    shift_reg &lt;= {shift_reg[6:0], sda};
+    ...
+  end
+end</pre>
+
+<h3>ACK handling differs per mode</h3>
+<table class="truth-table">
+  <tr><th>mode</th><th>ACK cycle behaviour</th><th>What to drive on SDA</th></tr>
+  <tr><td>0 (TX)</td><td>Release SDA, let receiver pull low</td><td><code>1'bz</code> (receiver drives ACK)</td></tr>
+  <tr><td>1 (RX)</td><td>Drive SDA based on send_ack</td><td><code>0</code>=ACK, <code>1'bz</code>=NACK</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>What you are about to build is a unified 5-state FSM that handles both byte transmission and reception. A single <code>mode</code> input selects the direction at the start of each transfer. In TX mode it serialises <code>data[7:0]</code> onto <code>sda_out</code>; in RX mode it deserialises bits from <code>sda</code> into <code>byte_out</code>. Both paths share the same state names and the same <code>start</code>/<code>done</code>/<code>busy</code> handshake signals.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>System clock driving all state transitions.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset; forces FSM back to IDLE.</td></tr>
+  <tr><td><code>mode</code></td><td>input logic</td><td>0 = transmit (TX) the byte in data; 1 = receive (RX) a byte from sda.</td></tr>
+  <tr><td><code>start</code></td><td>input logic</td><td>Pulse high for one cycle to begin the transfer selected by mode.</td></tr>
+  <tr><td><code>data [7:0]</code></td><td>input logic</td><td>Byte to transmit in TX mode; ignored in RX mode.</td></tr>
+  <tr><td><code>scl</code></td><td>input logic</td><td>I²C clock line; falling edge used in TX, rising edge in RX.</td></tr>
+  <tr><td><code>sda</code></td><td>input logic</td><td>Serial data input; sampled on each rising SCL edge in RX mode.</td></tr>
+  <tr><td><code>send_ack</code></td><td>input logic</td><td>In RX mode: 1 = send ACK, 0 = send NACK after the byte is received.</td></tr>
+  <tr><td><code>sda_out</code></td><td>output logic</td><td>Serial data output driven during TX mode; released (1'bz) otherwise.</td></tr>
+  <tr><td><code>busy</code></td><td>output logic</td><td>High while a transfer is in progress; low when idle.</td></tr>
+  <tr><td><code>done</code></td><td>output logic</td><td>Pulses high for one cycle when the byte transfer is complete.</td></tr>
+  <tr><td><code>byte_out [7:0]</code></td><td>output logic</td><td>Received byte; valid for one cycle when <code>done</code> pulses in RX mode.</td></tr>
+  <tr><td><code>valid</code></td><td>output logic</td><td>Pulses high together with <code>done</code> in RX mode to flag byte_out is ready.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare module i2c_byte_ctrl with all 12 ports from the table above',
+        'Declare state enum: IDLE, LOAD, SHIFT, ACK_WAIT, DONE (5 states, 3 bits)',
+        'Declare internal signals: state, shift_reg [7:0], bit_cnt [2:0], scl_d, mode_r (latched mode)',
+        'Write the SCL edge detector always_ff block',
+        'Add wire scl_rise and wire scl_fall combinational signals',
+        'Write the main FSM always_ff block with synchronous reset',
+        'IDLE: on start, latch mode into mode_r; if TX latch data into shift_reg; set bit_cnt=7; go to LOAD',
+        'LOAD: transition to SHIFT (one settling cycle)',
+        'SHIFT: if mode_r==0 use scl_fall to drive and shift TX; if mode_r==1 use scl_rise to sample and shift RX; when bit_cnt==0 go to ACK_WAIT',
+        'ACK_WAIT: if mode_r==0 release sda_out=1\'bz; if mode_r==1 drive based on send_ack; on the appropriate edge go to DONE',
+        'DONE: set done=1, set valid=(mode_r==1), assign byte_out=shift_reg if RX; return to IDLE',
+        'Assign busy = (state != IDLE) && (state != DONE)',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 5 PASS lines should appear in the Output tab',
+        '🎓 I²C Fundamentals certificate unlocked — you can transmit and receive I²C bytes',
+      ],
+      hint:
+`module i2c_byte_ctrl (
+  input  logic       clk,
+  input  logic       rst,
+  input  logic       mode,       // 0=TX, 1=RX
+  input  logic       start,
+  input  logic [7:0] data,
+  input  logic       scl,
+  input  logic       sda,
+  input  logic       send_ack,
+  output logic       sda_out,
+  output logic       busy,
+  output logic       done,
+  output logic [7:0] byte_out,
+  output logic       valid
+);
+  typedef enum logic [2:0] {
+    IDLE, LOAD, SHIFT, ACK_WAIT, DONE
+  } state_t;
+
+  state_t     state;
+  logic [7:0] shift_reg;
+  logic [2:0] bit_cnt;
+  logic       scl_d;
+  logic       mode_r;            // mode latched at start
+
+  always_ff @(posedge clk)
+    scl_d <= scl;
+
+  wire scl_rise = ~scl_d &  scl;
+  wire scl_fall =  scl_d & ~scl;
+
+  always_ff @(posedge clk) begin
+    done  <= 0;
+    valid <= 0;
+    if (!rst) begin
+      state     <= IDLE;
+      shift_reg <= 8'b0;
+      bit_cnt   <= 3'd7;
+      sda_out   <= 1'bz;
+      byte_out  <= 8'b0;
+      mode_r    <= 0;
+    end else begin
+      case (state)
+        IDLE: begin
+          sda_out <= 1'bz;
+          if (start) begin
+            mode_r    <= mode;
+            bit_cnt   <= 3'd7;
+            if (!mode) shift_reg <= data;  // TX: load data
+            state <= LOAD;
+          end
+        end
+        LOAD: begin
+          state <= SHIFT;
+        end
+        SHIFT: begin
+          if (!mode_r) begin              // TX path: falling edge
+            if (scl_fall) begin
+              sda_out   <= shift_reg[7];
+              shift_reg <= {shift_reg[6:0], 1'b0};
+              if (bit_cnt == 3'd0)
+                state <= ACK_WAIT;
+              else
+                bit_cnt <= bit_cnt - 1;
+            end
+          end else begin                  // RX path: rising edge
+            if (scl_rise) begin
+              shift_reg <= {shift_reg[6:0], sda};
+              if (bit_cnt == 3'd0)
+                state <= ACK_WAIT;
+              else
+                bit_cnt <= bit_cnt - 1;
+            end
+          end
+        end
+        ACK_WAIT: begin
+          if (!mode_r) begin              // TX: release SDA, receiver ACKs
+            if (scl_fall) begin
+              sda_out <= 1'bz;
+              state   <= DONE;
+            end
+          end else begin                  // RX: we drive ACK/NACK
+            if (scl_fall) begin
+              sda_out <= send_ack ? 1'b0 : 1'bz;
+              state   <= DONE;
+            end
+          end
+        end
+        DONE: begin
+          done  <= 1;
+          sda_out <= 1'bz;
+          if (mode_r) begin
+            byte_out <= shift_reg;
+            valid    <= 1;
+          end
+          state <= IDLE;
+        end
+        default: state <= IDLE;
+      endcase
+    end
+  end
+
+  assign busy = (state != IDLE) && (state != DONE);
+
+endmodule`,
+      design:
+`// Build the i2c_byte_ctrl module here. See Theory for the full spec.
+//
+// Ports: clk, rst, mode, start, data[7:0], scl, sda, send_ack (inputs)
+//        sda_out, busy, done, byte_out[7:0], valid (outputs)
+//
+// mode=0 → TX: shift data[7:0] out on sda_out (falling SCL edge)
+// mode=1 → RX: sample sda into byte_out (rising SCL edge), then ACK/NACK
+//
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic scl = 0;
+  always #20 scl = ~scl;   // 25 MHz SCL
+
+  logic       rst, mode, start, sda, send_ack;
+  logic [7:0] data;
+  logic       sda_out, busy, done, valid;
+  logic [7:0] byte_out;
+
+  i2c_byte_ctrl dut (
+    .clk(clk), .rst(rst), .mode(mode), .start(start),
+    .data(data), .scl(scl), .sda(sda), .send_ack(send_ack),
+    .sda_out(sda_out), .busy(busy), .done(done),
+    .byte_out(byte_out), .valid(valid)
+  );
+
+  task automatic do_rx_byte(input logic [7:0] val);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      @(negedge scl); #2;
+      sda = val[i];
+    end
+  endtask
+
+  initial begin
+    \$display("=== I2C Combined TX/RX Controller Test ===");
+    rst = 0; mode = 0; start = 0; sda = 1; send_ack = 1; data = 8'h00;
+    repeat(3) @(posedge clk); #1;
+    rst = 1;
+
+    // --- Test 1: idle state ---
+    if (busy === 0 && done === 0)
+      \$display("PASS  idle: busy=0 done=0");
+    else
+      \$display("FAIL  idle: busy=%0b done=%0b", busy, done);
+
+    // --- Test 2: TX mode with 0xC3 ---
+    mode = 0; data = 8'hC3; start = 1;
+    @(posedge clk); #1;
+    start = 0;
+    if (busy === 1)
+      \$display("PASS  TX started: busy=1");
+    else
+      \$display("FAIL  TX started: busy=%0b", busy);
+    repeat(140) @(posedge clk); #1;
+    if (busy === 0)
+      \$display("PASS  TX complete: busy=0");
+    else
+      \$display("FAIL  TX did not complete: busy=%0b done=%0b", busy, done);
+
+    // --- Test 3: RX mode with 0x6E ---
+    mode = 1; send_ack = 1; start = 1;
+    @(posedge clk); #1;
+    start = 0;
+    fork
+      do_rx_byte(8'h6E);
+    join_none
+    repeat(140) @(posedge clk); #1;
+    if (byte_out === 8'h6E && valid === 1)
+      \$display("PASS  RX received: 0x%02h valid=1", byte_out);
+    else
+      \$display("FAIL  RX: byte=0x%02h (expected 0x6e) valid=%0b", byte_out, valid);
+
+    // --- Test 4: RX NACK mode ---
+    mode = 1; send_ack = 0; start = 1;
+    @(posedge clk); #1;
+    start = 0;
+    fork
+      do_rx_byte(8'h11);
+    join_none
+    repeat(140) @(posedge clk); #1;
+    if (byte_out === 8'h11)
+      \$display("PASS  RX NACK mode: byte=0x%02h", byte_out);
+    else
+      \$display("FAIL  RX NACK: byte=0x%02h (expected 0x11)", byte_out);
+
+    \$display("Combined TX/RX Controller works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  idle: busy=0 done=0',
+        'PASS  TX started: busy=1',
+        'PASS  TX complete: busy=0',
+        'PASS  RX received: 0x6e valid=1',
+        'Combined TX/RX Controller works!'
+      ]
+    }
+
   ]
 });
