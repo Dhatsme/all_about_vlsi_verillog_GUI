@@ -137,7 +137,166 @@ endmodule`,
       ]
     },
 
-    // L2 added next
+    // ─────────────────────────────────────────────────────────────────────
+    // L2 — Testing Multi-Master Scenarios  (Tier 4–5)
+    // ─────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb7l2',
+      title: 'L2 — Testing Multi-Master Scenarios',
+      theory: `
+<h2>Why retry and back-off testing is a job requirement</h2>
+<p>In a real SoC regression suite, multi-master retry tests run on every RTL check-in. The failure mode they catch is subtle: a master loses arbitration, immediately retries without waiting, and collides again — locking the bus permanently. Chip companies have shipped silicon with exactly this bug, causing hours-long I²C bus hangs in production boards. Verifying the retry counter and the back-off delay is not optional.</p>
+
+<h2>What the multi-master controller does</h2>
+<pre class="code-block">
+State machine inside i2c_multi_master:
+
+  IDLE ──arb_lost──► BACKOFF ──delay_done──► RETRY ──success──► IDLE
+          ↑                                      │
+          └──────────────────────────────────────┘ (arb_lost again)
+
+  retry_count increments each time the RETRY state is entered.
+  back_off_cycles doubles each retry: 4, 8, 16, 32 ...
+  When the bus is finally clear, the master wins and returns to IDLE.
+</pre>
+
+<h2>Measuring back-off delay in simulation</h2>
+<p>Think of it like measuring a runner's rest time between attempts. You record the timestamp when the back-off starts (call it <code>t_start</code>), then record when the next RETRY fires (<code>t_end</code>). The delay is <code>t_end - t_start</code>. Run two retry cycles and check that the second delay is at least twice the first. This is how verification engineers check exponential back-off without knowing the internal counter values.</p>
+
+<table class="truth-table">
+  <tr><th>Retry number</th><th>Expected back-off</th><th>What to measure</th></tr>
+  <tr><td>1st</td><td>N cycles (baseline)</td><td>Record cycles between arb_lost and next tx_start</td></tr>
+  <tr><td>2nd</td><td>2N cycles</td><td>Verify 2nd delay &gt;= 2 × 1st delay</td></tr>
+  <tr><td>3rd</td><td>4N cycles</td><td>Verify 3rd delay &gt;= 2 × 2nd delay</td></tr>
+  <tr><td>success</td><td>—</td><td>Verify retry_count stops incrementing</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are writing a testbench for <code>i2c_multi_master</code>. The DUT exposes <code>arb_lost</code> (input you drive), <code>retry_count</code> (output you sample), and <code>tx_start</code> (output that pulses when the master tries again). Your test forces <code>arb_lost</code> three times in succession, measures the delay between each retry, and verifies both that the retry counter increments and that the back-off delay grows. A passing run prints PASS lines for counter increment and back-off growth, then a success message.</p>
+
+<h2>Testbench port table</h2>
+<table class="truth-table">
+  <tr><th>Signal</th><th>Type</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>logic (generated)</td><td>System clock — 100 MHz in simulation.</td></tr>
+  <tr><td><code>rst</code></td><td>logic</td><td>Synchronous active-low reset to put DUT in IDLE.</td></tr>
+  <tr><td><code>arb_lost</code></td><td>logic</td><td>Driven by testbench to simulate a collision on the bus.</td></tr>
+  <tr><td><code>retry_count</code></td><td>logic [3:0]</td><td>Output from DUT — number of retries attempted so far.</td></tr>
+  <tr><td><code>tx_start</code></td><td>logic</td><td>Output from DUT — pulses high when master begins a new attempt.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+`,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Set up clocked TB with reset: drive rst=0 for 2 cycles, then rst=1',
+        'Declare integer variables t_start and t_end to record cycle timestamps',
+        'Create a task force_arb_lost: pulse arb_lost=1 for one cycle, then deassert',
+        'Force arb_lost once — wait for tx_start to pulse — record cycle count as delay1',
+        'Force arb_lost again — wait for next tx_start — record delay2; verify delay2 >= 2*delay1',
+        'Verify retry_count increments each time arb_lost is forced',
+        'De-assert arb_lost so the master succeeds — verify retry_count stops incrementing',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all PASS lines should appear in the Output tab',
+      ],
+      hint:
+`DESIGN NOTES for i2ctb7 L2 — Testing Multi-Master Scenarios
+
+i2c_multi_master module contract:
+  input  logic       clk
+  input  logic       rst        -- active-low sync reset
+  input  logic       arb_lost   -- pulse high for 1 cycle to simulate a collision
+  output logic [3:0] retry_count -- increments each time RETRY state entered
+  output logic       tx_start   -- pulses high when master launches a new attempt
+
+Retry counter check method:
+  1. Reset DUT. Sample retry_count (should be 0).
+  2. Pulse arb_lost for 1 clock. Wait until tx_start pulses.
+  3. Sample retry_count again — must be 1.
+  4. Pulse arb_lost again. Wait until tx_start pulses again.
+  5. Sample retry_count — must be 2.
+
+Back-off delay measurement technique:
+  - Record \$time (or a cycle counter) when arb_lost is deasserted.
+  - Wait in a while loop for tx_start to go high; record \$time again.
+  - delay1 = t_end - t_start.
+  - Repeat for the 2nd retry. delay2 must be >= 2 * delay1.
+
+Important: wait loops should have a cycle-limit watchdog to prevent infinite
+simulation if the DUT hangs. E.g. repeat(1000) @(posedge clk) + timeout check.
+
+No code here — implement the above plan in SystemVerilog.`,
+      design:
+`// Build the i2c_multi_master testbench here. See Theory for the full spec.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic rst, arb_lost;
+  logic [3:0] retry_count;
+  logic tx_start;
+
+  i2c_multi_master dut (
+    .clk        (clk),
+    .rst        (rst),
+    .arb_lost   (arb_lost),
+    .retry_count(retry_count),
+    .tx_start   (tx_start)
+  );
+
+  // Wait up to max_cycles for tx_start pulse; return cycle count as delay
+  task automatic wait_tx_start(output int delay);
+    int cnt;
+    cnt = 0;
+    while (!tx_start && cnt < 512) begin
+      @(posedge clk); #1;
+      cnt++;
+    end
+    delay = cnt;
+  endtask
+
+  initial begin
+    \$display("=== Multi-Master Retry Test ===");
+    arb_lost = 0; rst = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1; @(posedge clk); #1;
+
+    // --- retry 1 ---
+    arb_lost = 1; @(posedge clk); #1; arb_lost = 0;
+    begin
+      int d1;
+      wait_tx_start(d1);
+      if (retry_count >= 1)
+        \$display("PASS  retry count increments");
+      else
+        \$display("FAIL  retry_count=%0d (expected >= 1)", retry_count);
+
+      // --- retry 2 ---
+      arb_lost = 1; @(posedge clk); #1; arb_lost = 0;
+      begin
+        int d2;
+        wait_tx_start(d2);
+        if (d2 >= d1)
+          \$display("PASS  back-off delay grows");
+        else
+          \$display("FAIL  back-off did not grow: d1=%0d d2=%0d", d1, d2);
+      end
+    end
+
+    \$display("Multi-master testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  retry count increments',
+        'PASS  back-off delay grows',
+        'Multi-master testbench works!'
+      ]
+    },
+
+    // L3 added next
 
   ]
 });
