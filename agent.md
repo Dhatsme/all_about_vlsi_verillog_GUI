@@ -53,14 +53,16 @@ Every lesson inside a module's `lessons` array must have exactly these fields:
   // Array of strings. Shown as checklist in theory pane.
   // Rules:
   //   - First item always: what state the editor is in
-  //   - Difficulty tier 1-2: one task per line of code, with the exact text to type
-  //   - Difficulty tier 3-4: structural guidance ("declare the always_ff block")
-  //   - Difficulty tier 5 (project): high-level spec only ("implement the state machine")
+  //   - ALL tiers: use "Step N:" numbered format for every middle task
+  //   - Tier 1-2: one Step per line of code, with the exact text to type
+  //   - Tier 3-4: one Step per code block; include mini snippet using \n
+  //   - Tier 5 (project): one Step per spec requirement
+  //   - Tier 3+ MUST include a Step for the $urandom_range loop
   //   - Second-to-last item: Verilator timing note (see template below)
   //   - Last item: "Hit Run — X test cases must print PASS"
   tasks: [
     'Code tab is blank — type every line.',
-    // ... lesson-specific tasks ...
+    // ... Step N: tasks ...
     'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
     'Hit Run — all N PASS lines should appear in the Output tab',
   ],
@@ -96,6 +98,7 @@ Every lesson inside a module's `lessons` array must have exactly these fields:
   //   - End with `$finish;`
   //   - `\`timescale 1ns/1ps` on line 1
   //   - Module name must be exactly `tb`
+  //   - Tier 3+: MUST include $urandom_range loop (Pattern D or E)
   testbench: `\`timescale 1ns/1ps\nmodule tb;\n  ...\nendmodule`,
 
   // ── EXPECTED ─────────────────────────────────────────────────────────
@@ -115,10 +118,67 @@ Every lesson inside a module's `lessons` array must have exactly these fields:
 ### Structure (in this order)
 1. **Concept heading** — what new idea this lesson introduces
 2. **Analogy or diagram** — ground it in something physical
-3. **Syntax block** — show the pattern, not a complete module
-4. **Truth table or example table** — for any boolean logic
-5. **What you are building** — describe the circuit, show truth table
-6. **One-line call to action** — "Switch to Code tab. Stuck? Tap 💡 Show Hint."
+3. **Block diagram** — show a circuit diagram, bus topology, or FSM state diagram.
+   Use `<div class="flow-diagram">` for signal-flow boxes, or ASCII art in `<pre class="code-block">` for bus topologies and state machines. Every lesson that builds a circuit MUST have one.
+
+   Signal flow example:
+   ```html
+   <div class="flow-diagram">
+     <div class="flow-step">tx_en<br>tx_data</div>
+     <span class="flow-arrow">→</span>
+     <div class="flow-step">Output<br>Driver<br>(tristate)</div>
+     <span class="flow-arrow">⇄</span>
+     <div class="flow-step">SDA Bus<br>(wire-AND)</div>
+     <span class="flow-arrow">→</span>
+     <div class="flow-step">rx_data</div>
+   </div>
+   ```
+
+   Bus topology / FSM example:
+   ```html
+   <pre class="code-block">VDD
+    │  pull-up
+   SDA ──┴── Master ──── Slave
+   SCL ──┬── Master ──── Slave
+
+   IDLE ──(start)──→ ADDR ──→ ACK ──→ DATA ──→ STOP</pre>
+   ```
+
+4. **Syntax block** — show the pattern, not a complete module
+5. **Truth table or example table** — for any boolean logic
+6. **What you are building** — describe the circuit, show truth table
+7. **Step-by-step implementation (Tier 1/2 only)** — numbered headings that mirror the tasks array exactly. Each step gets one `<h3>Step N — description</h3>` followed by a `<pre class="code-block">` showing ONLY that step's code fragment (never the full module).
+
+   Example:
+   ```html
+   <h3>Step 1 — Module header</h3>
+   <pre class="code-block">module open_drain_cell (
+     input  logic tx_en,
+     input  logic tx_data,
+     inout  wire  sda,
+     output logic rx_data
+   );</pre>
+
+   <h3>Step 2 — Drive the open-drain line</h3>
+   <p>Release (1'bz) when idle; pull low only when actively sending a 0.</p>
+   <pre class="code-block">assign sda = (tx_en &amp;&amp; !tx_data) ? 1'b0 : 1'bz;</pre>
+
+   <h3>Step 3 — Read back from the bus</h3>
+   <pre class="code-block">assign rx_data = sda;</pre>
+
+   <h3>Step 4 — Randomized testbench loop (Tier 3+)</h3>
+   <p>Use <code>$urandom_range(0, 255)</code> inside a for loop — 20 iterations minimum.</p>
+   <pre class="code-block">int i;
+   logic [7:0] rand_val;
+
+   for (i = 0; i &lt; 20; i++) begin
+     rand_val = $urandom_range(0, 255);
+     din = rand_val;
+     @(posedge clk); #1;
+   end</pre>
+   ```
+
+8. **One-line call to action** — "Switch to Code tab. Stuck? Tap 💡 Show Hint."
 
 ### Do NOT put in theory
 - Complete module code (goes in hint)
@@ -144,39 +204,96 @@ This is the core pedagogical rule. Every lesson has one of five tiers.
 Tier rises **within** a chapter and **across** chapters.
 
 ### Tier 1 — Fully guided (msv1 L1)
-- Tasks list every line of code with the exact text to type
+- Tasks use **Step N:** format, one step per line of code, with the exact text to type
+- Theory has matching **Step N —** headings each followed by a code snippet
 - Hint is the full solution with annotation on every line
 - Design starter has detailed port comments
 - Good for: first-ever concept, new syntax never seen before
 
-### Tier 2 — Line hints (msv1 L2, L3)
-- Tasks list each line but stop short of giving the full text
-  - "── Line 3 ── input logic muted, ← comma"
+Example tasks array:
+```javascript
+tasks: [
+  'Code tab is blank — type every line.',
+  'Step 1: Open the module header — module and_gate (',
+  'Step 2: Add input a — input logic a,  (trailing comma)',
+  'Step 3: Add input b — input logic b,  (trailing comma)',
+  'Step 4: Add output — output logic out  (NO comma, last port)',
+  'Step 5: Close port list — ); on its own line',
+  'Step 6: Write the gate logic — assign out = a & b;',
+  'Step 7: Close — endmodule',
+  'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+  'Hit Run — all 4 PASS lines should appear in the Output tab',
+],
+```
+
+### Tier 2 — Step hints (msv1 L2, L3)
+- Tasks use **Step N:** format naming the concept, not the full syntax
+- Theory has Step N headings with condensed code snippets
 - Hint is the full solution with brief inline comments
 - Design starter has port list in comments
 - Good for: second time using a concept, minor extension
 
+Example tasks:
+```javascript
+'Step 1: Timescale directive — `timescale 1ns/1ps',
+'Step 2: Module header with 4 ports',
+'Step 3: Conditional assign for the tristate sda line',
+'Step 4: Read-back assign for rx_data',
+```
+
 ### Tier 3 — Structural guidance
-- Tasks give block-level steps: "declare the always_ff block", "add a reset case"
+- Tasks use **Step N:** format, one step per code block (not per line)
+- Include a mini code snippet inside the step string where helpful (use `\n` for line breaks)
 - Hint is clean, unannotated complete solution
 - Design starter has only the module header with port names as comments
 - Good for: applying a known concept in a slightly harder context
 - This is where users start to struggle a little — that is intentional
+- **Randomization mandatory:** tasks MUST include a Step for the `$urandom_range` loop
+
+Example tasks:
+```javascript
+'Step 1: Declare the module ports — clk, rst, [7:0] din, [7:0] dout',
+'Step 2: Add the always_ff block:\n  always_ff @(posedge clk) begin\n    if (!rst) dout <= 0;\n    else dout <= din;\n  end',
+'Step 3: In the testbench declare — int i; logic [7:0] rand_val;',
+'Step 4: Write the randomized for loop:\n  for (i = 0; i < 20; i++) begin\n    rand_val = $urandom_range(0, 255);\n    din = rand_val; @(posedge clk); #1;\n  end',
+```
 
 ### Tier 4 — Spec only
-- Tasks describe the desired behaviour, not the implementation
-  - "The counter should roll over from 9 back to 0"
-  - "Output valid must go high exactly 1 cycle after input is latched"
+- Tasks use **Step N:** format describing desired behaviour, not implementation
 - Hint has only design notes: a truth table, a state diagram in ASCII, or key equations
 - Design starter is a bare port list, nothing else
 - Good for: mid-series, when the user knows the primitives
+- **Randomization mandatory:** spec MUST call for a randomized testbench loop
+
+Example tasks:
+```javascript
+'Step 1: The counter must roll over from 9 back to 0',
+'Step 2: Output valid must go high exactly 1 cycle after input is latched',
+'Step 3: Your testbench must run 20 randomized iterations using $urandom_range(0, 9)',
+```
 
 ### Tier 5 — Project / portfolio piece
-- Tasks are a requirements list, like a real spec document
+- Tasks are **Step N:** requirements list, like a real spec document
 - Hint contains an ASCII block diagram and suggested module decomposition, no code
 - Design starter is completely blank except for the module header
 - End of lesson shows "🎓 Portfolio piece — add this to your GitHub"
 - Good for: capstone lessons, end-of-chapter projects
+- **Randomization mandatory:** spec MUST call for ≥30-iteration randomized stress test
+
+Example tasks:
+```javascript
+'Step 1: Implement START and STOP condition generation on SDA',
+'Step 2: Support clock stretching — hold SCL low when slave pulls it low',
+'Step 3: Your testbench must run 30 randomized byte transactions using $urandom_range(0, 255)',
+'🎓 Portfolio piece — push this to your GitHub when complete',
+```
+
+### Lesson count rule
+
+> If a topic requires more than 4 tasks to explain, **split it into two lessons**.
+> Aim for **5–8 lessons per module** — never fewer than 4.
+> This is especially important for I²C chapters where each protocol concept
+> (open-drain, START, ACK, clock stretching) deserves its own focused lesson.
 
 ### Tier mapping per chapter
 
@@ -364,7 +481,7 @@ Always write the Verilator task line in tasks as:
 
 ## 8. Testbench patterns by lesson type
 
-### Pattern A — Combinational (msv1 style)
+### Pattern A — Combinational (Tier 1/2 only)
 ```systemverilog
 `timescale 1ns/1ps
 module tb;
@@ -389,7 +506,7 @@ module tb;
 endmodule
 ```
 
-### Pattern B — Clocked / sequential
+### Pattern B — Clocked / sequential (Tier 1/2 only)
 ```systemverilog
 `timescale 1ns/1ps
 module tb;
@@ -423,7 +540,87 @@ endmodule
 // Same clk setup as pattern B.
 // Drive inputs, wait N cycles, check outputs.
 // Label each test with $display("--- Test: idle state ---");
+// Tier 4+ FSM testbenches: add a randomized input-sequence loop (Pattern E style).
 ```
+
+### Pattern D — Randomized combinational (Tier 3+ required)
+```systemverilog
+`timescale 1ns/1ps
+module tb;
+  logic [7:0] a, b, out;
+  my_module dut (.a(a), .b(b), .out(out));
+
+  int         i;
+  logic [7:0] rand_a, rand_b;
+
+  initial begin
+    $display("=== My Module Randomized Test ===");
+    for (i = 0; i < 20; i++) begin
+      rand_a = $urandom_range(0, 255);
+      rand_b = $urandom_range(0, 255);
+      a = rand_a; b = rand_b; #5;
+      if (out === (rand_a & rand_b))
+        $display("PASS  a=%0h b=%0h -> out=%0h", rand_a, rand_b, out);
+      else
+        $display("FAIL  a=%0h b=%0h -> out=%0h (expected %0h)",
+                  rand_a, rand_b, out, rand_a & rand_b);
+    end
+    $display("Randomized test complete!");
+    $finish;
+  end
+endmodule
+```
+
+**When to use:** Any Tier 3+ combinational lesson. Replace the handful of directed `check()` calls with this loop.
+
+### Pattern E — Randomized sequential (Tier 3+ required for clocked designs)
+```systemverilog
+`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       rst;
+  logic [7:0] din, dout;
+  my_register dut (.clk(clk), .rst(rst), .din(din), .dout(dout));
+
+  int         i;
+  logic [7:0] rand_val;
+
+  initial begin
+    $display("=== Randomized Register Test ===");
+    rst = 1; repeat(2) @(posedge clk); rst = 0;
+    for (i = 0; i < 20; i++) begin
+      rand_val = $urandom_range(0, 255);
+      din = rand_val;
+      @(posedge clk); #1;
+      if (dout === rand_val)
+        $display("PASS  din=%0h -> dout=%0h", rand_val, dout);
+      else
+        $display("FAIL  din=%0h -> dout=%0h (expected %0h)", rand_val, dout, rand_val);
+    end
+    $display("Randomized test complete!");
+    $finish;
+  end
+endmodule
+```
+
+**When to use:** Any Tier 3+ clocked lesson (register, shift register, counter, FIFO, UART, I²C byte TX).
+
+### Mandatory randomization rule (Tier 3 and above)
+
+Every Tier 3, 4, or 5 testbench **MUST** include at least one randomized loop of 20 or more iterations.
+
+| Rule | Detail |
+|---|---|
+| Preferred function | `$urandom_range(max, min)` — note: **max is the first** argument |
+| Loop variable | `int i;` (SystemVerilog) — never `integer i;` (Verilog) |
+| Minimum iterations | 20 for Tier 3/4; 30 for Tier 5 portfolio |
+| Directed tests | Allowed as a pre-loop sanity block; alone they are **not** sufficient for Tier 3+ |
+| 1-bit signals | `$urandom_range(0, 1)` |
+| 8-bit signals | `$urandom_range(0, 255)` |
+| Verilator 5.020 | `$urandom_range`, `$urandom`, `$random` all work without extra flags |
+| iverilog | Same functions work without extra options |
 
 ---
 
@@ -476,6 +673,10 @@ Tier 5: one comment only: `// Build the XXXX module here. See Theory for the spe
 
 - [ ] Every lesson has all 8 required fields (id, title, theory, tasks, hint, design, testbench, expected)
 - [ ] Theory has NO complete working code — only concept snippets
+- [ ] Theory has a block diagram (flow-diagram div or ASCII pre) showing what circuit is built
+- [ ] Tier 1/2: theory has Step N headings with matching code snippets for each step
+- [ ] Task Step N numbers match the Theory Step N headings exactly
+- [ ] All task strings use "Step N:" format — no bare descriptions, no "── Line N ──" strings
 - [ ] Hint has the complete solution
 - [ ] Design tab is blank of logic
 - [ ] Testbench uses `logic` everywhere (no `reg`/`wire`)
@@ -484,7 +685,9 @@ Tier 5: one comment only: `// Build the XXXX module here. See Theory for the spe
 - [ ] `expected` array substrings all appear in a correct run
 - [ ] Verilator timing task line is in tasks array
 - [ ] Difficulty tier is correct for the chapter's position in the series
+- [ ] Tier 3+ testbench uses Pattern D or E with `$urandom_range` loop (≥20 iterations)
 - [ ] Lesson ids are globally unique (check existing files)
+- [ ] Each module targets 5–8 lessons — if a topic needs >4 tasks, split into two lessons
 - [ ] `index.html` script tag added before curriculum.js
 - [ ] `curriculum.js` updated with module id
 
