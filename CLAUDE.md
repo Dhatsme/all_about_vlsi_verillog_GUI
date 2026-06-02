@@ -44,7 +44,7 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 3. Read agent.md for full schema, difficulty tiers, and testbench patterns
 4. Build the lesson file  →  static/lessons/modules/<moduleId>.js
 5. Commit 1: push ONLY the lesson JS file to develop branch
-6. Commit 2: push ONLY the two registration files (index.html + curriculum.js) to develop branch
+6. Commit 2: push ONLY the three registration files (index.html + curriculum.js + courses.js) to develop branch
 7. Edit this CLAUDE.md: change ❌ to ✅ for the chapter just built
 8. Push this file to main
 9. Stop — do not build the next chapter in the same session
@@ -384,6 +384,27 @@ Find the `<!-- SCRIPTS -->` block. Add the new script tag BEFORE `curriculum.js`
 
 Fetch this file first. Add the new module id into the CURRICULUM array in the correct position (after msv2, before msv4 etc). The array controls display order on the landing page.
 
+### Edit 3: `static/lessons/courses.js`  ← **CRITICAL — modules are invisible without this**
+
+Fetch this file first. Find the course object whose `modules` array should include the new chapter.
+Add the new module id at the end of that array.
+
+```javascript
+// Example: adding msv7 to the svzth course
+{ id: 'svzth', modules: ['msv1', 'msv2', 'msv3', 'msv4', 'msv5', 'msv6', 'msv7'] }
+//                                                                           ^^^^
+```
+
+| New chapter belongs to | Course `id` to update |
+|---|---|
+| msv1 – msv7 | `svzth` |
+| spi1 – spi5 | `spi` |
+| spitb1 – spitbN | `spitb` |
+
+⚠️  This is the gate that controls whether a module card appears on the landing page.
+`index.html` and `curriculum.js` register the module's data; `courses.js` makes it visible.
+Omitting this edit means the module loads silently but the user never sees it.
+
 ---
 
 ## Step 6 — push (TWO commits to stay within token limits)
@@ -399,13 +420,14 @@ branch: 'develop'
 ```
 
 ### Commit 2 — registration only
-Use `mcp__github__push_files` with just the two small registration files:
+Use `mcp__github__push_files` with the three small registration files:
 ```
 files: [
   { path: 'static/index.html',               content: '...' },
   { path: 'static/lessons/curriculum.js',    content: '...' },
+  { path: 'static/lessons/courses.js',       content: '...' },
 ]
-message: 'feat(msv3): register module in index.html and curriculum.js'
+message: 'feat(msv3): register module in index.html, curriculum.js and courses.js'
 branch: 'develop'
 ```
 
@@ -610,6 +632,7 @@ Add these as the final task in the last lesson of the trigger chapter:
 [ ] Difficulty tier is correct per the tier table above
 [ ] index.html <script> tag added before curriculum.js
 [ ] curriculum.js updated with module id
+[ ] courses.js updated — module id added to the correct course's modules array
 [ ] This CLAUDE.md updated: ❌ → ✅ for built chapter, cursor advanced
 ```
 
