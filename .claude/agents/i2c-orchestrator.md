@@ -103,17 +103,22 @@ Use this exact prompt template for each builder:
 ```
 Build chapter <ID> for the All About VLSI I²C Design course.
 
+TOKEN BUDGET: Write ONE lesson at a time. Never generate all three lessons in a single Write/Edit call.
+
 Steps:
 1. Read .claude/agents/i2cdesign.md — find the section for <ID>
-2. Write static/lessons/modules/<ID>.js following ALL rules in .claude/agents/i2c-chapter-builder.md
-3. Commit 1: git add static/lessons/modules/<ID>.js && git commit -m "feat(<ID>): <Title> chapter"
-4. Push commit 1: git push -u origin develop
-5. Edit static/index.html: add <script src="/lessons/modules/<ID>.js"></script> after the last i2c script tag
-6. Edit static/lessons/courses.js: append '<ID>' to the i2c modules array
-7. Commit 2: git add static/index.html static/lessons/courses.js && git commit -m "feat(<ID>): register in index.html and courses.js"
-8. Push commit 2 (with rebase if needed): git pull --rebase origin develop && git push -u origin develop
+2. Write static/lessons/modules/<ID>.js with L1 only (module header + first lesson object)
+3. Commit 1: git add static/lessons/modules/<ID>.js && git commit -m "feat(<ID>): L1 <L1 title>"
+4. Edit the JS file to append L2 lesson object
+5. Commit 2: git add static/lessons/modules/<ID>.js && git commit -m "feat(<ID>): L2 <L2 title>"
+6. Edit the JS file to append L3 lesson object and close the array/push
+7. Commit 3: git add static/lessons/modules/<ID>.js && git commit -m "feat(<ID>): L3 <L3 title>"
+8. Edit static/index.html: add <script src="/lessons/modules/<ID>.js"></script> after the last i2c script tag
+9. Edit static/lessons/courses.js: append '<ID>' to the i2c modules array
+10. Commit 4: git add static/index.html static/lessons/courses.js && git commit -m "feat(<ID>): register in index.html and courses.js"
+11. Push all four commits (with rebase if needed): git pull --rebase origin develop && git push -u origin develop
 
-Report back: chapter ID, lesson count, and whether both commits pushed successfully.
+Report back: chapter ID, lesson count, and whether all four commits pushed successfully.
 ```
 
 ---

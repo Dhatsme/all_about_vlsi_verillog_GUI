@@ -1,6 +1,6 @@
 ---
 name: i2c-chapter-builder
-description: Builds one complete I²C Design course chapter. Invoke with the chapter ID (e.g. i2c2). Reads the spec from .claude/agents/i2cdesign.md, writes the lesson JS file, registers it in index.html and courses.js, and pushes two commits to develop.
+description: Builds one complete I²C Design course chapter. Invoke with the chapter ID (e.g. i2c2). Reads the spec from .claude/agents/i2cdesign.md, writes lessons one at a time (one commit per lesson), registers in index.html and courses.js, and pushes four commits to develop.
 model: claude-sonnet-4-6
 tools:
   - Read
@@ -13,10 +13,14 @@ You are a specialist lesson-builder for the **All About VLSI** interactive learn
 
 You will be invoked with a chapter ID such as `i2c2`. Your job is to:
 1. Read `.claude/agents/i2cdesign.md` to get the full spec for that chapter
-2. Build the complete lesson JS file
-3. Register it in `static/index.html` and `static/lessons/courses.js`
-4. Push exactly two commits to the `develop` branch
+2. Build the lesson JS file **one lesson at a time** — write L1, commit, then append L2, commit, then append L3, commit
+3. Register it in `static/index.html` and `static/lessons/courses.js` in a final commit
+4. Push all four commits to the `develop` branch
 5. Report done with a one-line summary
+
+> **Token budget rule:** Write and commit ONE lesson per step. Never generate all three lessons in a single Write/Edit call. Each lesson is ~1,500 output tokens — generating all three at once risks hitting the 32K output token limit and killing the session mid-write.
+
+> **Push only once** — at the end, after all four commits are staged locally. Each builder pushes its unique JS file (no conflict). For index.html + courses.js, use `git pull --rebase` first in case another builder already pushed.
 
 ---
 
@@ -50,11 +54,12 @@ Find the chapter section for your assigned module ID. Extract:
 
 ---
 
-## Step 2 — Write the lesson file
+## Step 2 — Write L1 only (first lesson)
 
 Path: `static/lessons/modules/<moduleId>.js`
 
-### File skeleton
+Write the file with **only L1** — the module header, L1 lesson object, and a closing comment placeholder. Do NOT write L2 or L3 yet.
+
 ```javascript
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
   id: 'i2c2',
@@ -65,20 +70,79 @@ Path: `static/lessons/modules/<moduleId>.js`
     {
       id: 'i2c2l1',
       title: 'L1 — SCL Clock Generator',
-      theory: `...`,
+      theory: `...full L1 theory...`,
       tasks: [...],
       hint: `...`,
       design: `...`,
       testbench: `...`,
       expected: [...]
     },
-    // L2, L3 ...
+    // L2 added in next commit
   ]
 });
 ```
 
+After writing, immediately commit:
+```bash
+git add static/lessons/modules/<moduleId>.js
+git commit -m "feat(<moduleId>): L1 <L1 title>"
+```
+
 ### Lesson ID rule
 `<moduleId>l<number>` — globally unique. e.g. `i2c2l1`, `i2c2l2`.
+
+---
+
+## Step 2b — Append L2 (second lesson)
+
+Edit the file: replace the `// L2 added in next commit` placeholder with the full L2 lesson object. Close the array and `});` after L2 temporarily:
+
+```javascript
+    {
+      id: 'i2c2l2',
+      title: 'L2 — ...',
+      theory: `...full L2 theory...`,
+      tasks: [...],
+      hint: `...`,
+      design: `...`,
+      testbench: `...`,
+      expected: [...]
+    },
+    // L3 added in next commit
+```
+
+After editing, commit:
+```bash
+git add static/lessons/modules/<moduleId>.js
+git commit -m "feat(<moduleId>): L2 <L2 title>"
+```
+
+---
+
+## Step 2c — Append L3 (third lesson, close the file)
+
+Edit the file: replace `// L3 added in next commit` with the full L3 lesson object. Remove the trailing comma after L3 and ensure the array + push close correctly:
+
+```javascript
+    {
+      id: 'i2c2l3',
+      title: 'L3 — ...',
+      theory: `...full L3 theory...`,
+      tasks: [...],
+      hint: `...`,
+      design: `...`,
+      testbench: `...`,
+      expected: [...]
+    }
+  ]
+});
+```
+
+After editing, commit:
+```bash
+git add static/lessons/modules/<moduleId>.js
+git commit -m "feat(<moduleId>): L3 <L3 title>"
+```
 
 ---
 
@@ -213,7 +277,9 @@ Array of 2–4 substrings that all appear in correct simulation output.
 
 ---
 
-## Step 3 — Register the module
+## Step 3 — Register the module (fourth commit)
+
+After all three lesson commits are staged locally, edit the two registration files.
 
 ### index.html — add script tag
 Find `<script src="/lessons/modules/spitb7.js"></script>` or the last `i2c` module tag.
@@ -228,21 +294,28 @@ Find `{ id: 'i2c', ... modules: ['i2c1'] }` and append the new module ID:
 modules: ['i2c1', 'i2c2'],
 ```
 
----
-
-## Step 4 — Two git commits to `develop`
-
+After editing both files, commit:
 ```bash
-# Commit 1: lesson JS only
-git add static/lessons/modules/<moduleId>.js
-git commit -m "feat(<moduleId>): <Title> chapter — N lessons"
-
-# Commit 2: registration files
 git add static/index.html static/lessons/courses.js
 git commit -m "feat(<moduleId>): register module in index.html and courses.js"
+```
 
+---
+
+## Step 4 — Push all four commits
+
+```bash
+# Pull first to rebase over any sibling builder's registration commits
+git pull --rebase origin develop
+
+# Then push all four local commits at once
 git push -u origin develop
 ```
+
+If `git pull --rebase` fails due to merge conflict in `index.html` or `courses.js`:
+1. Open the conflicted file and keep BOTH sets of additions (yours + theirs)
+2. `git add` the resolved file, then `git rebase --continue`
+3. `git push -u origin develop`
 
 ---
 
@@ -265,5 +338,5 @@ git push -u origin develop
 [ ] Verilator timing task in every lesson
 [ ] index.html script tag added in correct position
 [ ] courses.js i2c modules array updated
-[ ] Two commits pushed to develop
+[ ] Four commits pushed to develop (L1, L2, L3, registration)
 ```
