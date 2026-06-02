@@ -29,13 +29,13 @@ These rules were added after reviewing i2c1. Every chapter must follow them:
 | # | Module ID | Title | Lessons | Tier | Status |
 |---|---|---|---|---|---|
 | 1 | `i2c1` | I²C Fundamentals | L1 Open-Drain IO Cell, L2 START/STOP Detector, L3 Serial Shift Register | 1–2 | ✅ done |
-| 2 | `i2c2` | Bit-Banging the Bus | L1 SCL Clock Generator, L2 Data Bit TX, L3 Data Bit RX + Clock Stretch | 2 | ❌ **build this next** |
-| 3 | `i2c3` | Byte Transfer | L1 TX Byte FSM, L2 RX Byte + ACK, L3 Combined TX/RX Controller | 2–3 | ❌ |
-| 4 | `i2c4` | I²C Controller FSM | L1 Address Phase, L2 Data Phase, L3 Full Master Controller | 3 | ❌ |
-| 5 | `i2c5` | I²C Target Device | L1 Address Match, L2 Register Read/Write, L3 Target with IRQ | 3–4 | ❌ |
-| 6 | `i2c6` | Register Map & Memory | L1 8-bit Register File, L2 Address Decoder, L3 Auto-increment Pointer | 4 | ❌ |
-| 7 | `i2c7` | Multi-Master & Arbitration | L1 Bus Arbitration Logic, L2 Clock Sync, L3 Collision Detect & Retry | 4–5 | ❌ |
-| 8 | `i2c8` | I²C Subsystem (Capstone) | L1 Top-level Integration, L2 Verification Plan, L3 Full Subsystem Portfolio | 5 | ❌ |
+| 2 | `i2c2` | Bit-Banging the Bus | L1 SCL Clock Generator, L2 Data Bit TX, L3 Data Bit RX + Clock Stretch | 2 | ✅ done |
+| 3 | `i2c3` | Byte Transfer | L1 TX Byte FSM, L2 RX Byte + ACK, L3 Combined TX/RX Controller | 2–3 | ✅ done |
+| 4 | `i2c4` | I²C Controller FSM | L1 Address Phase, L2 Data Phase, L3 Full Master Controller | 3 | ✅ done |
+| 5 | `i2c5` | I²C Target Device | L1 Address Match, L2 Register Read/Write, L3 Target with IRQ | 3–4 | ✅ done |
+| 6 | `i2c6` | Register Map & Memory | L1 8-bit Register File, L2 Address Decoder, L3 Auto-increment Pointer | 4 | ✅ done |
+| 7 | `i2c7` | Multi-Master & Arbitration | L1 Bus Arbitration Logic, L2 Clock Sync, L3 Collision Detect & Retry | 4–5 | ✅ done |
+| 8 | `i2c8` | I²C Subsystem (Capstone) | L1 Top-level Integration, L2 Verification Plan, L3 Full Subsystem Portfolio | 5 | ✅ done |
 
 ---
 
