@@ -232,7 +232,284 @@ endmodule`,
       ]
     },
 
-    // L2 added next
+    // ─────────────────────────────────────────────────────────────────────
+    // L2 — Testing the Data Phase  (Tier 3)
+    // ─────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb4l2',
+      title: 'L2 — Testing the Data Phase',
+      theory: `
+<h2>Why the data phase matters to real engineers</h2>
+<p>Every I²C payload — the command register you write to a temperature sensor, the configuration byte you push to an OLED driver, the bytes you read back from a EEPROM — travels through the data phase. It is also the widest window for bugs: one bit arriving in the wrong order corrupts the entire message, yet the bus keeps running with no error signal. Verification teams test multi-byte sequences explicitly to catch shift-register misalignment, off-by-one bit counts, and incorrect NACK handling on the last byte.</p>
+
+<h2>Data phase timing — 3-byte TX example</h2>
+<pre class="code-block">Byte 1            Byte 2            Byte 3
+D7 D6 D5 D4 D3 D2 D1 D0 ACK  D7 D6 D5 D4 D3 D2 D1 D0 ACK  D7...D0 NACK
+|                          |                              |
+SCL pulses continuously; SDA changes while SCL is low.
+On the 9th pulse of each byte: target drives SDA=0 for ACK, releases for NACK.
+</pre>
+
+<h2>Multi-byte loop — the new concept</h2>
+<p>A single <code>send_byte</code> task handles one 8-bit transfer. For a multi-byte sequence you call it in a loop, passing each byte in order. The key rule: ACK is expected after every byte <em>except</em> the last one in a read transaction (the master sends NACK to tell the target "I have all the data I need, stop sending"). You verify each ACK/NACK response individually.</p>
+
+<pre class="code-block">// Parameterised N-byte TX: call send_byte for each byte
+task automatic send_byte(input logic [7:0] data, input logic ack_resp);
+  // drive 8 bits MSB-first on sda while scl is low
+  // on 9th cycle: ack_resp selects ACK(0) or NACK(1)
+endtask
+
+// 3-byte sequence:
+send_byte(8'hA1, 1'b0);  // byte 1, ACK expected
+send_byte(8'hB2, 1'b0);  // byte 2, ACK expected
+send_byte(8'hC3, 1'b1);  // byte 3, NACK (last byte)
+</pre>
+
+<table class="truth-table">
+  <tr><th>Scenario</th><th>Bytes</th><th>ACK after each</th><th>Expected output</th></tr>
+  <tr><td>3-byte TX</td><td>0xA1, 0xB2, 0xC3</td><td>ACK, ACK, NACK</td><td>tx_count===3, tx_done===1</td></tr>
+  <tr><td>2-byte RX</td><td>0x55, 0xAA</td><td>ACK (byte 1), NACK (byte 2)</td><td>data_out[0]===0x55, data_out[1]===0xAA</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>You are writing a testbench for <code>i2c_data_phase</code>. The module drives or samples 8-bit bytes over SDA with SCL. Your testbench provides a <code>send_byte</code> task that drives each bit MSB-first on SDA while SCL toggles, then simulates an ACK or NACK response. For the RX test you drive known bits into SDA and verify the received bytes. A passing run prints three PASS lines followed by "Data phase testbench works!".</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>System clock driving all FSM flip-flops.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset returning FSM to IDLE.</td></tr>
+  <tr><td><code>mode</code></td><td>input logic</td><td>0 = TX (master sends), 1 = RX (master receives).</td></tr>
+  <tr><td><code>start</code></td><td>input logic</td><td>Pulse high to begin the data phase transaction.</td></tr>
+  <tr><td><code>n_bytes</code></td><td>input logic [3:0]</td><td>Number of bytes to transfer (1–8).</td></tr>
+  <tr><td><code>tx_data</code></td><td>input logic [7:0]</td><td>Byte to transmit on the current iteration.</td></tr>
+  <tr><td><code>sda</code></td><td>inout wire</td><td>Bidirectional I²C data line.</td></tr>
+  <tr><td><code>scl</code></td><td>output logic</td><td>I²C clock output driven by the module.</td></tr>
+  <tr><td><code>rx_data</code></td><td>output logic [7:0]</td><td>Byte received on the current iteration.</td></tr>
+  <tr><td><code>byte_done</code></td><td>output logic</td><td>Pulses high for one cycle after each byte completes.</td></tr>
+  <tr><td><code>done</code></td><td>output logic</td><td>Pulses high when all n_bytes have transferred.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare tb with timescale, wire sda, pullup pu(sda), and 100 MHz clock',
+        'Declare DUT signals: rst, mode, start, n_bytes [3:0], tx_data [7:0], scl, rx_data [7:0], byte_done, done',
+        'Declare logic sda_drive and tri-state driver: assign sda = sda_drive_en ? (sda_drive ? 1\'bz : 1\'b0) : 1\'bz',
+        'Instantiate i2c_data_phase as dut, connecting all ports',
+        'Write task automatic send_byte(data, ack_resp): drive 8 bits MSB-first on SDA each SCL low period, drive ack_resp on 9th cycle, wait for byte_done',
+        'Write task automatic recv_byte(expected): drive known bits on SDA while SCL is high, verify rx_data===expected after byte_done',
+        'Test 1: 3-byte TX (0xA1, 0xB2, 0xC3); ACK after bytes 1 and 2, NACK after byte 3 — check done===1',
+        'Test 2: 2-byte RX — drive 0x55 and 0xAA as SDA bits, verify rx_data matches each byte',
+        'Print "Data phase testbench works!" and $finish',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 3 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;  // 100 MHz
+
+  wire  sda;
+  pullup pu(sda);
+
+  logic       rst, mode, start, byte_done, done;
+  logic [3:0] n_bytes;
+  logic [7:0] tx_data, rx_data;
+  logic       scl;
+
+  // testbench drives SDA when it needs to inject bits or ACK/NACK
+  logic sda_tb;   // 1 = release (high via pullup), 0 = pull low
+  assign sda = sda_tb ? 1'bz : 1'b0;
+
+  i2c_data_phase dut (
+    .clk      (clk),
+    .rst      (rst),
+    .mode     (mode),
+    .start    (start),
+    .n_bytes  (n_bytes),
+    .tx_data  (tx_data),
+    .sda      (sda),
+    .scl      (scl),
+    .rx_data  (rx_data),
+    .byte_done(byte_done),
+    .done     (done)
+  );
+
+  // send_byte: drive 8 data bits MSB-first on SDA while SCL is low,
+  // then drive ack_resp on the 9th (ACK) cycle.
+  task automatic send_byte(input logic [7:0] data, input logic ack_resp);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      @(negedge scl); #1;
+      sda_tb = data[i] ? 1'b1 : 1'b0;   // 1=release, 0=drive low
+    end
+    // 9th clock: ACK slot — target drives low for ACK
+    @(negedge scl); #1;
+    sda_tb = ack_resp;   // 0=ACK (pull low), 1=NACK (release)
+    @(posedge byte_done); #1;
+    sda_tb = 1;          // release after ACK
+  endtask
+
+  // recv_byte: drive known bits MSB-first so DUT can sample them on SCL posedge
+  task automatic recv_byte(
+    input logic [7:0] expected,
+    input logic       send_ack  // 0=master ACKs (more to come), 1=master NACKs (last)
+  );
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      @(negedge scl); #1;
+      sda_tb = expected[i] ? 1'b1 : 1'b0;
+    end
+    // master drives ACK/NACK on 9th cycle (master is the receiver here)
+    @(negedge scl); #1;
+    sda_tb = send_ack;   // 0=master ACKs, 1=master NACKs
+    @(posedge byte_done); #1;
+    sda_tb = 1;
+    if (rx_data === expected)
+      \$display("PASS  received 0x%02h", expected);
+    else
+      \$display("FAIL  received 0x%02h (expected 0x%02h)", rx_data, expected);
+  endtask
+
+  initial begin
+    \$display("=== Data Phase Test ===");
+    rst = 0; sda_tb = 1; mode = 0; start = 0; n_bytes = 0;
+    tx_data = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+
+    // --- Test 1: 3-byte TX ---
+    mode = 0; n_bytes = 4'd3;
+    start = 1; @(posedge clk); #1; start = 0;
+    tx_data = 8'hA1; send_byte(8'hA1, 1'b0);  // ACK
+    tx_data = 8'hB2; send_byte(8'hB2, 1'b0);  // ACK
+    tx_data = 8'hC3; send_byte(8'hC3, 1'b1);  // NACK (last byte)
+    @(posedge done); #1;
+    \$display("PASS  3 bytes transmitted");
+
+    repeat(4) @(posedge clk); #1;
+
+    // --- Test 2: 2-byte RX ---
+    mode = 1; n_bytes = 4'd2;
+    start = 1; @(posedge clk); #1; start = 0;
+    recv_byte(8'h55, 1'b0);   // byte 1: master ACKs
+    recv_byte(8'hAA, 1'b1);   // byte 2: master NACKs (last)
+    @(posedge done); #1;
+    \$display("PASS  2 bytes received");
+
+    \$display("Data phase testbench works!");
+    \$finish;
+  end
+endmodule`,
+      design:
+`// Type the i2c_data_phase testbench here.
+// See Theory for the multi-byte loop concept.
+//
+// Ports to declare (testbench signals):
+//   wire  sda               -- inout: use wire + pullup pu(sda)
+//   logic clk               -- 100 MHz clock
+//   logic rst, mode, start  -- control inputs
+//   logic [3:0] n_bytes     -- number of bytes (1-8)
+//   logic [7:0] tx_data     -- byte to transmit
+//   logic scl               -- SCL output from DUT
+//   logic [7:0] rx_data     -- byte received from DUT
+//   logic byte_done, done   -- completion signals
+//   logic sda_tb            -- testbench SDA driver
+//
+// Tasks:
+//   send_byte(data, ack_resp) -- drive 8 bits + ACK slot, wait for byte_done
+//   recv_byte(expected, ack)  -- inject bits, verify rx_data, drive master ACK
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  wire  sda;
+  pullup pu(sda);
+
+  logic       rst, mode, start, byte_done, done;
+  logic [3:0] n_bytes;
+  logic [7:0] tx_data, rx_data;
+  logic       scl;
+  logic       sda_tb;
+  assign sda = sda_tb ? 1'bz : 1'b0;
+
+  i2c_data_phase dut (
+    .clk(clk), .rst(rst), .mode(mode), .start(start),
+    .n_bytes(n_bytes), .tx_data(tx_data), .sda(sda),
+    .scl(scl), .rx_data(rx_data), .byte_done(byte_done), .done(done)
+  );
+
+  task automatic send_byte(input logic [7:0] data, input logic ack_resp);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      @(negedge scl); #1;
+      sda_tb = data[i] ? 1'b1 : 1'b0;
+    end
+    @(negedge scl); #1;
+    sda_tb = ack_resp;
+    @(posedge byte_done); #1;
+    sda_tb = 1;
+  endtask
+
+  task automatic recv_byte(input logic [7:0] expected, input logic send_ack);
+    integer i;
+    for (i = 7; i >= 0; i--) begin
+      @(negedge scl); #1;
+      sda_tb = expected[i] ? 1'b1 : 1'b0;
+    end
+    @(negedge scl); #1;
+    sda_tb = send_ack;
+    @(posedge byte_done); #1;
+    sda_tb = 1;
+    if (rx_data === expected)
+      \$display("PASS  received 0x%02h", expected);
+    else
+      \$display("FAIL  received 0x%02h (expected 0x%02h)", rx_data, expected);
+  endtask
+
+  initial begin
+    \$display("=== Data Phase Test ===");
+    rst = 0; sda_tb = 1; mode = 0; start = 0;
+    n_bytes = 0; tx_data = 0;
+    repeat(2) @(posedge clk); #1;
+    rst = 1;
+
+    mode = 0; n_bytes = 4'd3;
+    start = 1; @(posedge clk); #1; start = 0;
+    tx_data = 8'hA1; send_byte(8'hA1, 1'b0);
+    tx_data = 8'hB2; send_byte(8'hB2, 1'b0);
+    tx_data = 8'hC3; send_byte(8'hC3, 1'b1);
+    @(posedge done); #1;
+    \$display("PASS  3 bytes transmitted");
+
+    repeat(4) @(posedge clk); #1;
+
+    mode = 1; n_bytes = 4'd2;
+    start = 1; @(posedge clk); #1; start = 0;
+    recv_byte(8'h55, 1'b0);
+    recv_byte(8'hAA, 1'b1);
+    @(posedge done); #1;
+    \$display("PASS  2 bytes received");
+
+    \$display("Data phase testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  3 bytes transmitted',
+        'PASS  2 bytes received',
+        'Data phase testbench works!'
+      ]
+    },
+
+    // L3 added next
 
   ]
 });
