@@ -353,15 +353,21 @@
 </div>
 
 <!-- ── SCRIPTS ── -->
-<!-- Curriculum modules — add new chapter: create modules/msvN.js and add a line here -->
+<!-- courses.js is the single source of truth for module loading.
+     To add a new course chapter: update courses.js only — never edit index.html. -->
 <script src="./lessons/courses.js"></script>
-<script src="./lessons/modules/msv1.js"></script>
-<script src="./lessons/modules/msv2.js"></script>
-<script src="./lessons/modules/msv3.js"></script>
-<script src="./lessons/modules/msv4.js"></script>
-<script src="./lessons/modules/msv5.js"></script>
-<script src="./lessons/modules/msv6.js"></script>
-<script src="./lessons/modules/msv7.js"></script>
+<script>
+// Dynamically load every module listed in courses.js.
+// document.write is synchronous during page parse — all module scripts
+// execute and populate CURRICULUM_MODULES before curriculum.js runs.
+(function () {
+  var ids = (window.COURSES || []).reduce(function (a, c) { return a.concat(c.modules); }, []);
+  ids.forEach(function (id) {
+    document.write('<script src="./lessons/modules/' + id + '.js"><\/script>');
+  });
+}());
+</script>
+<!-- Standalone modules (not part of any course) — static tags only for these -->
 <script src="./lessons/modules/m1.js"></script>
 <script src="./lessons/modules/m2.js"></script>
 <script src="./lessons/modules/m3.js"></script>
@@ -371,33 +377,6 @@
 <script src="./lessons/modules/m13.js"></script>
 <script src="./lessons/modules/m16.js"></script>
 <script src="./lessons/modules/m15.js"></script>
-<script src="./lessons/modules/spi1.js"></script>
-<script src="./lessons/modules/spi2.js"></script>
-<script src="./lessons/modules/spi3.js"></script>
-<script src="./lessons/modules/spi4.js"></script>
-<script src="./lessons/modules/spi5.js"></script>
-<script src="./lessons/modules/spitb1.js"></script>
-<script src="./lessons/modules/spitb2.js"></script>
-<script src="./lessons/modules/spitb3.js"></script>
-<script src="./lessons/modules/spitb4.js"></script>
-<script src="./lessons/modules/spitb5.js"></script>
-<script src="./lessons/modules/spitb6.js"></script>
-<script src="./lessons/modules/spitb7.js"></script>
-<script src="./lessons/modules/i2c1.js"></script>
-<script src="./lessons/modules/i2c2.js"></script>
-<script src="./lessons/modules/i2c3.js"></script>
-<script src="./lessons/modules/i2c4.js"></script>
-<script src="./lessons/modules/i2c5.js"></script>
-<script src="./lessons/modules/i2c6.js"></script>
-<script src="./lessons/modules/i2c7.js"></script>
-<script src="./lessons/modules/i2c8.js"></script>
-<script src="./lessons/modules/i2ctb1.js"></script>
-<script src="./lessons/modules/i2ctb2.js"></script>
-<script src="./lessons/modules/i2ctb3.js"></script>
-<script src="./lessons/modules/i2ctb4.js"></script>
-<script src="./lessons/modules/i2ctb5.js"></script>
-<script src="./lessons/modules/i2ctb6.js"></script>
-<script src="./lessons/modules/i2ctb7.js"></script>
 <script src="./lessons/curriculum.js"></script>
 <script src="./js/waveform.js"></script>
 <script src="./js/app.js"></script>
