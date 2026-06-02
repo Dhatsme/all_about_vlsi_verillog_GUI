@@ -371,6 +371,194 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Data Bit Receiver + Clock Stretch  (Tier 2)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c2l3',
+      title: 'L3 — Data Bit Receiver and Clock Stretch',
+      theory: `
+<h2>Where this circuit appears in the real world</h2>
+<p>Slow I²C target devices — flash memories, low-power sensors — cannot always process a byte before the next SCL clock arrives. The I²C specification gives them an escape hatch: <strong>clock stretching</strong>. The target holds SCL low, forcing the master to wait. A Raspberry Pi talking to a slow EEPROM relies on this mechanism every time it writes data. The module you are building is the hardware that does both jobs: samples incoming bits and, when overwhelmed, stretches the clock.</p>
+
+<h2>Two behaviours on two SCL edges</h2>
+<pre class="code-block">SCL (normal):   _____|‾‾‾‾‾‾‾|_____
+                           ↑
+                     sample SDA here (rising edge)
+
+SCL (stretched):  _____|___↓HOLD_______|‾‾‾‾
+                               ↑
+                target drives SCL=0 to pause master
+                master waits until SCL floats high</pre>
+
+<h2>Sampling on the rising edge</h2>
+<p>The I²C receiver samples SDA on the <strong>rising</strong> edge of SCL — the moment when the transmitter guarantees data is stable. We detect the rising edge with the same 1-clock delay trick from i2c1:</p>
+<pre class="code-block">logic scl_d;
+always_ff @(posedge clk) begin
+  scl_d &lt;= scl;
+  if (!scl_d &amp;&amp; scl)       // SCL just rose
+    rx_data &lt;= sda;        // sample the bit
+end</pre>
+
+<h2>Clock stretching — driving an inout</h2>
+<p>SCL is normally an output of the master, but the target can hold it low by driving it to 0. Both SCL and SDA are open-drain wires: to stretch, the target pulls SCL to 0; to release, it lets go (high-Z). The master sees SCL stay low and waits.</p>
+<pre class="code-block">// When stretch=1, pull SCL low. Otherwise release it.
+assign scl = stretch ? 1'b0 : 1'bz;</pre>
+
+<table class="truth-table">
+  <tr><th>stretch</th><th>SCL driven to</th><th>Master sees</th></tr>
+  <tr><td>0</td><td>1'bz (released)</td><td>SCL from master (normal)</td></tr>
+  <tr><td>1</td><td>1'b0 (held low)</td><td>SCL stuck low — waits</td></tr>
+</table>
+
+<h2>Before you code</h2>
+<p>What you are about to build receives one bit from SDA on each rising SCL edge and stores it in <code>rx_data</code>. When the <code>stretch</code> input goes high, it pulls SCL low through the open-drain bus, pausing the master until stretch is released.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>Fast system clock used for edge detection — runs at a multiple of the SCL rate.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset — clears rx_data and releases the bus.</td></tr>
+  <tr><td><code>scl</code></td><td>inout wire</td><td>The I²C clock line — sampled as input normally; driven low when stretch=1.</td></tr>
+  <tr><td><code>sda</code></td><td>inout wire</td><td>The I²C data line — always sampled; the receiver never drives SDA in this module.</td></tr>
+  <tr><td><code>rx_data</code></td><td>output logic</td><td>The most recently received bit — updated on each rising SCL edge.</td></tr>
+  <tr><td><code>stretch</code></td><td>input logic</td><td>1 = hold SCL low to pause the master (clock stretching); 0 = release SCL.</td></tr>
+</table>
+<p>This one takes a few tries to get the edge directions right — that is completely normal. Pay close attention to whether you need the rising or falling edge of SCL for each action.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        '── Line 1 ──  module i2c_bit_rx (',
+        '── Line 2 ──  input  logic clk,      ← comma',
+        '── Line 3 ──  input  logic rst,      ← comma (synchronous active-low reset)',
+        '── Line 4 ──  inout  wire  scl,      ← comma — wire, not logic (open-drain)',
+        '── Line 5 ──  inout  wire  sda,      ← comma — wire, not logic',
+        '── Line 6 ──  output logic rx_data,  ← comma',
+        '── Line 7 ──  input  logic stretch   ← NO comma (last port)',
+        '── Line 8 ──  );',
+        '── Line 9 ──  Declare internal logic: scl_d (delayed SCL for edge detect)',
+        '── Line 10 ──  always_ff @(posedge clk) block:',
+        '── Line 11 ──    if (!rst): clear scl_d and rx_data to 0',
+        '── Line 12 ──    else: scl_d <= scl   ← always update the delay register',
+        '── Line 13 ──    if (!scl_d && scl): rx_data <= sda   ← rising edge: sample SDA',
+        '── Line 14 ──  assign scl = stretch ? 1\'b0 : 1\'bz;   ← open-drain clock stretch',
+        '── Line 15 ──  endmodule',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 3 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`module i2c_bit_rx (
+  input  logic clk,       // system clock
+  input  logic rst,       // synchronous active-low reset
+  inout  wire  scl,       // I2C clock — open-drain (can hold low for stretch)
+  inout  wire  sda,       // I2C data — sampled by receiver
+  output logic rx_data,   // bit received on last rising SCL edge
+  input  logic stretch    // 1 = hold SCL low (clock stretching)
+);
+  logic scl_d;  // SCL delayed one cycle for rising-edge detection
+
+  always_ff @(posedge clk) begin
+    if (!rst) begin
+      scl_d   <= 0;
+      rx_data <= 0;
+    end else begin
+      scl_d <= scl;
+      if (!scl_d && scl)    // SCL rising edge detected
+        rx_data <= sda;     // sample SDA — transmitter guarantees it's stable
+    end
+  end
+
+  // Open-drain clock stretch: pull SCL low when stretch=1, release otherwise
+  assign scl = stretch ? 1'b0 : 1'bz;
+
+endmodule`,
+      design:
+`// Type the i2c_bit_rx module here. See Theory for the concept.
+//
+// Ports: clk, rst, stretch (logic inputs)
+//        scl, sda (inout wire)
+//        rx_data (output logic)
+//
+// Delete this and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  wire  scl;           // inout must be wire in testbench
+  wire  sda;           // inout must be wire in testbench
+  pullup pu_scl(scl);  // external pull-up on SCL
+  pullup pu_sda(sda);  // external pull-up on SDA
+
+  logic rst, stretch;
+  logic rx_data;
+
+  // Master drives SCL as a tri-state logic driver
+  logic scl_drv;       // 1'b0 = master drives low; 1'bz = master releases
+  assign scl = scl_drv ? 1'b0 : 1'bz;
+
+  // External data source drives SDA
+  logic sda_drv;
+  assign sda = sda_drv ? 1'b0 : 1'bz;
+
+  i2c_bit_rx dut (
+    .clk(clk), .rst(rst), .scl(scl),
+    .sda(sda), .rx_data(rx_data), .stretch(stretch)
+  );
+
+  initial begin
+    \$display("=== I2C Bit RX Test ===");
+    rst = 0; scl_drv = 1; sda_drv = 1; stretch = 0;
+    repeat(3) @(posedge clk); #1;
+    rst = 1;
+
+    // Test 1: receive a 1 — SDA released (high via pull-up), SCL rises
+    sda_drv  = 0;           // release SDA -> pull-up drives it high
+    scl_drv  = 1;           // hold SCL low
+    repeat(2) @(posedge clk); #1;
+    scl_drv  = 0;           // release SCL -> pull-up drives it high (rising edge)
+    repeat(2) @(posedge clk); #1;
+    if (rx_data === 1)
+      \$display("PASS  received 1: rx_data=1");
+    else
+      \$display("FAIL  received 1: rx_data=%0b (expected 1)", rx_data);
+
+    // Test 2: receive a 0 — SDA driven low, SCL rises
+    scl_drv  = 1;           // pull SCL low
+    sda_drv  = 1;           // drive SDA low
+    repeat(2) @(posedge clk); #1;
+    scl_drv  = 0;           // release SCL (rising edge) — SDA is 0
+    repeat(2) @(posedge clk); #1;
+    if (rx_data === 0)
+      \$display("PASS  received 0: rx_data=0");
+    else
+      \$display("FAIL  received 0: rx_data=%0b (expected 0)", rx_data);
+
+    // Test 3: clock stretching — when stretch=1, SCL must be held low
+    scl_drv  = 0;           // master releases SCL
+    sda_drv  = 0;
+    stretch  = 1;           // DUT holds SCL low
+    repeat(3) @(posedge clk); #1;
+    if (scl === 0)
+      \$display("PASS  stretch: scl=0 (held low by target)");
+    else
+      \$display("FAIL  stretch: scl=%0b (expected 0)", scl);
+    stretch = 0;
+
+    \$display("Bit RX works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  received 1: rx_data=1',
+        'PASS  received 0: rx_data=0',
+        'PASS  stretch: scl=0 (held low by target)',
+        'Bit RX works!'
+      ]
+    }
+
   ]
 });
