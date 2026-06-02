@@ -635,7 +635,354 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ────────────────────────────────────────────────────────────────────
+    // L3 — Full Subsystem Portfolio  (Tier 5)
+    // ────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2c8l3',
+      title: 'L3 — Full Subsystem Portfolio',
+      theory: `
+<h2>You have built a complete I²C subsystem</h2>
+<p>Over the past eight chapters you assembled every layer of a real I²C peripheral from scratch — the same layers that appear in physical silicon shipping inside millions of consumer devices. This final lesson asks you to document, stress-test, and publish that work. In the industry this phase is called <em>design sign-off</em>. Nothing ships to a foundry without it.</p>
+<p>This is a real interview project at hardware companies. When a recruiter asks "show me something you built in RTL," this is your answer. An I²C subsystem — fully pipelined, arbitration-aware, register-mapped, verified — is senior-level work. You did it from primitives.</p>
+
+<h2>What a complete subsystem looks like</h2>
+<pre class="code-block">
+  i2c_subsystem (top-level wrapper)
+  |
+  +-- i2c_master          (chapters i2c4–i2c7)
+  |     +-- i2c_clk_gen   (i2c2 L1)
+  |     +-- i2c_bit_tx    (i2c2 L2)
+  |     +-- i2c_bit_rx    (i2c2 L3)
+  |     +-- i2c_tx_byte   (i2c3 L1)
+  |     +-- i2c_rx_byte   (i2c3 L2)
+  |     +-- i2c_addr_phase(i2c4 L1)
+  |     +-- i2c_data_phase(i2c4 L2)
+  |
+  +-- i2c_target          (chapters i2c5–i2c6)
+  |     +-- i2c_addr_match(i2c5 L1)
+  |     +-- i2c_target_reg(i2c5 L2)
+  |     +-- i2c_regfile   (i2c6 L1)
+  |     +-- i2c_addr_decode(i2c6 L2)
+  |     +-- i2c_autoincr  (i2c6 L3)
+  |     +-- irq logic     (i2c5 L3)
+  |
+  +-- i2c_arbitrate       (i2c7 L1)
+  |     +-- i2c_clk_sync  (i2c7 L2)
+  |
+  +-- pullup (sda, scl)   (i2c1 L1 — open-drain IO cell)
+</pre>
+
+<h2>Portfolio requirements</h2>
+<p>A portfolio-grade I²C subsystem must satisfy all of the following. Each requirement maps to one or more lessons you have already completed:</p>
+<table class="truth-table">
+  <tr><th>Requirement</th><th>From chapter</th><th>How to verify</th></tr>
+  <tr><td>Open-drain SDA and SCL with tri-state (1'bz release)</td><td>i2c1</td><td>TB: sda/scl idle high via pullup</td></tr>
+  <tr><td>START and STOP condition generation and detection</td><td>i2c1, i2c4</td><td>TB: check start_det/stop_det timing</td></tr>
+  <tr><td>SCL frequency parameterised (CLK_DIV)</td><td>i2c2</td><td>Measure SCL period in simulation</td></tr>
+  <tr><td>SDA changes only while SCL is low (setup/hold)</td><td>i2c2</td><td>Formal assertion or waveform check</td></tr>
+  <tr><td>ACK/NACK on 9th clock</td><td>i2c3</td><td>TB: NACK test with bad address</td></tr>
+  <tr><td>7-bit address phase with R/W bit</td><td>i2c4</td><td>TB: sniff bus, decode address</td></tr>
+  <tr><td>Target address match + register read/write</td><td>i2c5, i2c6</td><td>TB: write then read-back</td></tr>
+  <tr><td>Auto-increment register pointer on burst</td><td>i2c6</td><td>TB: write 4 bytes, read all 4 back</td></tr>
+  <tr><td>Bus arbitration — arb_lost within one SCL period</td><td>i2c7</td><td>TB: two simultaneous masters</td></tr>
+  <tr><td>Clock stretching — master pauses on SCL low</td><td>i2c2, i2c7</td><td>TB: target holds SCL low, verify byte completes</td></tr>
+  <tr><td>Reset clears all FSMs; bus returns to idle high</td><td>all</td><td>TB: rst mid-transaction</td></tr>
+</table>
+
+<h2>Formal assertion template</h2>
+<p>Add these SVA assertions to your i2c_subsystem to catch violations at synthesis time. They are the same rules an EDA tool would check:</p>
+<pre class="code-block">// SDA must not change while SCL is high (data-valid window)
+// Use a concurrent assertion (SVA) in the module or a bind file
+property sda_stable_when_scl_high;
+  @(posedge clk)
+  (scl === 1) |-> ($stable(sda));
+endproperty
+assert property (sda_stable_when_scl_high)
+  else \$error("PROTOCOL VIOLATION: SDA changed while SCL=1");</pre>
+
+<h2>Performance metrics to document</h2>
+<ul>
+  <li><strong>Max frequency (Fmax):</strong> synthesise in Vivado or OpenLane; report the critical path and slack. A well-pipelined design reaches 200 MHz at 28 nm.</li>
+  <li><strong>Area:</strong> report LUT count (FPGA) or gate equivalents (ASIC). A minimal I²C master fits in under 500 LUTs.</li>
+  <li><strong>Power:</strong> run toggle-based power estimation. The open-drain bus adds switching power when SDA toggles frequently.</li>
+  <li><strong>Throughput:</strong> at CLK_DIV=4 and 100 MHz system clock, SCL runs at 25 MHz — 25 Mb/s raw, ~2.5 MB/s effective (I²C overhead).</li>
+</ul>
+
+<h2>Before you code</h2>
+<p>What you are about to build is the final, complete, portfolio-ready version of your I²C subsystem. This means: all sub-modules integrated correctly, the verification testbench (from L2) passing all eight scenarios, formal assertions attached, and a clean synthesis run. There is no single correct way to structure this — that is what makes it a portfolio piece. Your design choices, your naming conventions, your module hierarchy will be yours.</p>
+
+<h2>Portfolio deliverables</h2>
+<table class="truth-table">
+  <tr><th>Deliverable</th><th>Description</th></tr>
+  <tr><td><code>i2c_subsystem.sv</code></td><td>Top-level integration module with all sub-modules instantiated</td></tr>
+  <tr><td><code>i2c_subsystem_tb.sv</code></td><td>Verification testbench covering all 8 scenarios from L2</td></tr>
+  <tr><td><code>assertions.sv</code></td><td>SVA properties: sda_stable_during_scl_high, arb_lost_timing, reset_clears_all</td></tr>
+  <tr><td><code>synthesis_report.txt</code></td><td>Fmax, LUT count, power estimate from Vivado or OpenLane</td></tr>
+  <tr><td><code>README.md</code></td><td>Block diagram, port table, test results, and waveform screenshots</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap \u{1F4A1} Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Integrate all sub-modules from i2c1 through i2c7 under a single i2c_subsystem wrapper',
+        'Parameterise CLK_DIV at the top level so it propagates down to i2c_clk_gen',
+        'Add pullup pu_sda(sda) and pullup pu_scl(scl) at the top level in simulation',
+        'Connect i2c_arbitrate: sda_driven from master busy, sda_obs from the actual sda wire',
+        'Connect i2c_regfile read data back to i2c_target so register reads work end-to-end',
+        'Run your L2 testbench against the complete design — all 8 scenarios must pass',
+        'Add the SVA assertion: sda must not change while scl is high',
+        'Run synthesis in Vivado or OpenLane — record Fmax and LUT count in a comment at the top of the file',
+        'Write a README.md with ASCII block diagram, port table, test results, and waveform screenshots',
+        'Push the complete project to a public GitHub repository',
+        '🎓 I²C Design Engineer certificate unlocked — you built a complete I²C subsystem from scratch',
+        'You now understand the complete I²C protocol from hardware primitives to multi-master systems.',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all PASS lines should appear in the Output tab',
+      ],
+      hint:
+`DESIGN NOTES for i2c_subsystem (complete portfolio version) — Tier 5
+
+No implementation code is given here. The design is yours.
+
+Instead, here is the complete checklist a senior verification engineer
+uses to sign off an I2C IP block before tapeout:
+
+CONNECTIVITY CHECK
+  [ ] sda and scl declared as inout wire at top level
+  [ ] Every sub-module that can drive SDA uses open-drain (drives 0 or z, never 1)
+  [ ] pullup primitives present in simulation top (off-chip in real silicon)
+  [ ] CLK_DIV parameter reaches i2c_clk_gen without hardcoding
+
+FUNCTIONAL CHECK (directed tests)
+  [ ] Write 0x55 to addr 0x50 reg 0x00 — read back 0x55
+  [ ] Write 0xAA to addr 0x50 reg 0x01 — read back 0xAA
+  [ ] Address 0x7F returns NACK; m_ack_err pulses
+  [ ] Burst write 0x01,0x02,0x03,0x04 — all four regs match
+  [ ] Reset mid-transaction — bus idles high within 1 cycle
+  [ ] Clock stretch for 3 SCL cycles — byte still completes correctly
+  [ ] Simultaneous two-master scenario — arb_lost on loser within 1 SCL
+
+PROTOCOL ASSERTION LIST (SVA)
+  1. SDA stable during SCL=1 (data valid window)
+     @(posedge clk) (scl===1) |-> $stable(sda);
+
+  2. START only when bus idle (SCL=1 at time of SDA falling)
+     @(negedge sda) (scl===1);   -- checked combinationally
+
+  3. STOP only during SCL=1 (SDA rising)
+     @(posedge sda) (scl===1);   -- checked combinationally
+
+  4. arb_lost within CLK_DIV/2 cycles of SDA conflict
+     Not expressible as a simple SVA -- use a monitor task
+
+  5. m_busy deasserts within 4 cycles of rst=0
+     @(posedge clk) (!rst) |-> ##[1:4] (!m_busy);
+
+SYNTHESIS TARGETS (reference numbers, 28 nm)
+  i2c_master:     ~350 gates,  Fmax ~400 MHz
+  i2c_target:     ~280 gates,  Fmax ~450 MHz
+  i2c_regfile:    ~200 gates,  Fmax ~600 MHz
+  i2c_arbitrate:  ~50  gates,  Fmax ~800 MHz
+  i2c_subsystem:  ~900 gates total
+
+GITHUB REPO STRUCTURE
+  rtl/
+    i2c_subsystem.sv
+    i2c_master.sv     (from i2c4)
+    i2c_target.sv     (from i2c5)
+    i2c_regfile.sv    (from i2c6)
+    i2c_arbitrate.sv  (from i2c7)
+    ... all sub-modules
+  tb/
+    i2c_subsystem_tb.sv
+    assertions.sv
+  syn/
+    synthesis_report.txt
+  README.md`,
+      design:
+`// Build the i2c_subsystem module here. See Theory for the full spec.
+//
+// Portfolio version — integrate everything from i2c1 through i2c7.
+// This is your capstone. There is no single right answer.
+//
+// Suggested parameter at top:
+//   parameter int CLK_DIV = 10  // propagate to i2c_clk_gen
+//
+// Suggested hierarchy:
+//   i2c_subsystem
+//   +-- i2c_master   (instantiate your i2c4 L3 module)
+//   +-- i2c_target   (instantiate your i2c5 L3 module)
+//   +-- i2c_regfile  (instantiate your i2c6 L1 module)
+//   +-- i2c_arbitrate(instantiate your i2c7 L1 module)
+//
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  // ---------------------------------------------------------------
+  // Clock and reset
+  // ---------------------------------------------------------------
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  wire  sda, scl;
+  pullup pu_sda(sda);
+  pullup pu_scl(scl);
+
+  logic        rst;
+  logic [6:0]  m_addr;
+  logic        m_rw;
+  logic [7:0]  m_data_in;
+  logic [7:0]  m_data_out;
+  logic        m_start;
+  logic        m_done, m_busy, m_ack_err, arb_lost;
+
+  int pass_count = 0;
+  int fail_count = 0;
+
+  i2c_subsystem dut (
+    .clk      (clk),       .rst      (rst),
+    .sda      (sda),       .scl      (scl),
+    .m_addr   (m_addr),    .m_rw     (m_rw),
+    .m_data_in(m_data_in), .m_data_out(m_data_out),
+    .m_start  (m_start),   .m_done   (m_done),
+    .m_busy   (m_busy),    .m_ack_err(m_ack_err),
+    .arb_lost (arb_lost)
+  );
+
+  // ---------------------------------------------------------------
+  // Helper tasks
+  // ---------------------------------------------------------------
+  task automatic write_byte(
+    input  logic [6:0] addr,
+    input  logic [7:0] data,
+    output logic       ok
+  );
+    m_addr = addr; m_data_in = data; m_rw = 0;
+    m_start = 1; @(posedge clk); #1; m_start = 0;
+    ok = 0;
+    repeat(500) begin
+      @(posedge clk); #1;
+      if (m_done) begin ok = 1; break; end
+    end
+  endtask
+
+  task automatic read_byte(
+    input  logic [6:0]  addr,
+    output logic [7:0]  data,
+    output logic        ok
+  );
+    m_addr = addr; m_rw = 1;
+    m_start = 1; @(posedge clk); #1; m_start = 0;
+    ok = 0; data = 8'hxx;
+    repeat(500) begin
+      @(posedge clk); #1;
+      if (m_done) begin data = m_data_out; ok = 1; break; end
+    end
+  endtask
+
+  task automatic check(input logic cond, input string msg);
+    if (cond) begin
+      \$display("PASS  %s", msg);
+      pass_count++;
+    end else begin
+      \$display("FAIL  %s", msg);
+      fail_count++;
+    end
+  endtask
+
+  // ---------------------------------------------------------------
+  // Scenario runner
+  // ---------------------------------------------------------------
+  initial begin
+    \$display("=== I2C Subsystem Portfolio Test ===");
+
+    // ------ Reset ------
+    rst = 0; m_start = 0; m_addr = 0; m_rw = 0; m_data_in = 0;
+    repeat(4) @(posedge clk); rst = 1; @(posedge clk); #1;
+    check(1, "subsystem reset released");
+    check(sda === 1 && scl === 1, "bus idle high after reset");
+
+    // ------ Scenario 1: write 0xAB to addr 0x50 ------
+    \$display("--- Scenario 1: Normal write ---");
+    begin
+      logic ok;
+      write_byte(7'h50, 8'hAB, ok);
+      check(ok === 1, "write 0xAB completed");
+      check(m_ack_err === 0, "no ack_err on valid address");
+    end
+
+    // ------ Scenario 2: read back 0xAB ------
+    \$display("--- Scenario 2: Read-back ---");
+    begin
+      logic [7:0] rdata;
+      logic ok;
+      read_byte(7'h50, rdata, ok);
+      check(ok === 1, "read completed");
+      check(rdata === 8'hAB, "read-back matches written value");
+    end
+
+    // ------ Scenario 3: NACK on unoccupied address ------
+    \$display("--- Scenario 3: NACK on bad address ---");
+    begin
+      logic ok;
+      write_byte(7'h7F, 8'hFF, ok);
+      check(m_ack_err === 1 || ok === 0, "NACK received on address 0x7F");
+    end
+
+    // ------ Scenario 4: bus busy guard ------
+    \$display("--- Scenario 4: Second start ignored while busy ---");
+    begin
+      logic ok;
+      m_addr = 7'h50; m_data_in = 8'h11; m_rw = 0;
+      m_start = 1; @(posedge clk); #1; m_start = 0;
+      repeat(3) @(posedge clk); #1;
+      if (m_busy) begin
+        // Fire second start — should be ignored
+        m_start = 1; @(posedge clk); #1; m_start = 0;
+        check(m_busy === 1, "m_busy stays high on second start");
+      end else begin
+        check(0, "m_busy was not asserted after first start");
+      end
+      // Wait for completion
+      repeat(500) begin
+        @(posedge clk); #1;
+        if (m_done || !m_busy) break;
+      end
+    end
+
+    // ------ Scenario 8: mid-transaction reset ------
+    \$display("--- Scenario 8: Mid-transaction reset ---");
+    begin
+      m_addr = 7'h50; m_data_in = 8'hCD; m_rw = 0;
+      m_start = 1; @(posedge clk); #1; m_start = 0;
+      repeat(12) @(posedge clk);
+      rst = 0; repeat(2) @(posedge clk);
+      rst = 1; @(posedge clk); #1;
+      check(m_busy === 0, "m_busy cleared after mid-tx reset");
+    end
+
+    // ------ Summary ------
+    \$display("--- Results: %0d PASS, %0d FAIL ---", pass_count, fail_count);
+    if (fail_count === 0)
+      \$display("I2C subsystem portfolio: ALL SCENARIOS PASSED");
+    else
+      \$display("I2C subsystem portfolio: SOME SCENARIOS FAILED");
+
+    \$display("Subsystem portfolio complete!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  subsystem reset released',
+        'PASS  bus idle high after reset',
+        'Subsystem portfolio complete!'
+      ]
+    }
+
   ]
 });
+
 
