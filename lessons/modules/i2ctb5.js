@@ -498,8 +498,241 @@ endmodule`,
       ]
     },
 
-    // L3 added next
+    // ─────────────────────────────────────────────────────────────────────
+    // L3 — Testing Target with IRQ  (Tier 4)
+    // ─────────────────────────────────────────────────────────────────────
+    {
+      id: 'i2ctb5l3',
+      title: 'L3 — Testing Target with IRQ',
+      theory: `
+<h2>Interrupts — where hardware meets firmware</h2>
+<p>A temperature sensor that sits on an I²C bus does not want to be polled every millisecond. Instead, it raises an interrupt pin (<code>irq</code>) the moment the measured value crosses a configured threshold. The firmware then reads the sensor only when the interrupt fires, saving bus bandwidth and processor cycles. This pattern — write a threshold, observe whether the interrupt fires at the right moment — is one of the most common tests in chip bring-up. If the threshold logic is off by one, firmware is never called when it should be, and the thermal protection feature silently fails.</p>
+
+<h2>Threshold testing — the three-point rule</h2>
+<p>One passing case is never enough for a threshold. You must verify three points: below the threshold (interrupt must not fire), exactly at the threshold (boundary condition — check the spec for inclusive vs exclusive), and above the threshold (interrupt must fire). The classical sign-off criterion is: "irq goes high within one clock cycle of the value exceeding the threshold, and goes low within one clock cycle of the value falling back below it."</p>
+
+<pre class="code-block">
+// Threshold sweep — three write values, three irq checks:
+//
+//  threshold register = 8'h80
+//
+//  write data_reg = 8'h7F  ->  irq must be 0  (below)
+//  write data_reg = 8'h80  ->  irq must be 0  (at: not exceeded)
+//  write data_reg = 8'h81  ->  irq must be 1  (above)
+//  write data_reg = 8'h7F  ->  irq must be 0  (clear by writing below)
+</pre>
+
+<table class="truth-table">
+  <tr><th>data_reg value</th><th>threshold_reg value</th><th>Expected irq</th><th>What it proves</th></tr>
+  <tr><td>0x7F</td><td>0x80</td><td>0</td><td>No false trigger below threshold</td></tr>
+  <tr><td>0x80</td><td>0x80</td><td>0</td><td>Boundary: strictly greater than fires (not equal)</td></tr>
+  <tr><td>0x81</td><td>0x80</td><td>1</td><td>Interrupt fires exactly when value exceeds threshold</td></tr>
+  <tr><td>0x7F</td><td>0x80</td><td>0</td><td>Interrupt clears when value drops back below</td></tr>
+</table>
+
+<p>Think of the threshold like a water level sensor: the alarm only sounds when the water is <em>above</em> the mark — not when it touches it, and not when it is below. The testbench is the person who pours water in slowly and checks the alarm at each level.</p>
+
+<h2>IRQ timing — when to sample</h2>
+<p>The <code>irq</code> output is registered, so it changes on the clock edge <em>after</em> the data register is updated. Your testbench must wait at least one clock cycle after the write completes before sampling <code>irq</code>.</p>
+
+<pre class="code-block">// After writing data_reg via I2C:
+@(posedge clk); #1;   // wait one cycle for irq to update
+if (irq === 1'b1)
+  $display("PASS  above threshold: irq=1");
+</pre>
+
+<p>Before you write any code: you are building a testbench that first configures the threshold register over I²C, then writes four different values to the data register, and checks <code>irq</code> after each write. A passing run prints four PASS lines and a banner. This is a real threshold test from silicon validation — the same pattern appears in every sensor chip verification plan.</p>
+
+<table class="truth-table">
+  <tr><th>Port</th><th>Direction</th><th>Purpose</th></tr>
+  <tr><td><code>clk</code></td><td>input logic</td><td>System clock; all state changes and IRQ updates are synchronous to this.</td></tr>
+  <tr><td><code>rst</code></td><td>input logic</td><td>Synchronous active-low reset that clears all registers and deasserts <code>irq</code>.</td></tr>
+  <tr><td><code>scl</code></td><td>input logic</td><td>I²C clock from the master; target uses this to time address/data reception.</td></tr>
+  <tr><td><code>sda</code></td><td>inout wire</td><td>Bidirectional I²C data line; target drives ACK bits and read data onto this wire.</td></tr>
+  <tr><td><code>my_addr</code></td><td>input logic [6:0]</td><td>7-bit address this target device responds to on the I²C bus.</td></tr>
+  <tr><td><code>irq</code></td><td>output logic</td><td>Goes high one clock after <code>data_reg > threshold_reg</code>, clears when condition is false.</td></tr>
+</table>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
+      `,
+      tasks: [
+        'Code tab is blank — type every line.',
+        'Declare the i2c_target module with: clk, rst, scl, sda (inout wire), my_addr [6:0], irq',
+        'Declare two 8-bit internal registers: data_reg and threshold_reg; assign irq combinatorially as data_reg > threshold_reg',
+        'Implement write logic: first byte after address selects the register (0=threshold, 1=data), second byte is the value to store',
+        'In the testbench, reuse the write_reg task structure from L2 adapted for two registers',
+        'Test 1: write threshold=0x80; write data=0x7F; wait one clock; check irq===0',
+        'Test 2: write data=0x80 (boundary); wait one clock; check irq===0',
+        'Test 3: write data=0x81 (above); wait one clock; check irq===1',
+        'Test 4: write data=0x7F (clear); wait one clock; check irq===0',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 4 PASS lines plus the banner should appear in the Output tab',
+      ],
+      hint:
+`DESIGN NOTES for i2c_target testbench (IRQ threshold testing):
+
+THRESHOLD LOGIC in DUT:
+  assign irq = (data_reg > threshold_reg);
+  // Purely combinatorial — fires immediately when data_reg updated
+
+REGISTER ADDRESSING CONVENTION:
+  reg_addr 0 = threshold_reg
+  reg_addr 1 = data_reg
+  (keep it simple — 2 registers, 1-bit address)
+
+TEST SEQUENCE:
+  Step 1: write threshold_reg (addr=0) = 8'h80
+  Step 2: write data_reg (addr=1) = 8'h7F  -> wait clk -> irq must be 0
+  Step 3: write data_reg (addr=1) = 8'h80  -> wait clk -> irq must be 0  (boundary)
+  Step 4: write data_reg (addr=1) = 8'h81  -> wait clk -> irq must be 1  (above)
+  Step 5: write data_reg (addr=1) = 8'h7F  -> wait clk -> irq must be 0  (cleared)
+
+TESTBENCH SIGNALS:
+  wire sda with pullup pu(sda)
+  logic sda_drive, sda_val
+  assign sda = (sda_drive && !sda_val) ? 1'b0 : 1'bz;
+
+SAMPLING RULE:
+  After the STOP condition, wait one full clock cycle before checking irq.
+  @(posedge clk); #1;
+
+BOUNDARY CONDITION NOTE:
+  "strictly greater than" means data=threshold does NOT fire irq.
+  Always confirm your DUT uses > not >=.
+
+NO CODE — implement based on these notes.`,
+      design:
+`// Build the i2c_target module here. See Theory for the full spec.
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;
+
+  logic       rst;
+  logic       scl_tb;
+  logic       sda_drive;
+  logic       sda_val;
+  wire        sda;
+  logic [6:0] my_addr_tb;
+  logic       irq;
+
+  // Open-drain SDA
+  assign sda = (sda_drive && !sda_val) ? 1'b0 : 1'bz;
+  pullup pu(sda);
+
+  localparam [6:0] MY_ADDR = 7'h31;
+
+  i2c_target dut (
+    .clk     (clk),
+    .rst     (rst),
+    .scl     (scl_tb),
+    .sda     (sda),
+    .my_addr (my_addr_tb),
+    .irq     (irq)
+  );
+
+  // SCL half-period helper
+  task automatic half_scl; @(posedge clk); #1; endtask
+
+  // Drive one bit on SDA and pulse SCL high
+  task automatic drive_bit(input logic b);
+    sda_drive = 1; sda_val = b;
+    scl_tb = 0; half_scl;
+    scl_tb = 1; half_scl;
+  endtask
+
+  // START condition
+  task automatic do_start;
+    sda_drive = 1; sda_val = 1; scl_tb = 1; half_scl;
+    sda_val = 0; half_scl;
+    scl_tb = 0; half_scl;
+  endtask
+
+  // STOP condition
+  task automatic do_stop;
+    sda_drive = 1; sda_val = 0; scl_tb = 0; half_scl;
+    scl_tb = 1; half_scl;
+    sda_val = 1; half_scl;
+    scl_tb = 0; half_scl;
+    sda_drive = 0;
+  endtask
+
+  // Send one byte MSB first + consume ACK slot
+  task automatic send_byte(input logic [7:0] data);
+    integer i;
+    for (i = 7; i >= 0; i--)
+      drive_bit(data[i]);
+    sda_drive = 0;
+    scl_tb = 0; half_scl;
+    scl_tb = 1; half_scl;
+    scl_tb = 0; half_scl;
+  endtask
+
+  // Write a register: reg_addr 0=threshold, 1=data
+  task automatic write_reg(input logic reg_addr, input logic [7:0] val);
+    do_start;
+    send_byte({MY_ADDR, 1'b0});
+    send_byte({7'h0, reg_addr});
+    send_byte(val);
+    do_stop;
+  endtask
+
+  initial begin
+    \$display("=== I2C Target IRQ Test ===");
+    rst = 0; scl_tb = 0; sda_drive = 1; sda_val = 1; my_addr_tb = MY_ADDR;
+    repeat(3) @(posedge clk); #1;
+    rst = 1; @(posedge clk); #1;
+
+    // Configure threshold = 0x80
+    write_reg(1'b0, 8'h80);
+    @(posedge clk); #1;
+
+    // Test 1: below threshold (0x7F < 0x80)
+    write_reg(1'b1, 8'h7F);
+    @(posedge clk); #1;
+    if (irq === 1'b0)
+      \$display("PASS  below threshold: irq=0");
+    else
+      \$display("FAIL  below threshold: irq=%0b (expected 0)", irq);
+
+    // Test 2: at threshold (0x80 == 0x80, strictly greater-than -> no irq)
+    write_reg(1'b1, 8'h80);
+    @(posedge clk); #1;
+    if (irq === 1'b0)
+      \$display("PASS  at threshold: irq=0");
+    else
+      \$display("FAIL  at threshold: irq=%0b (expected 0)", irq);
+
+    // Test 3: above threshold (0x81 > 0x80)
+    write_reg(1'b1, 8'h81);
+    @(posedge clk); #1;
+    if (irq === 1'b1)
+      \$display("PASS  above threshold: irq=1");
+    else
+      \$display("FAIL  above threshold: irq=%0b (expected 1)", irq);
+
+    // Test 4: clear by writing back below (0x7F < 0x80)
+    write_reg(1'b1, 8'h7F);
+    @(posedge clk); #1;
+    if (irq === 1'b0)
+      \$display("PASS  cleared: irq back to 0");
+    else
+      \$display("FAIL  cleared: irq=%0b (expected 0)", irq);
+
+    \$display("Target IRQ testbench works!");
+    \$finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  below threshold: irq=0',
+        'PASS  above threshold: irq=1',
+        'Target IRQ testbench works!'
+      ]
+    }
 
   ]
 });
+
 

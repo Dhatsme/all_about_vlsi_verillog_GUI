@@ -32,6 +32,6 @@ window.COURSES = [
     title: 'I²C Testbench Engineering',
     icon: '\u{1F9EA}',
     description: 'Write directed testbenches for every I²C module — from open-drain IO cells to full multi-master subsystems',
-    modules: ['i2ctb1', 'i2ctb2'],
+    modules: ['i2ctb1', 'i2ctb2', 'i2ctb3'],
   }
 ];
