@@ -26,5 +26,12 @@ window.COURSES = [
     icon: '🔗',
     description: 'Master open-drain I/O, START/STOP conditions, byte transfer, and full I²C controller design',
     modules: ['i2c1', 'i2c2', 'i2c3', 'i2c4', 'i2c5', 'i2c6', 'i2c7', 'i2c8'],
+  },
+  {
+    id: 'i2ctb',
+    title: 'I²C Testbench Engineering',
+    icon: '\u{1F9EA}',
+    description: 'Write directed testbenches for every I²C module — from open-drain IO cells to full multi-master subsystems',
+    modules: ['i2ctb1'],
   }
 ];
