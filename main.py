@@ -217,6 +217,46 @@ def _post_feedback_issue(entry: dict) -> bool:
     except urllib.error.URLError:
         return False
 
+_GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+_GITHUB_REPO  = os.environ.get("GITHUB_REPO", "dhatsme/all_about_vlsi_verillog_gui")
+
+def _post_feedback_issue(entry: dict) -> bool:
+    """Create a GitHub Issue for one feedback entry. Returns True on success."""
+    if not _GITHUB_TOKEN:
+        return False
+    stars = "★" * entry["rating"] + "☆" * (5 - entry["rating"]) if entry["rating"] else "no rating"
+    body = (
+        f"**Module:** `{entry['module']}`  \n"
+        f"**Lesson:** `{entry['lesson']}`  \n"
+        f"**Rating:** {stars} ({entry['rating']}/5)  \n"
+        f"**Time:** {entry['ts']}  \n\n"
+        f"**Comment:**\n{entry['comment'] or '_(none)_'}"
+    )
+    labels = ["feedback"]
+    if entry["module"]:
+        labels.append(entry["module"])
+    payload = json.dumps({
+        "title":  f"[Feedback] {stars} — {entry['module']} / {entry['lesson']}",
+        "body":   body,
+        "labels": labels,
+    }).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{_GITHUB_REPO}/issues",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {_GITHUB_TOKEN}",
+            "Accept":        "application/vnd.github+json",
+            "Content-Type":  "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 201
+    except urllib.error.URLError:
+        return False
+
 @app.post("/feedback")
 def submit_feedback(req: FeedbackRequest):
     entry = {
