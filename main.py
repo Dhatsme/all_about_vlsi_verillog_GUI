@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
-import subprocess, tempfile, os, shutil, json, datetime, logging, platform, glob
+import subprocess, tempfile, os, shutil, json, datetime, logging, platform, glob, urllib.request, urllib.error
 
 app = FastAPI(title="AllAboutVLSI Backend")
 
@@ -14,7 +14,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── REQUEST MODELS ────────────────────────────────────────────────────────────
+# ── REQUEST MODELS ──────────────────────────────────────────────────────────────────────────────
 
 class SimRequest(BaseModel):
     design:        str
@@ -31,7 +31,7 @@ class FeedbackRequest(BaseModel):
     rating:    int = 0    # 1–5; 0 = no rating
     comment:   str = ""
 
-# ── C++ HARNESSES ─────────────────────────────────────────────────────────────
+# ── C++ HARNESSES ─────────────────────────────────────────────────────────────────────────────
 #
 # NO-TIMING harness — works with Verilator 4.x and 5.x.
 # Uses a manual counter as the VCD timestamp; #delays are stripped by --no-timing.
@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
 }
 """
 
-# ── macOS: fix missing C++ stdlib headers ─────────────────────────────────────
+# ── macOS: fix missing C++ stdlib headers ─────────────────────────────────────────────────────
 # Homebrew Verilator on macOS can't find <cstdint> because libc++ headers
 # live inside the Xcode SDK, not in /usr/include/c++.  We detect the SDK
 # path once at startup and pass it to every verilator invocation via --CFLAGS.
@@ -130,7 +130,7 @@ if platform.system() == "Darwin":
 def _mac_cflags() -> list[str]:
     return ["--CFLAGS", f"-I{_MAC_CXX_INCLUDE}"] if _MAC_CXX_INCLUDE else []
 
-# ── UVM DETECTION ─────────────────────────────────────────────────────────────
+# ── UVM DETECTION ──────────────────────────────────────────────────────────────────────────────
 
 def _uvm_info() -> dict:
     """Check whether the UVM library is accessible and return metadata."""
@@ -146,7 +146,7 @@ def _uvm_info() -> dict:
         }
     return {"available": True, "home": uvm_home, "reason": ""}
 
-# ── VERILATOR VERSION ─────────────────────────────────────────────────────────
+# ── VERILATOR VERSION ───────────────────────────────────────────────────────────────────────────
 
 def _verilator_version() -> dict:
     if not shutil.which("verilator"):
@@ -163,7 +163,7 @@ def _verilator_version() -> dict:
     except Exception:
         return {"available": True, "version": "unknown", "major": 0}
 
-# ── INFO ENDPOINTS ────────────────────────────────────────────────────────────
+# ── INFO ENDPOINTS ──────────────────────────────────────────────────────────────────────────────
 
 @app.get("/verilator-info")
 def verilator_info():
@@ -175,7 +175,47 @@ def uvm_info():
     info.update(_verilator_version())
     return info
 
-# ── FEEDBACK ──────────────────────────────────────────────────────────────────
+# ── FEEDBACK ────────────────────────────────────────────────────────────────────────────────────
+
+_GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
+_GITHUB_REPO  = os.environ.get("GITHUB_REPO", "dhatsme/all_about_vlsi_verillog_gui")
+
+def _post_feedback_issue(entry: dict) -> bool:
+    """Create a GitHub Issue for one feedback entry. Returns True on success."""
+    if not _GITHUB_TOKEN:
+        return False
+    stars = "★" * entry["rating"] + "☆" * (5 - entry["rating"]) if entry["rating"] else "no rating"
+    body = (
+        f"**Module:** `{entry['module']}`  \n"
+        f"**Lesson:** `{entry['lesson']}`  \n"
+        f"**Rating:** {stars} ({entry['rating']}/5)  \n"
+        f"**Time:** {entry['ts']}  \n\n"
+        f"**Comment:**\n{entry['comment'] or '_(none)_'}"
+    )
+    labels = ["feedback"]
+    if entry["module"]:
+        labels.append(entry["module"])
+    payload = json.dumps({
+        "title":  f"[Feedback] {stars} — {entry['module']} / {entry['lesson']}",
+        "body":   body,
+        "labels": labels,
+    }).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{_GITHUB_REPO}/issues",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {_GITHUB_TOKEN}",
+            "Accept":        "application/vnd.github+json",
+            "Content-Type":  "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.status == 201
+    except urllib.error.URLError:
+        return False
 
 @app.post("/feedback")
 def submit_feedback(req: FeedbackRequest):
@@ -186,11 +226,14 @@ def submit_feedback(req: FeedbackRequest):
         "rating":  req.rating,
         "comment": req.comment,
     }
+    # Always write locally as a backup
     with open("feedback.jsonl", "a") as f:
         f.write(json.dumps(entry) + "\n")
+    # Also post to GitHub Issues if token is configured
+    _post_feedback_issue(entry)
     return {"ok": True}
 
-# ── SIMULATION ────────────────────────────────────────────────────────────────
+# ── SIMULATION ───────────────────────────────────────────────────────────────────────────────────
 
 @app.post("/simulate")
 def simulate(req: SimRequest):
@@ -253,7 +296,7 @@ def simulate(req: SimRequest):
         with open(d,  "w") as f: f.write(design_content)
         with open(tb, "w") as f: f.write(tb_content)
 
-        # ── VERILATOR ─────────────────────────────────────────────────────────
+        # ── VERILATOR ─────────────────────────────────────────────────────────────────────────────
         if tool == "verilator":
             # Sanitise user flags — allow dash-prefixed tokens only
             safe_extra = [
@@ -302,7 +345,7 @@ def simulate(req: SimRequest):
             # Don't duplicate defaults the user already supplied
             safe_extra = [f for f in safe_extra if f not in default_warn]
 
-            # ── Lint-only ────────────────────────────────────────────────────
+            # ── Lint-only ────────────────────────────────────────────────────────────────────────────
             if lint_only:
                 lint_cmd = [
                     "verilator", "--lint-only", "--sv",
@@ -316,7 +359,7 @@ def simulate(req: SimRequest):
                 output = (v.stderr + v.stdout).strip() or "Lint OK — no issues found."
                 return {"success": v.returncode == 0, "output": output, "vcd": ""}
 
-            # ── Choose C++ harness ────────────────────────────────────────────
+            # ── Choose C++ harness ──────────────────────────────────────────────────────────────────────────
             if use_timing:
                 # UVM simulations may run longer — raise the tick ceiling
                 max_ticks = 100_000_000 if req.use_uvm else 10_000_000
@@ -335,7 +378,7 @@ def simulate(req: SimRequest):
             with open(cpp, "w") as f:
                 f.write(harness)
 
-            # ── Build verilator command ───────────────────────────────────────
+            # ── Build verilator command ────────────────────────────────────────────────────────────────────────
             uvm_flags: list[str] = []
             if req.use_uvm:
                 uvm_home = os.environ["UVM_HOME"]
@@ -374,7 +417,7 @@ def simulate(req: SimRequest):
                     "vcd": "",
                 }
 
-            # ── Run simulation ────────────────────────────────────────────────
+            # ── Run simulation ────────────────────────────────────────────────────────────────────────────
             binary = os.path.join(tmp, "obj_dir", "Vtb")
             sim_args = [binary]
             if req.use_uvm:
@@ -388,7 +431,7 @@ def simulate(req: SimRequest):
                 timeout=run_timeout, cwd=tmp,
             )
 
-        # ── IVERILOG ──────────────────────────────────────────────────────────
+        # ── IVERILOG ───────────────────────────────────────────────────────────────────────────────────
         else:
             compile_result = subprocess.run(
                 ["iverilog", "-g2012", "-o", out, d, tb],
@@ -412,7 +455,7 @@ def simulate(req: SimRequest):
             "vcd":     vcd_content,
         }
 
-# ── STATIC FILES ──────────────────────────────────────────────────────────────
+# ── STATIC FILES ───────────────────────────────────────────────────────────────────────────────
 _static_dir = Path(__file__).parent / "static"
 if not _static_dir.is_dir():
     logging.error(
