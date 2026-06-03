@@ -1,0 +1,390 @@
+
+Your task is to develop a complete industrial-quality protocol/IP development package and learning curriculum.
+
+The goal is NOT to create isolated documents.
+
+The goal is to create a complete engineering knowledge base that mirrors how professional semiconductor companies develop IP from architecture through RTL implementation and verification.
+
+Follow industry-standard document dependencies.
+
+Never generate a document that depends on information that has not yet been specified.
+
+Always explain why a document exists before creating it.
+
+For every document:
+
+1. State the document purpose.
+2. State required input documents.
+3. State output documents that depend on it.
+4. Identify stakeholders:
+   - Architect
+   - RTL Designer
+   - DV Engineer
+   - Firmware Engineer
+   - System Integrator
+5. Define assumptions.
+6. Define traceability to previous documents.
+
+---
+
+DOCUMENT DEVELOPMENT ORDER
+
+Generate documents only in the following sequence.
+
+PHASE 1 – PROTOCOL UNDERSTANDING
+
+1. Protocol Specification
+
+Include:
+
+- History
+- Motivation
+- Architecture
+- Timing
+- Transactions
+- Electrical behavior
+- Modes of operation
+- Variations
+- Real-world usage
+
+Output:
+Defines WHAT the protocol is.
+
+---
+
+PHASE 2 – DESIGN DEFINITION
+
+2. Design Specification
+
+Input:
+Protocol Specification
+
+Include:
+
+- Functional requirements
+- Performance requirements
+- Supported features
+- Configurability
+- Error handling
+- Power requirements
+- Interfaces
+- Interrupts
+- DMA requirements
+- Reset behavior
+
+Output:
+Defines WHAT the IP must provide.
+
+---
+
+PHASE 3 – MICROARCHITECTURE
+
+3. Microarchitecture Specification
+
+Input:
+Design Specification
+
+Include:
+
+- Block diagrams
+- Module partitioning
+- Data flow
+- Clocking architecture
+- Reset architecture
+- Internal interfaces
+- Resource allocation
+
+Output:
+Defines HOW the IP will be implemented.
+
+---
+
+PHASE 4 – DESIGNER IMPLEMENTATION DOCUMENTS
+
+Generate the following in order.
+
+4. Register Specification
+
+Inputs:
+
+- Design Specification
+- Microarchitecture Specification
+
+Requirements:
+
+- CSV-style format
+- Register map
+- Fields
+- Reset values
+- Access permissions
+- Side effects
+- Verification notes
+
+Output:
+Firmware-visible behavior.
+
+---
+
+5. FSM Specifications
+
+Generate separate documents for:
+
+A. Master FSM
+
+B. Slave FSM
+
+C. Bus Interface FSM
+
+D. DMA FSM (if applicable)
+
+E. Chip Select FSM (if applicable)
+
+For each FSM:
+
+- State diagram
+- State descriptions
+- Entry conditions
+- Exit conditions
+- Outputs
+- Corner cases
+- Error handling
+- Transition table
+- Assertions derived from FSM
+
+Output:
+Control path specification.
+
+---
+
+6. Datapath Specification
+
+Inputs:
+
+- Register Spec
+- FSM Specs
+
+Include:
+
+- Shift registers
+- Counters
+- FIFOs
+- Multiplexers
+- Clock divider
+- Data movement
+- Cycle-by-cycle behavior
+- Datapath block diagrams
+
+Output:
+Data movement specification.
+
+---
+
+7. Signal Interface Specification
+
+Inputs:
+
+- Register Spec
+- FSM Specs
+- Datapath Spec
+
+For every signal:
+
+- Name
+- Width
+- Source
+- Destination
+- Reset value
+- Timing requirements
+- Functional description
+
+Output:
+Module connectivity definition.
+
+---
+
+8. RTL Coding Plan
+
+Inputs:
+
+- Register Spec
+- FSM Specs
+- Datapath Spec
+- Signal Spec
+
+Include:
+
+- RTL hierarchy
+- File structure
+- Coding ownership
+- Milestones
+- Unit test requirements
+- Coding guidelines
+
+Output:
+RTL implementation roadmap.
+
+---
+
+PHASE 5 – RTL DEVELOPMENT
+
+9. RTL Implementation Plan
+
+For every RTL module:
+
+- Purpose
+- Inputs
+- Outputs
+- Internal logic
+- Pseudocode
+- Corner cases
+- Assertions
+- Unit tests
+
+Include:
+
+- Top-level integration strategy
+- Bring-up plan
+
+Output:
+Implementation-ready design package.
+
+---
+
+PHASE 6 – VERIFICATION
+
+10. Verification Plan
+
+Inputs:
+
+- Design Spec
+- Register Spec
+- FSM Specs
+
+Include:
+
+- Features
+- Test strategy
+- Directed testing
+- Constrained-random testing
+- Regression strategy
+- Coverage goals
+
+---
+
+11. Assertion Specification
+
+Inputs:
+
+- FSM Specs
+- Datapath Spec
+- Signal Spec
+
+Include:
+
+- Protocol assertions
+- FSM assertions
+- Error assertions
+- FIFO assertions
+- Interface assertions
+
+Provide SVA examples.
+
+---
+
+12. Functional Coverage Specification
+
+Inputs:
+
+- Register Spec
+- Verification Plan
+
+Include:
+
+- Covergroups
+- Coverpoints
+- Cross coverage
+- Coverage closure strategy
+
+---
+
+13. Formal Verification Specification
+
+Inputs:
+
+- FSM Specs
+- Assertion Spec
+
+Include:
+
+- Safety properties
+- Liveness properties
+- Assumptions
+- Proof strategy
+
+---
+
+14. UVM Agent Specification
+
+Inputs:
+
+- Verification Plan
+- Register Spec
+
+Include:
+
+- Agent architecture
+- Driver
+- Monitor
+- Sequencer
+- Scoreboard
+- Coverage collector
+
+---
+
+PHASE 7 – EDUCATION PACKAGE
+
+After engineering documents are complete, generate:
+
+15. Beginner Learning Path
+
+16. Intermediate Learning Path
+
+17. Senior Engineer Learning Path
+
+18. Interview Question Bank
+
+19. Debug Scenarios
+
+20. Hands-on Labs
+
+21. Common Industry Bugs
+
+22. Silicon Escape Case Studies
+
+---
+
+DOCUMENT QUALITY REQUIREMENTS
+
+Every document must be:
+
+- Industry-standard
+- Implementation-ready
+- Traceable to previous documents
+- Consistent with all prior documents
+- Suitable for RTL, DV, and firmware teams
+- Detailed enough that engineers do not need meetings to understand intent
+
+Before generating any document:
+
+1. Verify all prerequisite documents exist.
+2. Identify missing dependencies.
+3. Explain why the document is needed.
+4. Then generate the document.
+
+After completing a document:
+
+- List review checklist.
+- List open questions.
+- List next dependent documents.
+
+Generate only one document at a time unless explicitly requested otherwise.This prompt gives you a repeatable framework. Once SPI is complete, you can replace "SPI" with "I2C", "UART", "AXI4", "APB", "PCIe", etc., and reuse the exact same document-generation pipeline.
