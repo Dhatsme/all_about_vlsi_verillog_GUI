@@ -13,7 +13,7 @@ Build the **SPI Deep-Dive** course (`spi_deep`) — a 6-month, 16-module standal
 - This course is **entirely independent** of `msv6`, `spi`, or `spitb` courses. Never import, reference, or build on those module IDs.
 - All new lesson files live at `static/lessons/modules/<moduleId>.js` where module IDs are from the table in §2.
 - Course ID in `courses.js` is `spi_deep`.
-- One chapter per session. Stop after step 10 of the build loop.
+- One chapter per session. Stop after step 13 (the STOP step) of the build loop.
 
 ---
 
@@ -51,23 +51,32 @@ Build the **SPI Deep-Dive** course (`spi_deep`) — a 6-month, 16-module standal
       docs/spi_master_fsm_spec.md
       Register_spec.txt   (register chapters only)
 5.  Check §5 (Dependency Graph) — read prior modules this chapter's testbench needs
+5a. Open docs/spi_port_registry.md. For each prior module in the dependency list,
+    read its port row to get the EXACT signal names for the integration testbench.
+    Fallback if a row is missing: open static/lessons/modules/<moduleId>.js and
+    read the final lesson's hint field for the port list.
 6.  Read agent.md — lesson schema, tier rules, Verilator testbench rules
 7.  Build  static/lessons/modules/<moduleId>.js
-8.  COMMIT 1 (branch: develop):
+8.  COMMIT 1 (branch: current working branch):
         files:   static/lessons/modules/<moduleId>.js
         message: 'feat(<moduleId>): <title> — <N> lessons'
-9.  COMMIT 2 (branch: develop):
+9.  COMMIT 2 (branch: current working branch):
         files:   static/index.html
                  static/lessons/curriculum.js
-                 static/lessons/courses.js
-        message: 'feat(<moduleId>): register module in index/curriculum/courses'
+        message: 'feat(<moduleId>): register module in index/curriculum'
+        NOTE: courses.js does not exist and is not used — skip it.
 10. If this chapter is an INTEGRATION CHECKPOINT (§6):
         → Verify the L4 testbench instantiates all required prior modules
         → Check that cross-module signal names match §7 Interface Contracts
-11. COMMIT 3 (branch: main):
+        → Check docs/spi_port_registry.md wiring notes for the exact wire mappings
+11. Update docs/spi_port_registry.md — add a row for the module just built.
+    Copy exact port names from the final lesson's hint field.
+    Also add integration wiring notes if this chapter is a checkpoint dependency.
+12. COMMIT 3 (branch: current working branch):
         files:   docs/spi_deep_dive.md  (❌ → ✅, advance cursor)
-        message: 'chore: mark <moduleId> done, advance curriculum cursor'
-12. STOP — one chapter per session
+                 docs/spi_port_registry.md  (new module row added in step 11)
+        message: 'chore: mark <moduleId> done, update port registry'
+13. STOP — one chapter per session
 ```
 
 ---
@@ -79,13 +88,13 @@ Read **exactly** these sections before building each chapter. Reading more is fi
 | Module | Read from spi_datapath_spec.md | Read from spi_master_fsm_spec.md | Read from Register_spec.txt |
 |---|---|---|---|
 | spi1 | §1 (Introduction), §2.1 (TX overview) | §2 (Signals), §3.1 (state list) | — |
-| spi2 | §4 (Clock divider, full section) | §3.4 (SCK handling), §6.3 (bit counter) | CLKDIV register |
+| spi2 | §4 (Clock divider, full section) | §3.4 (SCK handling) | CLKDIV register |
 | spi3 | §2.2–2.3 (TX FIFO depth/flags) | — | TXDATA, FIFO_CTRL, FIFO_STATUS |
 | spi4 | §3.4–3.5 (RX FIFO depth/flags) | — | RXDATA, FIFO_CTRL, FIFO_STATUS |
 | spi5 | §2.4–2.6 (TX shift), §3.2 (RX shift) | §6 (shift register equations) | — |
 | spi6 | §5 (CPOL/CPHA timing, full section) | §3.4 (SCK/CPHA), §4 (mode table) | CTRL.CPOL, CTRL.CPHA |
 | spi7 | §6 (CS controller, full section) | §3.2 (ASSERT_CS/DEASSERT_CS states) | CS_CTRL register |
-| spi8 | §11.5–11.12 (FSM outputs per state) | §3 (full FSM spec) | CTRL, STATUS |
+| spi8 | §2.4 (LOAD state TX pop), §3.3 (COMPLETE state RX push) | §3 (full FSM spec) | CTRL, STATUS |
 | spi9 | §8 (error detection), §9 (interrupts) | §7 (error conditions) | INT_EN, INT_STATUS, MODE_FAULT |
 | spi10 | §13.1 (internal signal naming) | §5 (counters/interfaces) | — |
 | spi11 | §13.2 (APB slave timing) | — | ALL 18 registers |
@@ -107,6 +116,10 @@ spi2   — standalone
 spi3   — standalone
 spi4   — standalone (reuse spi3 FIFO pattern)
 spi5   — L4 testbench instantiates: spi2 (clock divider drives launch/sample pulses)
+         Checkpoint A wiring (Mode 0 hardcoded — spi6 not yet built):
+           spi2.rising_edge_p  → spi5.sample_pulse  (Mode 0: sample on rising SCK)
+           spi2.falling_edge_p → spi5.launch_pulse  (Mode 0: launch on falling SCK)
+         See docs/spi_port_registry.md for the exact wire-name example.
 spi6   — L4 testbench instantiates: spi2, spi5
 spi7   — standalone CS controller unit test
 spi8   — L4 testbench instantiates: spi2, spi5, spi6, spi7   ← Checkpoint B
@@ -192,19 +205,20 @@ ABORT_WAIT   = 7'b100_0000
 Every chapter produces exactly 3 commits (2 to `develop`, 1 to `main`):
 
 ```
-Commit 1 — develop branch
+Commit 1 — current working branch
   Files:   static/lessons/modules/<moduleId>.js
   Format:  feat(<moduleId>): <title> — <N> lessons
 
-Commit 2 — develop branch
+Commit 2 — current working branch
   Files:   static/index.html
            static/lessons/curriculum.js
-           static/lessons/courses.js
-  Format:  feat(<moduleId>): register module in index/curriculum/courses
+  Format:  feat(<moduleId>): register module in index/curriculum
+  NOTE: courses.js does NOT exist and is NOT used by app.js. Do not create it.
 
-Commit 3 — main branch
-  Files:   docs/spi_deep_dive.md
-  Format:  chore: mark <moduleId> done, advance curriculum cursor
+Commit 3 — current working branch
+  Files:   docs/spi_deep_dive.md      (❌ → ✅, advance cursor)
+           docs/spi_port_registry.md  (new row for this module)
+  Format:  chore: mark <moduleId> done, update port registry
 ```
 
 Use `mcp__github__push_files` for all commits (never `git` CLI for these three).
@@ -222,12 +236,14 @@ Add one `<script>` tag inside the `<!-- SCRIPTS -->` block, BEFORE `curriculum.j
 ### static/lessons/curriculum.js
 Append the module ID to the `CURRICULUM` array (order = display order on landing page).
 
-### static/lessons/courses.js
-Course object: `{ id: 'spi_deep', modules: ['spi1'] }`
-On first chapter (spi1): create the object.
-On subsequent chapters: append the new module ID to the `modules` array.
+### static/lessons/courses.js — NOT USED
+`courses.js` does not exist in this repository and is not referenced by `app.js`.
+The app builds the landing page directly from the `CURRICULUM` array (populated by
+each module's `<script>` tag). **Do not create `courses.js`.**
 
-**Never** add spi_deep module IDs to the `spi` or `spitb` course objects.
+### docs/spi_port_registry.md
+After every session, add a row for the newly built module. This file is the
+authoritative port manifest used by integration testbenches.
 
 ---
 

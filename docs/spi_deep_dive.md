@@ -10,8 +10,8 @@
 | # | Module ID | Title | Phase | Tier | Lessons | Status |
 |---|---|---|---|---|---|---|
 | 1 | `spi1` | SPI Protocol & Signal Definitions | 1 | 1→2 | 3 | ✅ done |
-| 2 | `spi2` | Clock Divider & SCK Generation | 1 | 2 | 3 | ❌ **build this next** |
-| 3 | `spi3` | TX FIFO Design | 2 | 2→3 | 4 | ❌ |
+| 2 | `spi2` | Clock Divider & SCK Generation | 1 | 2 | 3 | ✅ done |
+| 3 | `spi3` | TX FIFO Design | 2 | 2→3 | 4 | ❌ **build this next** |
 | 4 | `spi4` | RX FIFO Design | 2 | 2→3 | 4 | ❌ |
 | 5 | `spi5` | TX & RX Shift Registers | 2 | 3 | 4 | ❌ |
 | 6 | `spi6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ❌ |
@@ -85,7 +85,8 @@ Modules: spitb1 (unit TBs), spitb2 (corner cases), spitb3 (SVA/formal), spitb4 (
 |---|---|---|---|
 | 0 | 2026-06-03 | Phase 0 setup — orchestrator + tracker docs | 78f9ff8 |
 | 1 | 2026-06-03 | spi1 — SPI Protocol & Signal Definitions (3 lessons) | 34bfd64 |
+| 2 | 2026-06-03 | spi2 — Clock Divider & SCK Generation (3 lessons) | 5fe0db1 |
 
 ---
 
-*Cursor: spi2 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi3 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
