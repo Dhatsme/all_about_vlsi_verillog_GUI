@@ -6,6 +6,7 @@
 <title>All About VLSI — Zero to Hero Verilog</title>
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <link rel="stylesheet" href="./css/style.css">
+<link rel="stylesheet" href="./css/course-cert.css">
 </head>
 <body>
 
@@ -17,7 +18,7 @@
   <!-- Nav -->
   <nav class="landing-nav">
     <div class="logo">
-      <div class="logo-chip">⭡</div>
+      <div class="logo-chip">⬡</div>
       All About <em>&nbsp;VLSI</em>
     </div>
     <div class="landing-nav-right">
@@ -37,7 +38,7 @@
       with real iverilog simulation, interactive waveforms, and hands-on challenges.
     </p>
     <div class="hero-actions">
-      <button class="btn-primary" onclick="openModule('m1')">
+      <button class="btn-primary" onclick="openModule('msv1')">
         ▶ Start Learning Free
       </button>
       <button class="btn-secondary" onclick="openModule('m4')">
@@ -101,7 +102,7 @@
     </select>
     <button class="veri-opts-btn" id="veri-opts-btn" onclick="toggleVerilatorPanel()"
             title="Verilator compiler options" style="display:none;">
-      ⚙ Options
+      &#9881; Options
     </button>
 
     <button class="run-btn" id="run-btn" onclick="runSimulation()">
@@ -115,7 +116,7 @@
 
     <!-- Sidebar -->
     <aside class="lesson-sidebar">
-      <div class="sidebar-module-header">
+      <div id="sidebar-module-header" class="sidebar-module-header">
         <div class="sidebar-mod-title" id="sidebar-mod-title">Module</div>
       </div>
       <div class="sidebar-lessons" id="sidebar-lessons"></div>
@@ -133,7 +134,7 @@
     <!-- Theory Pane -->
     <div class="theory-pane">
       <div class="pane-header">
-        <span class="pane-label">&#128214; Theory</span>
+        <span class="pane-label">&#128218; Theory</span>
       </div>
       <div class="theory-content" id="theory-content"></div>
     </div>
@@ -206,7 +207,7 @@
         <span class="mob-tab-icon">&#9776;</span><span>Lessons</span>
       </button>
       <button class="mob-tab" id="mob-tab-theory" onclick="mobTab('theory')">
-        <span class="mob-tab-icon">&#128214;</span><span>Theory</span>
+        <span class="mob-tab-icon">&#128218;</span><span>Theory</span>
       </button>
       <button class="mob-tab active" id="mob-tab-code" onclick="mobTab('code')">
         <span class="mob-tab-icon">&#128187;</span><span>Code</span>
@@ -224,7 +225,7 @@
      ═══════════════════════════════════════════════════════ -->
 <div id="veri-panel" class="veri-panel" style="display:none;">
   <div class="veri-panel-header">
-    <span class="veri-panel-title">⚙ Verilator Options</span>
+    <span class="veri-panel-title">&#9881; Verilator Options</span>
     <span id="veri-ver-badge" class="veri-ver-badge"></span>
     <button class="veri-panel-close" onclick="toggleVerilatorPanel()">&#10005;</button>
   </div>
@@ -253,34 +254,13 @@
     <!-- ── Warnings ── -->
     <div class="veri-section">
       <div class="veri-section-title">Warnings</div>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-Wall">
-        <span><code>--Wall</code> — enable all warnings</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-Wnofatal">
-        <span><code>--Wno-fatal</code> — warnings are non-fatal</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-WnoWIDTH">
-        <span><code>--Wno-WIDTH</code> — suppress bit-width mismatch</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-WnoUNUSED">
-        <span><code>--Wno-UNUSED</code> — suppress unused signal warnings</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-WnoUNDRIVEN">
-        <span><code>--Wno-UNDRIVEN</code> — suppress undriven signal warnings</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-WnoCASE">
-        <span><code>--Wno-CASEINCOMPLETE</code> — suppress incomplete case</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-WnoUNSIGNED">
-        <span><code>--Wno-UNSIGNED</code> — suppress unsigned comparison</span>
-      </label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-Wall"><span><code>--Wall</code> — enable all warnings</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-Wnofatal"><span><code>--Wno-fatal</code> — warnings are non-fatal</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-WnoWIDTH"><span><code>--Wno-WIDTH</code> — suppress bit-width mismatch</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-WnoUNUSED"><span><code>--Wno-UNUSED</code> — suppress unused signal warnings</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-WnoUNDRIVEN"><span><code>--Wno-UNDRIVEN</code> — suppress undriven signal warnings</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-WnoCASE"><span><code>--Wno-CASEINCOMPLETE</code> — suppress incomplete case</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-WnoUNSIGNED"><span><code>--Wno-UNSIGNED</code> — suppress unsigned comparison</span></label>
     </div>
 
     <!-- ── Optimization ── -->
@@ -301,37 +281,23 @@
     <!-- ── Features ── -->
     <div class="veri-section">
       <div class="veri-section-title">Language &amp; Features</div>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-assert">
-        <span><code>--assert</code> — enable SystemVerilog assertions (SVA)</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-coverage">
-        <span><code>--coverage</code> — enable code coverage</span>
-      </label>
-      <label class="veri-check-label">
-        <input type="checkbox" id="vf-lint-only">
-        <span><code>--lint-only</code> — lint only, skip simulation</span>
-      </label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-assert"><span><code>--assert</code> — enable SystemVerilog assertions (SVA)</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-coverage"><span><code>--coverage</code> — enable code coverage</span></label>
+      <label class="veri-check-label"><input type="checkbox" id="vf-lint-only"><span><code>--lint-only</code> — lint only, skip simulation</span></label>
     </div>
 
     <!-- ── UVM ── -->
     <div class="veri-section">
       <div class="veri-section-title">UVM — Universal Verification Methodology</div>
-      <div id="uvm-unavail-msg" class="uvm-unavail" style="display:none;">
-        ⚠ UVM library not detected on this server
-      </div>
+      <div id="uvm-unavail-msg" class="uvm-unavail" style="display:none;">&#9888; UVM library not detected on this server</div>
       <label class="veri-check-label" id="uvm-toggle-row">
         <input type="checkbox" id="vf-uvm" onchange="onUvmToggle()">
         <span>Enable UVM &nbsp;<em style="color:var(--muted);font-style:normal;font-size:0.66rem;">(forces --timing, requires Verilator 5.x)</em></span>
       </label>
-
-      <!-- UVM sub-options — shown only when checkbox is ticked -->
       <div id="uvm-subopts" class="uvm-subopts" style="display:none;">
         <div class="uvm-row">
           <label class="uvm-label" for="vf-uvm-test">Test name</label>
-          <input type="text" id="vf-uvm-test" class="veri-extra-input"
-                 placeholder="e.g. my_test  (maps to +UVM_TESTNAME)">
+          <input type="text" id="vf-uvm-test" class="veri-extra-input" placeholder="e.g. my_test  (maps to +UVM_TESTNAME)">
         </div>
         <div class="uvm-row">
           <label class="uvm-label" for="vf-uvm-verb">Verbosity</label>
@@ -344,44 +310,27 @@
             <option value="UVM_DEBUG">UVM_DEBUG</option>
           </select>
         </div>
-        <div class="uvm-hint">
-          Your testbench must <code>import uvm_pkg::*;</code> and
-          <code>`include "uvm_macros.svh"</code>.
-          Use <code>run_test();</code> to launch the test.
-        </div>
+        <div class="uvm-hint">Your testbench must <code>import uvm_pkg::*;</code> and <code>`include "uvm_macros.svh"</code>. Use <code>run_test();</code> to launch the test.</div>
       </div>
     </div>
 
     <!-- ── Extra Flags ── -->
     <div class="veri-section">
       <div class="veri-section-title">Extra Flags <span style="font-weight:400;color:var(--muted)">(advanced)</span></div>
-      <input type="text" id="vf-extra"
-             class="veri-extra-input"
-             placeholder="e.g. --pins-bv 2 +define+SIM">
+      <input type="text" id="vf-extra" class="veri-extra-input" placeholder="e.g. --pins-bv 2 +define+SIM">
     </div>
 
-    <!-- ── Active flags preview ── -->
     <div class="veri-flags-preview" id="veri-flags-preview"></div>
-
-    <!-- ── Actions ── -->
     <div class="veri-panel-actions">
       <button class="veri-reset-btn" onclick="resetVerilatorOptions()">&#8634; Reset defaults</button>
     </div>
-
   </div><!-- /veri-panel-body -->
 </div><!-- /veri-panel -->
-<!-- Panel backdrop -->
 <div id="veri-backdrop" style="display:none;" onclick="closeVerilatorPanel()"></div>
 
-<!-- Toast -->
 <div class="toast" id="toast"></div>
 
-<!-- ── FEEDBACK FAB ── -->
-<button class="feedback-fab" id="feedback-fab" onclick="openFeedback()" title="Send feedback on this lesson">
-  &#128172; Feedback
-</button>
-
-<!-- Feedback modal -->
+<button class="feedback-fab" id="feedback-fab" onclick="openFeedback()" title="Send feedback on this lesson">&#128172; Feedback</button>
 <div class="feedback-overlay" id="feedback-overlay" onclick="closeFeedback()"></div>
 <div class="feedback-modal" id="feedback-modal">
   <div class="feedback-header">
@@ -396,17 +345,29 @@
     <span data-v="4" onclick="setRating(4)">&#9733;</span>
     <span data-v="5" onclick="setRating(5)">&#9733;</span>
   </div>
-  <textarea id="feedback-comment" class="feedback-textarea"
-    placeholder="What could be improved? Any confusion? (optional)"></textarea>
+  <textarea id="feedback-comment" class="feedback-textarea" placeholder="What could be improved? Any confusion? (optional)"></textarea>
   <div class="feedback-actions">
     <button class="feedback-btn-cancel" onclick="closeFeedback()">Cancel</button>
-    <button class="feedback-btn-send"   onclick="submitFeedback()">Send &#8599;</button>
+    <button class="feedback-btn-send" onclick="submitFeedback()">Send &#8599;</button>
   </div>
 </div>
 
 <!-- ── SCRIPTS ── -->
-<!-- Curriculum modules — add new chapter: create modules/mN.js and add a line here -->
-<script src="./lessons/modules/msv1.js"></script>
+<!-- courses.js is the single source of truth for module loading.
+     To add a new course chapter: update courses.js only — never edit index.html. -->
+<script src="./lessons/courses.js"></script>
+<script>
+// Dynamically load every module listed in courses.js.
+// document.write is synchronous during page parse — all module scripts
+// execute and populate CURRICULUM_MODULES before curriculum.js runs.
+(function () {
+  var ids = (window.COURSES || []).reduce(function (a, c) { return a.concat(c.modules); }, []);
+  ids.forEach(function (id) {
+    document.write('<script src="./lessons/modules/' + id + '.js"><\/script>');
+  });
+}());
+</script>
+<!-- Standalone modules (not part of any course) — static tags only for these -->
 <script src="./lessons/modules/m1.js"></script>
 <script src="./lessons/modules/m2.js"></script>
 <script src="./lessons/modules/m3.js"></script>
@@ -416,13 +377,11 @@
 <script src="./lessons/modules/m13.js"></script>
 <script src="./lessons/modules/m16.js"></script>
 <script src="./lessons/modules/m15.js"></script>
-<script src="./lessons/modules/i2c1.js"></script>
 <script src="./lessons/curriculum.js"></script>
 <script src="./js/waveform.js"></script>
 <script src="./js/app.js"></script>
 
 <script>
-  // Count total lessons for stats
   window.addEventListener('DOMContentLoaded', () => {
     const total = CURRICULUM.reduce((s, m) => s + m.lessons.length, 0);
     document.getElementById('stat-lessons').textContent = total;
