@@ -13,8 +13,8 @@
 
 | Chapter | SV Module Name | Inputs | Outputs |
 |---------|---------------|--------|---------|
-| spi1 | *(educational — no integration contract)* | — | — |
-| spi2 | `spi_clk_div` | `pclk`, `rst_n`, `enable`, `cpol`, `div[15:0]` | `sck_out`, `rising_edge_p`, `falling_edge_p` |
+| spi_long1 | *(educational — no integration contract)* | — | — |
+| spi_long2 | `spi_clk_div` | `pclk`, `rst_n`, `enable`, `cpol`, `div[15:0]` | `sck_out`, `rising_edge_p`, `falling_edge_p` |
 
 ---
 
@@ -23,14 +23,14 @@
 These notes record how producer port names map to consumer port names at each
 integration checkpoint. Use them verbatim when writing integration testbenches.
 
-### Checkpoint A — spi5 L4 (spi_clk_div + spi_shift, Mode 0 hardcoded)
+### Checkpoint A — spi_long5 L4 (spi_clk_div + spi_shift, Mode 0 hardcoded)
 
 ```systemverilog
 // Mode 0: CPOL=0, CPHA=0
 // spi_clk_div outputs raw edge pulses by physical direction.
 // spi_shift inputs are named by semantic role (launch/sample).
 // For Mode 0: launch on falling SCK, sample on rising SCK.
-// spi6 (CPOL/CPHA engine) is NOT instantiated in Checkpoint A — wire manually:
+// spi_long6 (CPOL/CPHA engine) is NOT instantiated in Checkpoint A — wire manually:
 
 logic raw_rise, raw_fall;
 
@@ -47,4 +47,4 @@ spi_shift u_sft (
 );
 ```
 
-*(Checkpoint B and C wiring notes will be added when spi7 and spi12 are built.)*
+*(Checkpoint B and C wiring notes will be added when spi_long7 and spi_long12 are built.)*
