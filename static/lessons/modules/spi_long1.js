@@ -13,125 +13,64 @@
       title: 'L1 — MOSI, MISO, SCK, SS_n',
 
       theory: `
-<h2>The Six-Module SPI Master — and Where Signal Definitions Fit</h2>
+<h2>Imagine You Have a Brain and a Sensor</h2>
 <p>
-  Before writing any RTL, let's see the complete system we are building across
-  this course. Every chapter from spi_long1 to spi_long12 contributes one
-  module to this pipeline. This chapter covers the protocol layer — what each
-  wire means, which direction it flows, and how all six modules eventually
-  connect to the four physical pads at the chip boundary.
+  Picture a small chip on a circuit board — the "brain" (your processor). It needs
+  to talk to a sensor sitting next to it: maybe a temperature sensor, a pressure gauge,
+  or a memory chip. The question is: how do two chips share information using as few
+  wires as possible?
 </p>
-<pre class="code-block">
-  APB Bus (host processor reads/writes control registers)
-       │
-       ▼
-  ┌──────────────────────┐
-  │    spi_reg_block     │  stores: mode, word_len, clk_div, cs_sel, int_en …
-  │    (spi_long11)      │
-  └──────────┬───────────┘
-             │  config signals fan out to every module below
-       ┌─────┴────────────────────────────────────────────┐
-       │                                                  │
-       ▼                                                  ▼
-  ┌──────────────┐                              ┌──────────────────┐
-  │ spi_clk_div  │  rising_edge_p               │  spi_cs_ctrl     │
-  │  (spi_long2) │  falling_edge_p              │  (spi_long7)     │
-  └──────┬───────┘  sck_out                     └────────┬─────────┘
-         │                                               │
-         ▼                                               │
-  ┌──────────────┐                                       │
-  │  spi_cpha    │  launch_pulse                         │
-  │  (spi_long6) │  sample_pulse                         │
-  └──────┬───────┘                                       │
-         │                          ┌──────────────────┐ │
-         ▼                          │  spi_master_fsm  │◄┘ cs_transfer_active
-  ┌──────────────┐◄─────────────────│   (spi_long8)    │
-  │  spi_shift   │  load, shift_en  └──────────────────┘
-  │  (spi_long5) │
-  └──────┬───────┘
-         │
-         │  ◄══ This chapter defines what these pads mean ══►
-         ▼
-  ┌───────────────────────────────────────────────────────┐
-  │                 Chip Boundary (IO pads)               │
-  │   spi_mosi_o ──►  MOSI pin  (Master Out, Slave In)   │
-  │   spi_miso_i ◄──  MISO pin  (Master In, Slave Out)   │
-  │   spi_sck_o  ──►  SCK  pin  (Serial Clock)           │
-  │   spi_csn_o  ──►  CS   pin  (Chip Select, active-LOW)│
-  └───────────────────────────────────────────────────────┘
-</pre>
 <p>
-  Every module in this course ultimately drives or reads one of these four
-  pads. Getting the directions right is the first thing any RTL review
-  checks — and the most common mistake on a new SPI bring-up.
+  SPI answers that with just <strong>four wires</strong>. That's the whole protocol.
+  Four wires, and both chips can send and receive data at the same time.
 </p>
 
-<h3>What Goes Wrong When Signal Directions Are Swapped</h3>
+<h3>The Four Wires — a Simple Conversation Analogy</h3>
 <p>
-  The most frequent SPI wiring error on a new PCB is swapping MOSI and MISO.
-  Schematic and layout tools sometimes mirror connector pinouts — what the
-  schematic calls "MOSI out" connects to the slave's "MOSI in" correctly on
-  paper, but the PCB layout reverses the net. The result: the master drives
-  its own MISO line, and the slave drives directly into the master's MOSI
-  driver — a bus contention on every transfer. The scope shows activity on
-  both lines but every byte received is 0xFF because the slave's strong MISO
-  driver dominates. The bug is invisible without a probe.
-</p>
-<p>
-  Declaring <code>spi_mosi_o</code> as an <code>output</code> and
-  <code>spi_miso_i</code> as an <code>input</code> locks the direction
-  contract into the type system. A reversed connection becomes a compile-time
-  direction mismatch, not a board spin.
-</p>
-
-<h2>The Four SPI Pads — Derived Step by Step</h2>
-
-<h3>Step 1 — What does each wire carry?</h3>
-<p>
-  SPI moves data in both directions simultaneously on every clock edge.
-  Signal names encode the direction <em>from the master's perspective</em>:
+  Think of the brain (called the <strong>master</strong>) as a person dictating
+  a letter while simultaneously reading a reply. The sensor (called the
+  <strong>slave</strong>) is the assistant doing the same in reverse.
+  Here is what each wire carries:
 </p>
 <table class="truth-table">
-  <tr><th>Signal</th><th>Direction at master</th><th>What it carries</th><th>Internal source</th></tr>
-  <tr><td><code>MOSI</code></td><td>output</td><td>Master → Slave data</td><td>TX shift register MSB</td></tr>
-  <tr><td><code>MISO</code></td><td>input</td><td>Slave → Master data</td><td>Slave shift register</td></tr>
-  <tr><td><code>SCK</code></td><td>output</td><td>Serial clock</td><td>Clock divider (spi_long2)</td></tr>
-  <tr><td><code>SS_n</code></td><td>output</td><td>Slave select, active-LOW</td><td>CS controller (spi_long7)</td></tr>
+  <tr><th>Wire</th><th>Think of it as…</th><th>Direction</th></tr>
+  <tr><td><strong>MOSI</strong></td><td>Master's words going OUT to the sensor</td><td>→ master sends</td></tr>
+  <tr><td><strong>MISO</strong></td><td>Sensor's reply coming back IN to the master</td><td>← sensor sends</td></tr>
+  <tr><td><strong>SCK</strong></td><td>A shared metronome — both sides use this clock to know when each bit starts</td><td>→ master drives</td></tr>
+  <tr><td><strong>SS_n</strong></td><td>A tap on the shoulder — tells ONE specific sensor "I'm talking to you now"</td><td>→ master drives</td></tr>
 </table>
-
-<h3>Step 2 — Map to port names using the AMBA pad convention</h3>
 <p>
-  The suffix <code>_o</code> marks a signal leaving the chip; <code>_i</code>
-  marks one arriving. Internal names connect to these pads through
-  <code>assign</code> wires — no logic, just routing:
+  The <strong>n</strong> in SS_n stands for "active when LOW." Imagine it like
+  a push-button that activates when pressed down. When the master pulls SS_n LOW,
+  that sensor wakes up and joins the conversation. All other sensors ignore the bus
+  until their own SS_n wire goes LOW.
+</p>
+
+<h3>Why Do We Need the Clock Wire?</h3>
+<p>
+  Without a shared clock, imagine two people trying to speak at different speeds — the
+  listener might think "hello" ended after "hel" and start reading the next word too
+  early. The SCK wire prevents this: the master controls the speed, and both sides
+  read one bit on every tick of that clock. No confusion, no timing drift.
+</p>
+
+<h3>What We Are Building in This Lesson</h3>
+<p>
+  A small connector module called <code>spi_signals</code>. Think of it as the
+  labelled ports on the back of a device — it just names and connects four internal
+  wires to the four physical pins. No calculations, no memory. Just four connections:
 </p>
 <pre class="code-block">
-module spi_signals (
-  input  logic tx_bit,    // from TX shift register: bit to transmit
-  input  logic miso_in,   // arriving from MISO pad
-  input  logic sck_int,   // from clock divider
-  input  logic cs_n_raw,  // from CS controller (already active-low)
-  output logic mosi,      // → MOSI pad
-  output logic miso,      // → MISO pad (alias for miso_in)
-  output logic sck,       // → SCK pad
-  output logic ss_n       // → SS_n pad
-);
-</pre>
-
-<h3>Step 3 — Connect internal signals to pads</h3>
-<p>
-  No combinational logic needed — four wires, four assigns:
-</p>
-<pre class="code-block">
-  assign mosi = tx_bit;    // shift register MSB → MOSI pad
-  assign miso = miso_in;   // MISO pad → readable by RX shift register
-  assign sck  = sck_int;   // clock divider output → SCK pad
-  assign ss_n = cs_n_raw;  // CS controller output → SS_n pad
+  Internal name    →    Physical pin
+  tx_bit           →    mosi    (the bit we want to send right now)
+  miso_in          →    miso    (the bit the sensor just sent back)
+  sck_int          →    sck     (the clock tick we share with the sensor)
+  cs_n_raw         →    ss_n    (which sensor we are talking to)
 </pre>
 <p>
-  In L2 we will build the shift register that produces <code>tx_bit</code>
-  and consumes <code>miso_in</code> — a circular ring that exchanges an
-  entire byte between master and slave in eight clock edges.
+  In L2 we build the shift register — the part that lines up 8 bits to send
+  and collects 8 bits arriving. Think of it as the actual letter being written
+  and read, one word at a time.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
@@ -265,82 +204,89 @@ endmodule`,
       title: 'L2 — Full-Duplex Shift Register',
 
       theory: `
-<h2>Why SPI Is a Ring — and Why That Makes Bring-Up Straightforward</h2>
+<h2>Imagine a Queue of Eight People Passing Notes</h2>
 <p>
-  The key structural insight in SPI: the master and slave are wired as a
-  single circular shift register. Every SCK edge rotates both registers one
-  position — one bit leaves the master's MSB and enters the slave's LSB via
-  MOSI; simultaneously one bit leaves the slave's MSB and enters the master's
-  LSB via MISO. After eight edges, both sides have received the other's
-  complete byte.
+  Picture eight people standing in a line. Each person holds a card with either
+  a "1" or a "0" on it. These eight cards together form one byte of data.
+</p>
+<p>
+  Now imagine a referee with a whistle. Every time the referee blows the whistle
+  (one clock tick of SCK):
+</p>
+<ul>
+  <li>The person at the <strong>front</strong> of the line hands their card through the door — that bit travels out on MOSI to the sensor.</li>
+  <li>Everyone else takes one step forward.</li>
+  <li>A brand-new person joins at the <strong>back</strong> — carrying the bit that just arrived from the sensor on MISO.</li>
+</ul>
+<p>
+  After eight whistles, the entire original queue has walked out, and eight new
+  people (the sensor's reply) have walked in. The master has received a complete
+  byte. And at the sensor's side, the exact same thing happened in reverse — it
+  also received the master's byte. Both sides exchanged a full byte in the same
+  eight clock ticks. That is SPI full-duplex.
 </p>
 <pre class="code-block">
-  MASTER tx_shift[7:0]               SLAVE tx_shift[7:0]
-  ┌───┬───┬───┬───┬───┬───┬───┬───┐  ┌───┬───┬───┬───┬───┬───┬───┬───┐
-  │ 7 │ 6 │ 5 │ 4 │ 3 │ 2 │ 1 │ 0 │  │ 7 │ 6 │ 5 │ 4 │ 3 │ 2 │ 1 │ 0 │
-  └───┴───┴───┴───┴───┴───┴───┴───┘  └───┴───┴───┴───┴───┴───┴───┴───┘
-    MSB exits ──────────────────────MOSI──────────────────────► enters LSB
-    MSB enters ◄─────────────────── MISO ── leaves MSB
-                   ▲ both shift on the same SCK edge ▲
+  MASTER's queue (tx_shift)
+  ┌───┬───┬───┬───┬───┬───┬───┬───┐
+  │ 7 │ 6 │ 5 │ 4 │ 3 │ 2 │ 1 │ 0 │
+  └───┴───┴───┴───┴───┴───┴───┴───┘
+  front exits ─── MOSI ──────────────────────────► sensor
+  back fills  ◄── MISO ────────────────────────── sensor exits
+                 ↑ one person moves per whistle ↑
 </pre>
 <p>
-  This ring structure makes the first bring-up test trivial: connect MISO to
-  MOSI directly on the evaluation board (a loopback wire). No slave IC is
-  needed. If the master transmits 0xA5 and receives 0xA5 back after eight
-  SCK edges, the shift register, clock divider, and IO cells are all working
-  correctly. This is the first test run on every new SPI design — it either
-  passes in minutes or immediately identifies a clock, IO direction, or reset
-  problem.
+  This design also makes testing easy. On the first day of bring-up, connect a
+  wire directly from MOSI back to MISO on the board — a <strong>loopback</strong>.
+  No sensor needed. If you send 0xA5 and receive 0xA5 back, the queue is working.
+  If not, something is wrong with the clock, wiring, or reset. Engineers run this
+  test before attaching any real sensor.
 </p>
 
-<h2>Building the Shift Register — Three Questions</h2>
+<h2>Translating the Queue Into Code — Three Questions</h2>
 
-<h3>Question 1 — What state must this block remember between clock edges?</h3>
+<h3>Question 1 — What does this block need to remember?</h3>
 <p>
-  Two 8-bit registers: one holding bits not yet transmitted
-  (<code>tx_shift</code>), one accumulating received bits
-  (<code>rx_shift</code>). All control signals come from outside — the
-  block itself only stores data.
+  Two queues. One for outgoing bits (<code>tx_shift</code>), one collecting
+  incoming bits (<code>rx_shift</code>). Both hold 8 positions:
 </p>
 <pre class="code-block">
-logic [7:0] tx_shift;   // queued transmit bits, MSB goes out first
-logic [7:0] rx_shift;   // accumulating received bits, MSB arrives first
+logic [7:0] tx_shift;   // the outgoing queue — person [7] is always at the front
+logic [7:0] rx_shift;   // the incoming queue — new arrivals fill position [0]
 </pre>
 
-<h3>Question 2 — What events change the state, in what priority order?</h3>
+<h3>Question 2 — What three events can change the queue?</h3>
 <p>
-  Three events, handled in decreasing priority so the FSM can safely
-  issue a load at any time without interfering with an ongoing shift:
+  Three things can happen — when multiple conditions are true, the one
+  listed first wins:
 </p>
 <pre class="code-block">
 always_ff @(posedge clk or negedge rst_n) begin
-  if (!rst_n) begin
-    tx_shift &lt;= 8'b0;   // reset clears both registers
+  if (!rst_n) begin               // Reset: everyone leaves, queue clears
+    tx_shift &lt;= 8'b0;
     rx_shift &lt;= 8'b0;
-  end else if (load) begin            // FSM LOAD state: capture transmit word
+  end else if (load) begin        // Load: a fresh team of 8 lines up to go
     tx_shift &lt;= tx_data;
-  end else if (shift_en) begin        // one pulse per active SCK edge
-    tx_shift &lt;= {tx_shift[6:0], 1'b0};     // left-shift: MSB exits via MOSI
-    rx_shift &lt;= {rx_shift[6:0], miso_in};  // left-shift: MISO enters at bit 0
+  end else if (shift_en) begin    // Whistle: one step — front exits, back fills
+    tx_shift &lt;= {tx_shift[6:0], 1'b0};      // everyone shifts forward; back gets zero
+    rx_shift &lt;= {rx_shift[6:0], miso_in};   // incoming bit joins at the back
   end
 end
 </pre>
 
-<h3>Question 3 — Why must MOSI be combinational, not registered?</h3>
+<h3>Question 3 — Why is MOSI always "live" — no delay?</h3>
 <p>
-  If <code>mosi_out</code> were registered, it would update one clock cycle
-  <em>after</em> <code>tx_shift</code> shifts — the bit on the MOSI wire
-  would lag the shift register by one cycle. The slave samples MOSI on the
-  SCK edge, so MOSI must be stable <em>before</em> that edge arrives.
-  A combinational assign from the MSB guarantees zero latency:
+  The sensor reads MOSI on the same clock tick as the whistle. If MOSI were
+  connected through a register (with a clock delay), the sensor would read
+  last tick's person — always one step behind. We avoid this by wiring MOSI
+  directly to whoever is standing at the front of the queue right now:
 </p>
 <pre class="code-block">
-assign mosi_out = tx_shift[7];  // always reflects the current MSB instantly
+assign mosi_out = tx_shift[7];   // front of queue — always visible immediately
+assign rx_data  = rx_shift;      // completed incoming queue, readable anytime
 </pre>
 <p>
-  In L3 we will see what controls <em>which</em> SCK edge the slave uses
-  to sample MOSI — the CPOL/CPHA mode setting that SPI masters must match
-  to each slave device's datasheet.
+  In L3 we answer the last open question: on which whistle — the clock going
+  UP or DOWN — does the sensor actually read the card? That is CPOL and CPHA.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
@@ -498,108 +444,95 @@ endmodule`,
       title: 'L3 — CPOL/CPHA Mode Decoder',
 
       theory: `
-<h2>Where the Mode Decoder Fits — and the Failure It Prevents</h2>
+<h2>Two People Exchanging Notes — But They Need to Agree on the Signal First</h2>
 <p>
-  In L1 we saw the full six-module pipeline. The mode decoder is the first step
-  inside the timing engine — it translates two register bits into the edge
-  assignments that every other module depends on. Get it wrong and the data path
-  from L2 silently receives garbage on every transfer.
+  Imagine you and a friend are across a room, passing sticky notes back and forth.
+  You agree: every time you raise your hand, you both swap notes at the same moment.
+  Simple — it works perfectly.
 </p>
-<pre class="code-block">
-  spi_reg_block ──► {cpol, cpha} ──► spi_mode_decode ──► launch_on_rise
-                                           ★                sample_on_rise
-                                           │
-                                           ▼
-                                      spi_cpha (spi_long6)   timing engine
-                                      spi_shift (spi_long5)  shift register
-</pre>
+<p>
+  Now imagine a second friend in another room who uses a completely different signal.
+  She swaps when you <em>lower</em> your hand, not raise it. Neither of you is wrong.
+  But if you try to exchange notes with her using the first signal, she does nothing.
+  You both end up confused, holding the wrong notes.
+</p>
+<p>
+  This is exactly the problem SPI modes solve. Every sensor chip has a preference:
+  some swap bits on the rising clock edge, others on the falling edge. The master
+  must match the sensor's preference — otherwise every byte received will be garbage.
+  CPOL and CPHA are just a way to describe which signal the sensor expects.
+</p>
 
-<h3>The Real Failure: a Four-Sensor Data Logger</h3>
+<h3>CPOL — Where Does the Clock Rest?</h3>
 <p>
-  A data-logging board has four SPI sensors sharing one bus: a pressure sensor
-  (Mode 0), a temperature sensor (Mode 0), a gyroscope (Mode 3), and an SPI NOR
-  Flash (Mode 0). Each gets its own CS pin; all four share MOSI, MISO, SCK.
-</p>
-<p>
-  The RTL reads the gyroscope register with Mode 0 instead of Mode 3. The
-  gyroscope drives MISO on the <em>falling</em> SCK edge (Mode 3), but the
-  master samples MISO on the <em>rising</em> edge, expecting Mode 0 timing.
-  Result:
+  When no data is being sent, the clock wire has to sit at some level. Think of it
+  as your hand position when you're not actively signalling:
 </p>
 <ul>
-  <li>The master samples MISO one half-cycle too early — capturing the previous bit.</li>
-  <li>Every byte from the gyroscope is bit-shifted by one position.</li>
-  <li>The pressure and temperature sensors read correctly on the same bus, making the bug look intermittent and device-specific.</li>
-  <li>Finding it requires a logic analyser and careful comparison of MISO timing against SCK — not just a register dump.</li>
+  <li><strong>CPOL = 0</strong>: hand rests <strong>DOWN</strong> between transfers. Clock idles LOW. First move is up.</li>
+  <li><strong>CPOL = 1</strong>: hand rests <strong>UP</strong> between transfers. Clock idles HIGH. First move is down.</li>
 </ul>
-<p>
-  The mode decoder ensures the RTL selects the correct edge assignment from the
-  value written to CTRL[1:0] by the host processor. One wrong bit causes
-  exactly this failure.
-</p>
 
-<h2>Deriving the Four Modes — Three Steps</h2>
-
-<h3>Step 1 — What does each bit control?</h3>
+<h3>CPHA — Which Move Is the Signal?</h3>
 <p>
-  Two bits, two independent questions about the SCK waveform:
+  Once you know the resting position, CPHA picks which movement counts as "swap":
 </p>
+<ul>
+  <li><strong>CPHA = 0</strong>: the <strong>first</strong> movement away from rest is the signal. Swap immediately on the first edge.</li>
+  <li><strong>CPHA = 1</strong>: ignore the first movement; swap on the <strong>second</strong> edge.</li>
+</ul>
+
+<h3>The Four Combinations</h3>
 <table class="truth-table">
-  <tr><th>Bit</th><th>Name</th><th>Question it answers</th><th>0 means</th><th>1 means</th></tr>
-  <tr><td><code>cpol</code></td><td>Clock POLarity</td><td>What level does SCK rest at between transfers?</td><td>Idle LOW (most devices)</td><td>Idle HIGH</td></tr>
-  <tr><td><code>cpha</code></td><td>Clock PHAse</td><td>Which edge does the slave use to sample MOSI?</td><td>First active edge</td><td>Second active edge</td></tr>
-</table>
-
-<h3>Step 2 — Map every combination to edge assignments</h3>
-<p>
-  Four combinations produce four modes. The key outputs we need are
-  <code>launch_on_rise</code> (when to update MOSI) and
-  <code>sample_on_rise</code> (when to capture MISO):
-</p>
-<table class="truth-table">
-  <tr><th>Mode</th><th>CPOL</th><th>CPHA</th><th>SCK idle</th><th>launch_on_rise</th><th>sample_on_rise</th></tr>
-  <tr><td>0</td><td>0</td><td>0</td><td>LOW</td><td>0 (falling edge)</td><td>1 (rising edge)</td></tr>
-  <tr><td>1</td><td>0</td><td>1</td><td>LOW</td><td>1 (rising edge)</td><td>0 (falling edge)</td></tr>
-  <tr><td>2</td><td>1</td><td>0</td><td>HIGH</td><td>1 (rising edge)</td><td>0 (falling edge)</td></tr>
-  <tr><td>3</td><td>1</td><td>1</td><td>HIGH</td><td>0 (falling edge)</td><td>1 (rising edge)</td></tr>
+  <tr><th>Mode</th><th>CPOL</th><th>CPHA</th><th>Clock rests</th><th>Swap bits on</th><th>Common use</th></tr>
+  <tr><td>0</td><td>0</td><td>0</td><td>LOW</td><td>Rising edge (1st move up)</td><td>Most sensors, NOR Flash</td></tr>
+  <tr><td>1</td><td>0</td><td>1</td><td>LOW</td><td>Falling edge (2nd move)</td><td>Some ADCs</td></tr>
+  <tr><td>2</td><td>1</td><td>0</td><td>HIGH</td><td>Falling edge (1st move down)</td><td>Less common</td></tr>
+  <tr><td>3</td><td>1</td><td>1</td><td>HIGH</td><td>Rising edge (2nd move)</td><td>Some gyroscopes</td></tr>
 </table>
 <p>
-  There is a pattern: <code>launch_on_rise = cpol XOR cpha</code>. The XOR captures
-  whether the first active SCK edge is rising or falling — which is exactly the
-  question CPHA asks about an SCK whose idle level is set by CPOL:
+  A handy pattern: if CPOL and CPHA are the <em>same</em> (both 0 or both 1),
+  the swap happens on the rising edge. If they are <em>different</em>, the swap
+  happens on the falling edge. Just one XOR gate captures this completely:
+  <code>sample_on_rise = !(cpol XOR cpha)</code>.
 </p>
-<pre class="code-block">
-  idle_level     =  cpol              // CPOL is the idle level by definition
-  launch_on_rise =  (cpol ^ cpha)     // 1 = MOSI changes on rising SCK
-  sample_on_rise = !(cpol ^ cpha)     // 1 = MISO captured on rising SCK (= XNOR)
-</pre>
 
-<h3>Step 3 — Why always_comb + case, not three assign lines?</h3>
+<h3>What Goes Wrong If You Pick the Wrong Mode?</h3>
 <p>
-  We could write three assign statements and be done. We instead write an
-  <code>always_comb</code> block with <code>case ({cpol, cpha})</code> because
-  spi_long6 (the timing engine) will extend this exact block with CPHA=0
-  pre-seed logic and a last-bit guard — and a <code>case</code> statement
-  scales cleanly for those additions. Establishing the pattern here at Tier 2
-  prepares us for the Tier 4 work ahead:
+  A sensor board has four chips: a pressure sensor (Mode 0), a temperature sensor
+  (Mode 0), a gyroscope (Mode 3), and a flash memory chip (Mode 0). All four share
+  MOSI, MISO, and SCK — only the CS pins are separate.
+</p>
+<p>
+  Someone writes the RTL and forgets to check the gyroscope's datasheet. It gets
+  configured as Mode 0. The gyroscope puts its MISO bit on the wire on the
+  <em>falling</em> edge (Mode 3 behaviour), but the master reads MISO on the
+  <em>rising</em> edge. The master always reads the bit from <em>last</em> clock
+  cycle — every gyroscope byte comes back shifted by one position.
+</p>
+<p>
+  The tricky part: the pressure and temperature sensors still work perfectly, so
+  the bug looks random. It takes a logic analyser — looking at exact MISO timing
+  against the SCK edges — to find it.
+</p>
+<p>
+  The module we are building reads the two CPOL/CPHA bits set by the host
+  processor and produces two simple outputs: "does MOSI launch on the rising
+  edge?" and "does MISO get sampled on the rising edge?" Everything else in the
+  system uses these two signals to time the transfer correctly.
 </p>
 <pre class="code-block">
 always_comb begin
-  idle_level = cpol;   // direct assignment — always equals CPOL
+  idle_level = cpol;         // resting position comes straight from CPOL
   case ({cpol, cpha})
-    2'b00: begin  // Mode 0 — most common (ADCs, NOR Flash, most sensors)
-      launch_on_rise = 1'b0;   // MOSI changes on FALLING SCK edge
-      sample_on_rise = 1'b1;   // MISO captured on RISING SCK edge
+    2'b00: begin             // Mode 0 — most sensors
+      launch_on_rise = 0;    // update MOSI on falling edge
+      sample_on_rise = 1;    // read MISO on rising edge
     end
-    // ... three more cases + default
+    // ... three more cases + a default (the default prevents a latch)
   endcase
 end
 </pre>
-<p>
-  The <code>default</code> case must assign all outputs. Without it, Verilator
-  infers a latch — a timing violation that would appear as metastability in
-  silicon if the inputs ever glitch to an undefined state.
-</p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
