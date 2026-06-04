@@ -14,8 +14,8 @@
 | 3 | `spi_long3` | TX FIFO Design | 2 | 2→3 | 4 | ✅ done |
 | 4 | `spi_long4` | RX FIFO Design | 2 | 2→3 | 4 | ✅ done |
 | 5 | `spi_long5` | TX & RX Shift Registers | 2 | 3 | 4 | ✅ done |
-| 6 | `spi_long6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ❌ **build this next** |
-| 7 | `spi_long7` | CS Controller & Timing | 3 | 3→4 | 4 | ❌ |
+| 6 | `spi_long6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ✅ done |
+| 7 | `spi_long7` | CS Controller & Timing | 3 | 3→4 | 4 | ❌ **build this next** |
 | 8 | `spi_long8` | Master FSM | 3 | 4 | 4 | ❌ |
 | 9 | `spi_long9` | Error Handling & Interrupt Controller | 3 | 4 | 4 | ❌ |
 | 10 | `spi_long10` | SPI Package & Internal Interfaces | 4 | 4 | 3 | ❌ |
@@ -50,6 +50,7 @@ No integration checkpoint in this phase.
 Goal: Student has built every data-path block: FIFOs, shift registers, timing engine.
 Modules: spi_long3 (TX FIFO), spi_long4 (RX FIFO), spi_long5 (shift regs), spi_long6 (CPOL/CPHA mux)
 **Checkpoint A** fires at end of spi_long5 (clock divider + shift loopback). ✅ PASSED
+Phase 2 complete ✅
 
 ### Phase 3 — Control Path (Month 4) | spi_long7–spi_long9
 Goal: Student can drive a full SPI transfer under FSM control with error handling.
@@ -90,7 +91,8 @@ Modules: spi_long_tb1 (unit TBs), spi_long_tb2 (corner cases), spi_long_tb3 (SVA
 | 4 | 2026-06-04 | spi_long3 — TX FIFO Design (4 lessons) | 32e3c79 |
 | 5 | 2026-06-04 | spi_long4 — RX FIFO Design (4 lessons) | db01d68 |
 | 6 | 2026-06-04 | spi_long5 — TX & RX Shift Registers (4 lessons, Checkpoint A) | 60d8783 |
+| 7 | 2026-06-04 | spi_long6 — CPOL/CPHA Timing Engine (4 lessons) | 5d1c572 |
 
 ---
 
-*Cursor: spi_long6 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long7 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
