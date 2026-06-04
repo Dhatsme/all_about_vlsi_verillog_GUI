@@ -33,5 +33,12 @@ window.COURSES = [
     icon: '\u{1F9EA}',
     description: 'Write directed testbenches for every I²C module — from open-drain IO cells to full multi-master subsystems',
     modules: ['i2ctb1', 'i2ctb2', 'i2ctb3', 'i2ctb4', 'i2ctb5', 'i2ctb6', 'i2ctb7'],
+  },
+  {
+    id: 'spi_long',
+    title: 'SPI Zero to Hero (2 Month)',
+    icon: '🔬',
+    description: 'Build a complete register-programmable SPI master from wire definitions to APB-connected RTL — deep-dive track',
+    modules: ['spi_long1', 'spi_long2'],
   }
 ];
