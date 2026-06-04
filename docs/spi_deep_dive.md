@@ -15,8 +15,8 @@
 | 4 | `spi_long4` | RX FIFO Design | 2 | 2→3 | 4 | ✅ done |
 | 5 | `spi_long5` | TX & RX Shift Registers | 2 | 3 | 4 | ✅ done |
 | 6 | `spi_long6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ✅ done |
-| 7 | `spi_long7` | CS Controller & Timing | 3 | 3→4 | 4 | ❌ **build this next** |
-| 8 | `spi_long8` | Master FSM | 3 | 4 | 4 | ❌ |
+| 7 | `spi_long7` | CS Controller & Timing | 3 | 3→4 | 4 | ✅ done |
+| 8 | `spi_long8` | Master FSM | 3 | 4 | 4 | ❌ **build this next** |
 | 9 | `spi_long9` | Error Handling & Interrupt Controller | 3 | 4 | 4 | ❌ |
 | 10 | `spi_long10` | SPI Package & Internal Interfaces | 4 | 4 | 3 | ❌ |
 | 11 | `spi_long11` | APB Register Interface | 4 | 4→5 | 4 | ❌ |
@@ -92,7 +92,8 @@ Modules: spi_long_tb1 (unit TBs), spi_long_tb2 (corner cases), spi_long_tb3 (SVA
 | 5 | 2026-06-04 | spi_long4 — RX FIFO Design (4 lessons) | db01d68 |
 | 6 | 2026-06-04 | spi_long5 — TX & RX Shift Registers (4 lessons, Checkpoint A) | 60d8783 |
 | 7 | 2026-06-04 | spi_long6 — CPOL/CPHA Timing Engine (4 lessons) | 5d1c572 |
+| 8 | 2026-06-04 | spi_long7 — CS Controller & Timing (4 lessons) | — |
 
 ---
 
-*Cursor: spi_long7 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long8 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
