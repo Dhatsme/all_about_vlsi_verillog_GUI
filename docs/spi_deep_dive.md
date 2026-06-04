@@ -11,8 +11,8 @@
 |---|---|---|---|---|---|---|
 | 1 | `spi_long1` | SPI Protocol & Signal Definitions | 1 | 1→2 | 3 | ✅ done |
 | 2 | `spi_long2` | Clock Divider & SCK Generation | 1 | 2 | 3 | ✅ done |
-| 3 | `spi_long3` | TX FIFO Design | 2 | 2→3 | 4 | ❌ **build this next** |
-| 4 | `spi_long4` | RX FIFO Design | 2 | 2→3 | 4 | ❌ |
+| 3 | `spi_long3` | TX FIFO Design | 2 | 2→3 | 4 | ✅ done |
+| 4 | `spi_long4` | RX FIFO Design | 2 | 2→3 | 4 | ❌ **build this next** |
 | 5 | `spi_long5` | TX & RX Shift Registers | 2 | 3 | 4 | ❌ |
 | 6 | `spi_long6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ❌ |
 | 7 | `spi_long7` | CS Controller & Timing | 3 | 3→4 | 4 | ❌ |
@@ -87,7 +87,8 @@ Modules: spi_long_tb1 (unit TBs), spi_long_tb2 (corner cases), spi_long_tb3 (SVA
 | 1 | 2026-06-03 | spi_long1 — SPI Protocol & Signal Definitions (3 lessons) | 34bfd64 |
 | 2 | 2026-06-03 | spi_long2 — Clock Divider & SCK Generation (3 lessons) | 5fe0db1 |
 | 3 | 2026-06-04 | Rename: spi* → spi_long*; restore spi1/spi2 to develop versions | 82ee1c3 |
+| 4 | 2026-06-04 | spi_long3 — TX FIFO Design (4 lessons) | 32e3c79 |
 
 ---
 
-*Cursor: spi_long3 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long4 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
