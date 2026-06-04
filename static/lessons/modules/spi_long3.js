@@ -13,84 +13,116 @@
       title: 'L1 — Pointer Arithmetic & Storage',
 
       theory: `
-<h2>How a FIFO Tracks Its Data</h2>
+<h2>The Airport Boarding Queue</h2>
 <p>
-  A synchronous FIFO (First-In, First-Out) buffer is the bridge between software and
-  hardware. The CPU writes words at any time; the SPI shift register reads them one
-  by one at the SCK rate. The FIFO hides this speed mismatch so neither side has to
-  wait for the other to be ready.
+  Imagine you are at a busy airport boarding gate. Passengers (bytes from the CPU)
+  arrive at their own pace — sometimes five at once, sometimes none for a while.
+  But the flight crew (SPI shift register) can only process one passenger at a time,
+  at a fixed boarding pace set by SCK. Without a waiting area, passengers who arrive
+  while the flight crew is busy would simply be lost forever.
 </p>
 <p>
-  A FIFO needs two things: a <strong>storage array</strong> and two
-  <strong>pointers</strong> — one for the write head (<code>wr_ptr</code>) and one
-  for the read head (<code>rd_ptr</code>). Both pointers start at 0. Each write
-  increments <code>wr_ptr</code>; each read increments <code>rd_ptr</code>.
-  When a pointer reaches DEPTH, it wraps back to 0.
+  The TX FIFO is that waiting area — eight numbered seats arranged in a circle.
+  Two attendants manage the queue: a <strong>write pointer</strong> who shows
+  arriving passengers to the next empty seat, and a <strong>read pointer</strong>
+  who escorts them onto the plane one by one. Neither attendant needs to know what
+  the other is doing — they just keep moving forward around the circle.
 </p>
 
+<h3>Where the TX FIFO Lives in Our SPI Master</h3>
 <pre class="code-block">
-// Depth-8 FIFO — 3-bit pointers (0..7 + wrap bit = 4 bits)
-parameter DEPTH = 8;
-parameter W     = 8;
-
-logic [W-1:0]   mem [0:DEPTH-1];   // storage
-logic [2:0]     wr_ptr, rd_ptr;    // 3-bit binary pointers
-
-// Write
-always_ff @(posedge clk)
-  if (wr_en &amp;&amp; !full)
-    mem[wr_ptr] &lt;= wr_data;
-
-// Read (registered output)
-always_ff @(posedge clk)
-  rd_data &lt;= mem[rd_ptr];
+  The CPU writes bytes into TXDATA
+  register via the APB bus
+          │
+          ▼
+  ┌──────────────────────────────────────────────────┐
+  │             spi_tx_fifo                      ★   │
+  │                                                  │
+  │  wr_ptr ──► mem[0]  mem[1]  ...  mem[7]          │
+  │                               │                  │
+  │                            rd_ptr                │
+  │                                                  │
+  │  Outputs: rd_data, full, empty                   │
+  └─────────────────────────┬────────────────────────┘
+                            │ rd_data
+                            ▼
+                     spi_shift (spi_long5)
+                            │
+                         MOSI pin ──► sensor
 </pre>
 
-<h3>Empty & Full from MSB Trick</h3>
+<h3>The Circular Queue and the Wrap Bit Trick</h3>
 <p>
-  With a power-of-two depth, empty and full can be detected cheaply by extending
-  the pointers by one extra bit — the <em>wrap bit</em>. When the wrap bits
-  <strong>match</strong>, the pointers are in the same lap → FIFO is
-  <strong>empty</strong>. When the wrap bits <strong>differ</strong> but the low bits
-  match, one pointer has lapped the other → FIFO is <strong>full</strong>.
+  Both pointers start at 0. Each write increments <code>wr_ptr</code>; each read
+  increments <code>rd_ptr</code>. Both wrap from 7 back to 0. With 8 slots and
+  3-bit index pointers (0–7), how do we tell <strong>empty</strong>
+  (both pointers at slot 0 — no data) from <strong>full</strong>
+  (one pointer has lapped the other — all 8 slots used)?
 </p>
-
-<table class="truth-table">
-  <tr><th>wr_ptr[MSB] == rd_ptr[MSB]</th><th>wr_ptr[low] == rd_ptr[low]</th><th>Condition</th></tr>
-  <tr><td>yes</td><td>yes</td><td>EMPTY (both laps match)</td></tr>
-  <tr><td>no</td><td>yes</td><td>FULL (lapped by exactly DEPTH entries)</td></tr>
-  <tr><td>any</td><td>no</td><td>Partially filled</td></tr>
-</table>
-
-<h3>What You Will Build</h3>
 <p>
-  Module <code>spi_tx_fifo</code> with depth 8 and width 8. Parameters
-  <code>DEPTH</code> and <code>W</code> are fixed for this lesson;
-  you will parameterise them later. Implement the storage array, the two
-  pointers with wrap arithmetic, and the <code>empty</code> / <code>full</code>
-  flags using the MSB trick.
+  Think of it like laps on a running track. Two runners start at the same spot.
+  If they are on the same lap and at the same position → they have not separated →
+  <strong>empty</strong>. If one has lapped the other and they are at the same
+  position → a full lap of separation → <strong>full</strong>. We track this
+  with a <strong>wrap bit</strong> — a 4th bit that flips every time the 3-bit
+  index wraps from 7 to 0:
+</p>
+<table class="truth-table">
+  <tr><th>wr_ptr[3] == rd_ptr[3]?</th><th>wr_ptr[2:0] == rd_ptr[2:0]?</th><th>Condition</th></tr>
+  <tr><td>Yes (same lap)</td><td>Yes (same position)</td><td><strong>EMPTY</strong></td></tr>
+  <tr><td>No (different laps)</td><td>Yes (same position)</td><td><strong>FULL</strong></td></tr>
+  <tr><td>any</td><td>No</td><td>Partially filled</td></tr>
+</table>
+<pre class="code-block">
+logic [7:0] mem [0:7];         // 8 storage slots
+logic [3:0] wr_ptr, rd_ptr;    // 4-bit: [3]=lap bit, [2:0]=slot index
+
+assign empty = (wr_ptr === rd_ptr);
+assign full  = (wr_ptr[2:0] === rd_ptr[2:0]) &amp;&amp; (wr_ptr[3] !== rd_ptr[3]);
+
+always_ff @(posedge clk or negedge rst_n) begin
+  if (!rst_n) begin
+    wr_ptr  &lt;= 4'b0;
+    rd_ptr  &lt;= 4'b0;
+    rd_data &lt;= 8'b0;
+  end else begin
+    if (wr_en &amp;&amp; !full) begin
+      mem[wr_ptr[2:0]] &lt;= wr_data;
+      wr_ptr &lt;= wr_ptr + 1;      // wrap bit flips naturally at 8
+    end
+    if (rd_en &amp;&amp; !empty) begin
+      rd_data &lt;= mem[rd_ptr[2:0]];
+      rd_ptr  &lt;= rd_ptr + 1;
+    end
+  end
+end
+</pre>
+<p>
+  Notice <code>rd_data</code> is registered — it appears one clock cycle after
+  <code>rd_en</code> asserts. This one-cycle latency is normal for synchronous
+  FIFOs and exactly what the SPI shift register expects.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        '── Line 1 ──  `timescale 1ns/1ps',
-        '── Line 2 ──  module spi_tx_fifo (   ← open parenthesis',
-        '── Line 3 ──    input  logic       clk, rst_n,   ← clock and active-low reset',
-        '── Line 4 ──    input  logic       wr_en, rd_en,   ← write/read enables',
-        '── Line 5 ──    input  logic [7:0] wr_data,',
-        '── Line 6 ──    output logic [7:0] rd_data,',
-        '── Line 7 ──    output logic       full, empty   ← no trailing comma on last port',
-        '── Line 8 ──  );',
-        '── Line 9 ──  localparam DEPTH = 8;',
-        '── Line 10 ── logic [7:0] mem [0:7];   ← 8-entry storage array',
-        '── Line 11 ── logic [3:0] wr_ptr, rd_ptr;   ← 4-bit: 3 index bits + 1 wrap bit',
-        '── Line 12 ── assign empty = (wr_ptr === rd_ptr);',
-        '── Line 13 ── assign full  = (wr_ptr[2:0] === rd_ptr[2:0]) && (wr_ptr[3] !== rd_ptr[3]);',
-        '── Line 14 ── always_ff block: on posedge clk or negedge rst_n — reset both pointers to 0',
-        '── Line 15 ── else: if wr_en && !full → mem[wr_ptr[2:0]] <= wr_data; wr_ptr <= wr_ptr + 1',
-        '── Line 16 ── else: if rd_en && !empty → rd_data <= mem[rd_ptr[2:0]]; rd_ptr <= rd_ptr + 1',
+        'Step 1 — Module header: module spi_tx_fifo (',
+        '         input  logic       clk, rst_n',
+        '         input  logic       wr_en, rd_en',
+        '         input  logic [7:0] wr_data',
+        '         output logic [7:0] rd_data',
+        '         output logic       full, empty',
+        '         );',
+        'Step 2 — Declare storage and 4-bit pointers:',
+        '         logic [7:0] mem [0:7];',
+        '         logic [3:0] wr_ptr, rd_ptr;',
+        'Step 3 — Two combinational assigns for empty and full (use the wrap-bit formulas from Theory)',
+        'Step 4 — always_ff @(posedge clk or negedge rst_n):',
+        '         if (!rst_n): zero wr_ptr, rd_ptr, rd_data',
+        '         else if (wr_en && !full): write mem[wr_ptr[2:0]], increment wr_ptr',
+        '         else if (rd_en && !empty): latch rd_data from mem[rd_ptr[2:0]], increment rd_ptr',
+        'Step 5 — endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 4 PASS lines should appear in the Output tab',
       ],
@@ -133,20 +165,19 @@ endmodule`,
 
       design:
 `// Type the spi_tx_fifo module here.
-// Read Theory first — it explains the MSB wrap-bit trick for empty/full.
+// Read Theory first — it explains the wrap-bit trick for empty/full.
 //
 // Ports:
 //   input  logic       clk        — system clock
 //   input  logic       rst_n      — active-low async reset
-//   input  logic       wr_en      — push one word this cycle
-//   input  logic       rd_en      — pop one word this cycle
-//   input  logic [7:0] wr_data    — data to push
-//   output logic [7:0] rd_data    — data popped (registered, 1-cycle latency)
+//   input  logic       wr_en      — push one byte this cycle
+//   input  logic       rd_en      — pop one byte this cycle
+//   input  logic [7:0] wr_data    — byte to push
+//   output logic [7:0] rd_data    — byte popped (registered, 1-cycle latency)
 //   output logic       full       — no room to write
 //   output logic       empty      — nothing to read
 //
-// Internals needed: mem[0:7], wr_ptr[3:0], rd_ptr[3:0]
-// MSB of pointer = wrap bit; low 3 bits = array index
+// Internals: mem[0:7], wr_ptr[3:0], rd_ptr[3:0]
 //
 // Delete this and start typing:
 `,
@@ -169,7 +200,7 @@ module tb;
   );
 
   initial begin
-    // Reset
+    $display("=== TX FIFO: Pointer Arithmetic ===");
     rst_n = 0; wr_en = 0; rd_en = 0; wr_data = 0;
     repeat(2) @(posedge clk); #1;
     rst_n = 1;
@@ -178,32 +209,23 @@ module tb;
     if (empty === 1'b1 && full === 1'b0)
       $display("PASS  reset: empty=1 full=0");
     else
-      $display("FAIL  reset: empty=%0b full=%0b (expected empty=1 full=0)", empty, full);
+      $display("FAIL  reset: empty=%0b full=%0b", empty, full);
 
-    // --- Test 2: write three bytes, read them back in order ---
+    // --- Test 2: write three bytes, read first back ---
     wr_en = 1;
     wr_data = 8'hA5; @(posedge clk); #1;
     wr_data = 8'h3C; @(posedge clk); #1;
     wr_data = 8'h7F; @(posedge clk); #1;
     wr_en = 0;
 
-    // Read first word (rd_en asserts → data appears next cycle)
-    rd_en = 1; @(posedge clk); #1;  // rd_ptr advances, rd_data latches 0xA5
+    rd_en = 1; @(posedge clk); #1;   // rd_ptr advances, rd_data latches 0xA5
     rd_en = 0; @(posedge clk); #1;
     if (rd_data === 8'hA5)
       $display("PASS  read[0]: rd_data=0x%02h", rd_data);
     else
       $display("FAIL  read[0]: rd_data=0x%02h (expected 0xA5)", rd_data);
 
-    // Read second word
-    rd_en = 1; @(posedge clk); #1;
-    rd_en = 0; @(posedge clk); #1;
-    if (rd_data === 8'h3C)
-      $display("PASS  read[1]: rd_data=0x%02h", rd_data);
-    else
-      $display("FAIL  read[1]: rd_data=0x%02h (expected 0x3C)", rd_data);
-
-    // --- Test 3: fill to full ---
+    // --- Test 3: fill to full (8 entries) ---
     rst_n = 0; @(posedge clk); #1; rst_n = 1; @(posedge clk); #1;
     wr_en = 1;
     repeat(8) begin
@@ -214,7 +236,14 @@ module tb;
     if (full === 1'b1)
       $display("PASS  full after 8 writes: full=1");
     else
-      $display("FAIL  full flag not set after 8 writes: full=%0b", full);
+      $display("FAIL  full flag not set: full=%0b", full);
+
+    // --- Test 4: write while full is ignored ---
+    wr_en = 1; wr_data = 8'hFF; @(posedge clk); #1; wr_en = 0;
+    if (full === 1'b1)
+      $display("PASS  still full after blocked write");
+    else
+      $display("FAIL  full flag changed unexpectedly: full=%0b", full);
 
     $display("TX FIFO pointer test done!");
     $finish;
@@ -237,61 +266,69 @@ endmodule`,
       title: 'L2 — Level Counter & Status Flags',
 
       theory: `
-<h2>Counting How Full the FIFO Is</h2>
+<h2>The Water Tank with a Level Gauge</h2>
 <p>
-  Empty and full flags tell you the extremes, but real hardware also needs to know
-  <em>how many words</em> are waiting. The SPI controller uses this count to decide
-  whether to start a burst, throttle a DMA, or request an interrupt. The count is
-  called the <strong>fill level</strong>.
+  Imagine a water tower with a glass level gauge on the side. You pump water in
+  from the top (CPU writes bytes into the FIFO) and draw it out from a tap at
+  the bottom (SPI engine reads bytes at SCK rate). The level gauge tells you
+  exactly how much water — how many bytes — are currently waiting inside.
+</p>
+<p>
+  Real hardware needs this count, not just the binary full/empty extremes.
+  The SPI controller uses it to decide whether to start a new burst, when to
+  request more data from the CPU via a DMA trigger, or when to raise an interrupt.
+  The fill count is called the <strong>level</strong>.
 </p>
 
 <h3>Deriving Level from Pointers</h3>
 <p>
-  Because both pointers wrap modulo DEPTH (using the MSB trick), the fill level is
-  simply the difference of the full 4-bit pointers, interpreted as an unsigned
-  number. This works because the wrap bit is included in the subtraction:
+  Because our 4-bit pointers wrap naturally using the lap-bit trick, the fill level
+  is simply the unsigned difference of the two full 4-bit values. No special cases:
 </p>
 <pre class="code-block">
 assign level = wr_ptr - rd_ptr;   // 4-bit result, naturally 0..8
 </pre>
 <p>
-  When <code>wr_ptr == rd_ptr</code> the result is 0 (empty). When one pointer has
-  lapped the other by exactly DEPTH the result is 8 (full). No special cases needed.
+  When <code>wr_ptr == rd_ptr</code> → result = 0 (empty).
+  When one pointer has lapped the other by exactly 8 → result = 8 (full).
+  Everything in between gives the true fill count.
 </p>
 
-<h3>Status Flags Derived from Level</h3>
+<h3>Four Status Flags from Level</h3>
+<p>
+  Think of the water tower with four sensor probes installed at different heights
+  — each one lights up when the water reaches it:
+</p>
 <table class="truth-table">
   <tr><th>Flag</th><th>Condition</th><th>Meaning</th></tr>
-  <tr><td><code>empty</code></td><td>level == 0</td><td>No data to read</td></tr>
-  <tr><td><code>full</code></td><td>level == DEPTH</td><td>No room to write</td></tr>
-  <tr><td><code>almost_empty</code></td><td>level &lt;= 1</td><td>Only 1 word left — SPI engine about to starve</td></tr>
-  <tr><td><code>almost_full</code></td><td>level &gt;= DEPTH-1</td><td>Only 1 slot left — CPU must stop soon</td></tr>
+  <tr><td><code>empty</code></td><td>level == 0</td><td>No data — SPI engine would underrun</td></tr>
+  <tr><td><code>full</code></td><td>level == 8</td><td>No room — CPU must pause writing</td></tr>
+  <tr><td><code>almost_empty</code></td><td>level &lt;= 1</td><td>Last byte — warn CPU to refill soon</td></tr>
+  <tr><td><code>almost_full</code></td><td>level &gt;= 7</td><td>One slot left — give CPU early warning</td></tr>
 </table>
-
 <p>
-  <code>almost_empty</code> and <code>almost_full</code> thresholds will become
-  programmable watermarks in L3. For now they are hardcoded to 1 entry.
-</p>
-
-<h3>What You Will Build</h3>
-<p>
-  Extend the L1 module with a 4-bit <code>level</code> output and the four flags
-  above. All are <code>assign</code> statements — purely combinational.
+  The <code>almost_empty</code> and <code>almost_full</code> thresholds are
+  hardcoded to 1 entry in this lesson. In L3 we make them software-configurable.
+  All four flags are purely combinational — pure <code>assign</code> statements,
+  no clock needed.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        'Start from the L1 spi_tx_fifo skeleton — same ports, same internals',
-        '── Add port ──  output logic [3:0] level,',
-        '── Add port ──  output logic       almost_empty, almost_full',
-        '── Add assign ── level = wr_ptr - rd_ptr;   (4-bit subtraction with natural wrap)',
-        '── Add assign ── empty = (level === 4\'d0);',
-        '── Add assign ── full  = (level === 4\'d8);',
-        '── Add assign ── almost_empty = (level <= 4\'d1);',
-        '── Add assign ── almost_full  = (level >= 4\'d7);',
-        'Keep the always_ff block identical to L1 (pointer updates only)',
+        'Step 1 — Start from the L1 spi_tx_fifo skeleton — same ports, same internals',
+        'Step 2 — Add two new output ports:',
+        '         output logic [3:0] level',
+        '         output logic       almost_empty, almost_full',
+        'Step 3 — Add four combinational assigns:',
+        '         assign level        = wr_ptr - rd_ptr;',
+        '         assign empty        = (level === 4\'d0);',
+        '         assign full         = (level === 4\'d8);',
+        '         assign almost_empty = (level <= 4\'d1);',
+        '         assign almost_full  = (level >= 4\'d7);',
+        'Step 4 — Keep the always_ff block identical to L1 (pointer updates only)',
+        'Step 5 — endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 5 PASS lines should appear in the Output tab',
       ],
@@ -339,7 +376,7 @@ endmodule`,
 
       design:
 `// Extend spi_tx_fifo with a level counter and four status flags.
-// See Theory for the assign formulas.
+// See Theory for the assign formulas — all purely combinational.
 //
 // New ports to add:
 //   output logic [3:0] level        — 0..8 fill count
@@ -370,6 +407,7 @@ module tb;
   );
 
   initial begin
+    $display("=== TX FIFO: Level & Flags ===");
     rst_n = 0; wr_en = 0; rd_en = 0; wr_data = 8'h00;
     repeat(2) @(posedge clk); #1;
     rst_n = 1;
@@ -441,60 +479,63 @@ endmodule`,
       title: 'L3 — Programmable Watermarks',
 
       theory: `
-<h2>Making Thresholds Software-Configurable</h2>
+<h2>Setting Your Own Alarm Thresholds</h2>
 <p>
-  Hardcoding <code>almost_empty = (level &lt;= 1)</code> works for a single use case,
-  but real SPI controllers let the firmware tune these thresholds via registers.
-  A DMA engine might want to refill the FIFO when <em>4</em> slots are empty;
-  a power-sensitive sensor might want an interrupt only when the FIFO is
-  <em>completely</em> empty. That is what the <strong>watermark</strong> registers
-  are for.
+  Think of your phone's battery alarms. One person might want a warning at 20%
+  and a critical alert at 10%. Another might want them at 30% and 15% — maybe
+  they are a heavy user who needs more time to find a charger. The phone does not
+  hardcode these thresholds; it lets each user pick the levels that matter to them.
+</p>
+<p>
+  Real SPI controllers work the same way. The CPU writes watermark registers
+  once at startup, and the FIFO raises flags when the level crosses those
+  programmed thresholds. A DMA engine might want to refill the FIFO when 4 slots
+  are empty. A power-sensitive driver might only trigger an interrupt when the FIFO
+  is completely empty. The hardware does not decide — software does.
 </p>
 
 <h3>Watermark Semantics</h3>
 <table class="truth-table">
-  <tr><th>Register</th><th>Flag raised when…</th><th>Typical value</th></tr>
-  <tr><td><code>ae_thresh</code> — almost-empty threshold</td><td>level &lt;= ae_thresh</td><td>2 (refill when 2 words remain)</td></tr>
-  <tr><td><code>af_thresh</code> — almost-full threshold</td><td>level &gt;= af_thresh</td><td>6 (stop writing at 6 words)</td></tr>
+  <tr><th>Port</th><th>Flag fires when…</th><th>Typical value</th></tr>
+  <tr><td><code>ae_thresh</code></td><td>level &lt;= ae_thresh</td><td>2 — refill when only 2 words remain</td></tr>
+  <tr><td><code>af_thresh</code></td><td>level &gt;= af_thresh</td><td>6 — stop writing at 6 entries</td></tr>
 </table>
-
 <p>
-  The CPU writes these thresholds once at startup through the
-  <code>FIFO_CTRL</code> register. The FIFO itself does not know or care that
-  they came from a register — it just receives them as ports.
+  The CPU writes these thresholds through the <code>FIFO_CTRL</code> register once
+  at boot. The FIFO itself does not know or care where they came from — it just
+  receives them as input ports and applies the comparisons every cycle.
 </p>
-
 <pre class="code-block">
+input logic [3:0] ae_thresh,   // almost-empty fires when level &lt;= this
+input logic [3:0] af_thresh,   // almost-full  fires when level &gt;= this
+
 assign almost_empty = (level &lt;= ae_thresh);
 assign almost_full  = (level &gt;= af_thresh);
 </pre>
 
-<h3>Parameter Constraint</h3>
+<h3>Boundary Constraint</h3>
 <p>
-  Thresholds are bounded: <code>ae_thresh</code> must be in <code>[0, DEPTH-1]</code>
-  and <code>af_thresh</code> in <code>[1, DEPTH]</code>. Setting
-  <code>ae_thresh = DEPTH</code> would make <code>almost_empty</code>
-  permanently high, which is legal but useless. The hardware clamps silently;
-  any out-of-range value from software is its own problem.
-</p>
-
-<h3>What You Will Build</h3>
-<p>
-  Extend L2's module with two new inputs — <code>ae_thresh</code> and
-  <code>af_thresh</code> — each 4 bits wide. Replace the hardcoded comparisons
-  with the parameterised versions above. Everything else stays the same.
+  Thresholds are bounded: <code>ae_thresh</code> should stay in
+  <code>[0, DEPTH-1]</code> and <code>af_thresh</code> in
+  <code>[1, DEPTH]</code>. Setting <code>ae_thresh = 8</code> would make
+  <code>almost_empty</code> always HIGH, which is legal but useless.
+  Hardware clamps nothing — any out-of-range value from software is software's problem.
+  This one takes a few tries to get right — that is completely normal.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        'Start from the L2 module — add two new input ports',
-        '── New port ── input logic [3:0] ae_thresh,   ← almost-empty threshold',
-        '── New port ── input logic [3:0] af_thresh,   ← almost-full threshold',
-        '── Change assign ── almost_empty = (level <= ae_thresh);',
-        '── Change assign ── almost_full  = (level >= af_thresh);',
-        'All other logic (pointers, storage, full/empty) stays identical to L2',
+        'Step 1 — Start from the L2 module — keep all existing ports and internals',
+        'Step 2 — Add two new input ports:',
+        '         input logic [3:0] ae_thresh   (almost-empty threshold)',
+        '         input logic [3:0] af_thresh   (almost-full threshold)',
+        'Step 3 — Replace the hardcoded almost_empty and almost_full assigns:',
+        '         assign almost_empty = (level <= ae_thresh);',
+        '         assign almost_full  = (level >= af_thresh);',
+        'Step 4 — All pointer logic (always_ff) stays identical to L2',
+        'Step 5 — endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 4 PASS lines should appear in the Output tab',
       ],
@@ -581,9 +622,10 @@ module tb;
   endtask
 
   initial begin
+    $display("=== TX FIFO: Programmable Watermarks ===");
     ae_thresh = 4'd2; af_thresh = 4'd6;
 
-    // --- Test 1: ae_thresh=2, fill to 2, check almost_empty fires ---
+    // --- Test 1: ae_thresh=2, fill to 2 ---
     reset_fifo();
     wr_en = 1;
     wr_data = 8'hAA; @(posedge clk); #1;
@@ -594,14 +636,14 @@ module tb;
     else
       $display("FAIL  ae_thresh=2 level=2: almost_empty=%0b level=%0d", almost_empty, level);
 
-    // --- Test 2: add one more word, almost_empty should clear ---
+    // --- Test 2: add one more word, almost_empty clears ---
     wr_en = 1; wr_data = 8'hCC; @(posedge clk); #1; wr_en = 0;
     if (almost_empty === 1'b0 && level === 4'd3)
       $display("PASS  level=3 > ae_thresh=2: almost_empty=0");
     else
       $display("FAIL  level=3: almost_empty=%0b (expected 0)", almost_empty);
 
-    // --- Test 3: af_thresh=6, fill to 6, check almost_full fires ---
+    // --- Test 3: af_thresh=6, fill to 6 ---
     reset_fifo();
     wr_en = 1;
     repeat(6) begin
@@ -615,12 +657,9 @@ module tb;
       $display("FAIL  af_thresh=6 level=6: almost_full=%0b level=%0d", almost_full, level);
 
     // --- Test 4: change threshold at runtime ---
-    ae_thresh = 4'd3;  // now almost_empty should fire at level=3 or below
-    // drain down to 3 words
+    ae_thresh = 4'd3;
     rd_en = 1;
-    repeat(3) begin
-      @(posedge clk); #1;
-    end
+    repeat(3) @(posedge clk); #1;
     rd_en = 0;
     if (almost_empty === 1'b1)
       $display("PASS  ae_thresh changed to 3: almost_empty=1 at level=%0d", level);
@@ -648,70 +687,93 @@ endmodule`,
       title: 'L4 — Overflow Flag & Flush',
 
       theory: `
-<h2>Handling Write Overflows and Software Flushes</h2>
+<h2>The Bouncer and the Fire Alarm</h2>
 <p>
-  In a real system, software can get ahead of itself — it writes to the TX FIFO
-  even though it is already full. Two things must happen:
+  Picture the airport boarding gate again — but now all 8 seats in the waiting
+  area are taken. A ninth passenger arrives anyway and tries to push in.
+  The boarding agent (our hardware) cannot create an extra seat, so they gently
+  turn the passenger away. But there is a problem: if nobody notices that someone
+  was turned away, that byte is silently lost — and the CPU has no idea the
+  transfer is incomplete.
 </p>
-<ul>
-  <li>The incoming word is <strong>dropped silently</strong> (no pointer advances).</li>
-  <li>A <strong>sticky overflow flag</strong> (<code>ovf_sticky</code>) is set and
-      stays set until the CPU explicitly clears it via a W1C (write-1-to-clear)
-      control bit in the <code>FIFO_STATUS</code> register.</li>
-</ul>
+<p>
+  This is the <strong>sticky overflow flag</strong>. When a write arrives while
+  the FIFO is full, the incoming byte is dropped, and a flag is raised that stays
+  raised until the CPU explicitly clears it. The CPU polls the flag after every
+  transfer to detect if it missed feeding the FIFO in time.
+</p>
+<p>
+  Now imagine a fire alarm clears the entire gate instantly. Everyone in the waiting
+  area has to leave immediately — no orderly boarding, no individual checkouts.
+  In one second the waiting area is empty. That is the <strong>flush</strong>
+  input: both pointers reset to zero in a single clock cycle, making the FIFO
+  appear empty instantly. The old data is still physically in <code>mem[]</code>
+  but will be overwritten by the next writes.
+</p>
 
-<h3>Sticky Flag Pattern</h3>
+<h3>Sticky Flag Pattern — Set Beats Clear</h3>
 <pre class="code-block">
+// Separate always_ff for the sticky flag
 always_ff @(posedge clk or negedge rst_n) begin
   if (!rst_n)
     ovf_sticky &lt;= 1'b0;
-  else if (wr_en &amp;&amp; full)       // overflow event
+  else if (wr_en &amp;&amp; full)      // overflow event — set wins
     ovf_sticky &lt;= 1'b1;
-  else if (clr_ovf)             // W1C clear from CPU
+  else if (clr_ovf)            // W1C: CPU writes 1 to clear
     ovf_sticky &lt;= 1'b0;
 end
 </pre>
 <p>
-  The priority matters: set takes priority over clear. That way a simultaneous
-  overflow and clear is registered as an overflow (not silently lost).
+  The priority matters: <strong>set takes priority over clear</strong>. If an
+  overflow and a software clear arrive in the same cycle, the flag stays set.
+  This prevents a race where the CPU thinks it cleared the flag but another
+  overflow had already happened.
 </p>
 
 <h3>Flush — Reset Without Reset</h3>
-<p>
-  The <code>flush</code> input lets firmware drain the FIFO instantly —
-  faster than reading every word. It resets both pointers to 0 in one clock cycle,
-  making the FIFO appear empty. No actual data is touched in <code>mem[]</code>;
-  the next write simply overwrites the old contents.
-</p>
 <pre class="code-block">
-if (flush) begin
-  wr_ptr &lt;= 4'b0;
-  rd_ptr &lt;= 4'b0;
+// Pointer logic: rst_n > flush > normal wr/rd
+always_ff @(posedge clk or negedge rst_n) begin
+  if (!rst_n) begin
+    wr_ptr &lt;= 4'b0; rd_ptr &lt;= 4'b0;
+  end else if (flush) begin          // fire alarm: empty instantly
+    wr_ptr &lt;= 4'b0; rd_ptr &lt;= 4'b0;
+  end else begin
+    if (wr_en &amp;&amp; !full)   ... // normal write
+    if (rd_en &amp;&amp; !empty)  ... // normal read
+  end
 end
 </pre>
-<p>
-  Flush has lower priority than reset but higher priority than normal
-  read/write operations.
-</p>
 
-<h3>What You Will Build</h3>
+<h3>What We Are Building</h3>
 <p>
-  Extend L3's module with <code>flush</code> and <code>clr_ovf</code> inputs and
-  the <code>ovf_sticky</code> output. The always_ff block gains two new priority
-  branches above the normal pointer updates.
+  Extend the L3 module with two new inputs (<code>flush</code> and
+  <code>clr_ovf</code>) and one new output (<code>ovf_sticky</code>).
+  The always_ff block for pointers gains a flush branch above the normal
+  read/write logic. The overflow flag lives in its own always_ff block.
+  This is a real interview question at hardware companies — the set-beats-clear
+  priority and the flush-before-write ordering trip up almost everyone the first time.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        'Start from the L3 module skeleton',
-        '── New port ── input logic flush,    ← synchronous pointer reset',
-        '── New port ── input logic clr_ovf,  ← W1C: clears ovf_sticky',
-        '── New port ── output logic ovf_sticky,',
-        'Add a separate always_ff block for ovf_sticky: set on (wr_en && full), clear on clr_ovf',
-        'In the pointer always_ff: add an else-if (flush) branch that zeros both pointers (before wr_en/rd_en checks)',
-        'Overflow rule: when wr_en && full, do NOT advance wr_ptr — drop the word',
+        'Step 1 — Start from the L3 module skeleton — all existing ports remain',
+        'Step 2 — Add three new ports:',
+        '         input  logic flush     (synchronous pointer reset)',
+        '         input  logic clr_ovf   (W1C: clears ovf_sticky)',
+        '         output logic ovf_sticky',
+        'Step 3 — Add a SEPARATE always_ff block for ovf_sticky:',
+        '         if (!rst_n): ovf_sticky <= 0',
+        '         else if (wr_en && full): ovf_sticky <= 1   (set wins)',
+        '         else if (clr_ovf): ovf_sticky <= 0',
+        'Step 4 — In the pointer always_ff, add a flush branch BEFORE wr_en/rd_en:',
+        '         if (!rst_n): reset pointers',
+        '         else if (flush): wr_ptr <= 0; rd_ptr <= 0',
+        '         else: normal wr/rd pointer updates',
+        'Step 5 — Overflow rule: when wr_en && full, do NOT advance wr_ptr',
+        'Step 6 — endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 5 PASS lines should appear in the Output tab',
       ],
@@ -743,22 +805,22 @@ module spi_tx_fifo (
 
   // Sticky overflow flag — set beats clear
   always_ff @(posedge clk or negedge rst_n) begin
-    if (!rst_n)           ovf_sticky <= 1'b0;
+    if (!rst_n)             ovf_sticky <= 1'b0;
     else if (wr_en && full) ovf_sticky <= 1'b1;   // overflow wins
-    else if (clr_ovf)     ovf_sticky <= 1'b0;
+    else if (clr_ovf)       ovf_sticky <= 1'b0;
   end
 
-  // Pointer and storage logic
+  // Pointer and storage — rst > flush > wr/rd
   always_ff @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       wr_ptr  <= 4'b0;
       rd_ptr  <= 4'b0;
       rd_data <= 8'b0;
-    end else if (flush) begin                      // flush takes priority
+    end else if (flush) begin
       wr_ptr <= 4'b0;
       rd_ptr <= 4'b0;
     end else begin
-      if (wr_en && !full) begin                    // normal write (drop if full)
+      if (wr_en && !full) begin
         mem[wr_ptr[2:0]] <= wr_data;
         wr_ptr <= wr_ptr + 1;
       end
@@ -780,7 +842,9 @@ endmodule`,
 //   input  logic clr_ovf    — W1C: clears ovf_sticky when asserted
 //   output logic ovf_sticky — set when wr_en fires while full; stays until clr_ovf
 //
-// Priority in always_ff: rst_n > flush > normal wr/rd
+// Two separate always_ff blocks:
+//   1. ovf_sticky: if set event, else if clr event
+//   2. pointers:   if rst, else if flush, else normal wr/rd
 //
 // Delete this and start typing:
 `,
@@ -809,12 +873,13 @@ module tb;
   );
 
   initial begin
+    $display("=== TX FIFO: Overflow & Flush ===");
     rst_n = 0; wr_en = 0; rd_en = 0; flush = 0; clr_ovf = 0;
     wr_data = 8'h00; ae_thresh = 4'd2; af_thresh = 4'd6;
     repeat(2) @(posedge clk); #1;
     rst_n = 1;
 
-    // --- Test 1: fill to full (8 writes) ---
+    // --- Test 1: fill to full (8 writes), no overflow yet ---
     wr_en = 1;
     repeat(8) begin
       wr_data = wr_data + 1;
@@ -826,7 +891,7 @@ module tb;
     else
       $display("FAIL  full=%0b ovf_sticky=%0b (expected full=1 ovf=0)", full, ovf_sticky);
 
-    // --- Test 2: write while full → overflow sticky ---
+    // --- Test 2: write while full → overflow sticky set ---
     wr_en = 1; wr_data = 8'hFF; @(posedge clk); #1; wr_en = 0;
     if (ovf_sticky === 1'b1 && full === 1'b1)
       $display("PASS  overflow: ovf_sticky=1 full=1");
