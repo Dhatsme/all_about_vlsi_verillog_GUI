@@ -92,7 +92,7 @@ Modules: spi_long_tb1 (unit TBs), spi_long_tb2 (corner cases), spi_long_tb3 (SVA
 | 5 | 2026-06-04 | spi_long4 — RX FIFO Design (4 lessons) | db01d68 |
 | 6 | 2026-06-04 | spi_long5 — TX & RX Shift Registers (4 lessons, Checkpoint A) | 60d8783 |
 | 7 | 2026-06-04 | spi_long6 — CPOL/CPHA Timing Engine (4 lessons) | 5d1c572 |
-| 8 | 2026-06-04 | spi_long7 — CS Controller & Timing (4 lessons) | — |
+| 8 | 2026-06-04 | spi_long7 — CS Controller & Timing (4 lessons) | 14b2154 |
 
 ---
 
