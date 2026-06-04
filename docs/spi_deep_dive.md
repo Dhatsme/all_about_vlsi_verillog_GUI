@@ -13,8 +13,8 @@
 | 2 | `spi_long2` | Clock Divider & SCK Generation | 1 | 2 | 3 | ✅ done |
 | 3 | `spi_long3` | TX FIFO Design | 2 | 2→3 | 4 | ✅ done |
 | 4 | `spi_long4` | RX FIFO Design | 2 | 2→3 | 4 | ✅ done |
-| 5 | `spi_long5` | TX & RX Shift Registers | 2 | 3 | 4 | ❌ **build this next** |
-| 6 | `spi_long6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ❌ |
+| 5 | `spi_long5` | TX & RX Shift Registers | 2 | 3 | 4 | ✅ done |
+| 6 | `spi_long6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ❌ **build this next** |
 | 7 | `spi_long7` | CS Controller & Timing | 3 | 3→4 | 4 | ❌ |
 | 8 | `spi_long8` | Master FSM | 3 | 4 | 4 | ❌ |
 | 9 | `spi_long9` | Error Handling & Interrupt Controller | 3 | 4 | 4 | ❌ |
@@ -32,7 +32,7 @@
 
 | Checkpoint | Embedded In | Pass Condition | Status |
 |---|---|---|---|
-| A — Clock + Shift Loopback | spi_long5 L4 | `PASS rx_data=0xa5` in Mode 0 | ⬜ |
+| A — Clock + Shift Loopback | spi_long5 L4 | `PASS rx_data=0xa5` in Mode 0 | ✅ |
 | B — FSM + CS + 3-word burst | spi_long8 L4 | CS never toggles mid-burst; bit_cnt resets each word | ⬜ |
 | C — Full APB-driven transfer | spi_long12 L4 | All 4 modes × WL=8/16/32; IRQ fires once; RXDATA==TXDATA | ⬜ |
 | D — 38-item DV checklist | spi_long_tb4 L4 | All 38 items print `PASS` | ⬜ |
@@ -49,7 +49,7 @@ No integration checkpoint in this phase.
 ### Phase 2 — Data Path (Months 2–3) | spi_long3–spi_long6
 Goal: Student has built every data-path block: FIFOs, shift registers, timing engine.
 Modules: spi_long3 (TX FIFO), spi_long4 (RX FIFO), spi_long5 (shift regs), spi_long6 (CPOL/CPHA mux)
-**Checkpoint A** fires at end of spi_long5 (clock divider + shift loopback).
+**Checkpoint A** fires at end of spi_long5 (clock divider + shift loopback). ✅ PASSED
 
 ### Phase 3 — Control Path (Month 4) | spi_long7–spi_long9
 Goal: Student can drive a full SPI transfer under FSM control with error handling.
@@ -72,7 +72,7 @@ Modules: spi_long_tb1 (unit TBs), spi_long_tb2 (corner cases), spi_long_tb3 (SVA
 
 | Certificate | Trigger | Status |
 |---|---|---|
-| SPI Foundations | spi_long5 L4 | ⬜ |
+| SPI Foundations | spi_long5 L4 | ✅ |
 | SPI Protocol Engineer | spi_long8 L4 | ⬜ |
 | SPI Silicon Designer | spi_long12 L4 | ⬜ |
 | SPI Verification Engineer | spi_long_tb4 L4 | ⬜ |
@@ -89,7 +89,8 @@ Modules: spi_long_tb1 (unit TBs), spi_long_tb2 (corner cases), spi_long_tb3 (SVA
 | 3 | 2026-06-04 | Rename: spi* → spi_long*; restore spi1/spi2 to develop versions | 82ee1c3 |
 | 4 | 2026-06-04 | spi_long3 — TX FIFO Design (4 lessons) | 32e3c79 |
 | 5 | 2026-06-04 | spi_long4 — RX FIFO Design (4 lessons) | db01d68 |
+| 6 | 2026-06-04 | spi_long5 — TX & RX Shift Registers (4 lessons, Checkpoint A) | 60d8783 |
 
 ---
 
-*Cursor: spi_long5 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long6 is next. Read `docs/spi_agent_orchestrator.md` before starting.*
