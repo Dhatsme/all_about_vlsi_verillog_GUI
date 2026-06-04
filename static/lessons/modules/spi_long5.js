@@ -13,64 +13,87 @@
       title: 'L1 — Parallel Load & MSB-First Shift',
 
       theory: `
-<h2>The Shift Register: Converting Parallel Data to Serial Bits</h2>
+<h2>The Radio Broadcaster Who Can Only Transmit One Word at a Time</h2>
 <p>
-  The FIFO holds complete words; the SPI bus transmits one bit per SCK edge.
-  The <strong>shift register</strong> is the converter between these two worlds.
-  On a <code>load</code> pulse it captures a parallel word from the TX FIFO;
-  then on each <code>launch_pulse</code> it shifts the next bit onto MOSI.
+  Imagine a radio journalist who has a full news report written out (8 bits in
+  parallel inside the CPU). The radio channel can only send one word per
+  minute — one bit per SCK edge. The journalist reads the report word-by-word
+  from left to right (MSB first), sending each word over the air, one at a time.
+</p>
+<p>
+  The SPI shift register does exactly this: it captures the full 8-bit word
+  from the TX FIFO in one clock cycle (parallel load), then drives each bit
+  onto MOSI one at a time on every <code>launch_pulse</code>.
 </p>
 
-<h3>MSB-First Shifting</h3>
-<p>
-  SPI defaults to transmitting the most-significant bit first. After loading
-  <code>tx_data</code> into an internal register <code>tx_shift</code>, each
-  launch pulse outputs the top bit and left-shifts the register by one:
-</p>
+<h3>Where spi_shift Lives in the SPI Master</h3>
 <pre class="code-block">
-always_ff @(posedge pclk) begin
-  if (load)
-    tx_shift &lt;= tx_data;          // parallel capture
-  else if (launch_pulse)
-    tx_shift &lt;= {tx_shift[6:0], 1'b0};  // shift left, MSB exits
-end
-
-assign mosi_out = tx_shift[7];   // always driving MSB
+  TX FIFO → rd_data[7:0]
+                 │ load pulse
+                 ▼
+  ┌──────────────────────────────────────────────────┐
+  │                 spi_shift                    ★   │
+  │                                                  │
+  │  tx_shift[7:0]:  loaded from tx_data             │
+  │                  shifts left on launch_pulse      │
+  │                  (MSB exits first onto MOSI)      │
+  │                                                  │
+  │  rx_shift[7:0]:  shifts in miso_in (added L3)    │
+  │                                                  │
+  │  bit_cnt:        counts 0..7 (added L4)          │
+  └──────────────┬───────────────────────────────────┘
+                 │
+              mosi_out  ──►  MOSI pin  ──►  sensor
 </pre>
 
+<h3>The MSB-First Pattern</h3>
 <p>
-  The bit that "falls off" the left is what appears on MOSI. After 8 pulses the
-  entire byte has been transmitted, MSB first.
+  Load the word. On each <code>launch_pulse</code>: output the top bit
+  (<code>tx_shift[7]</code>) and shift the register left by one — the next
+  highest bit moves into position. After 8 pulses the entire word is gone:
 </p>
+<pre class="code-block">
+assign mosi_out = tx_shift[7];   // always driving MSB of current register
 
+always_ff @(posedge pclk or negedge rst_n) begin
+  if (!rst_n)
+    tx_shift &lt;= 8'b0;
+  else if (load)
+    tx_shift &lt;= tx_data;                    // latch full word
+  else if (launch_pulse)
+    tx_shift &lt;= {tx_shift[6:0], 1'b0};     // MSB exits, zeros fill from right
+end
+</pre>
+
+<h3>The Transmission in Action</h3>
 <table class="truth-table">
-  <tr><th>Cycle</th><th>tx_shift</th><th>mosi_out</th></tr>
+  <tr><th>Cycle</th><th>tx_shift</th><th>mosi_out (tx_shift[7])</th></tr>
   <tr><td>load (0xA5 = 1010_0101)</td><td>1010_0101</td><td>1</td></tr>
   <tr><td>pulse 1</td><td>0100_1010</td><td>0</td></tr>
   <tr><td>pulse 2</td><td>1001_0100</td><td>1</td></tr>
   <tr><td>pulse 3</td><td>0010_1000</td><td>0</td></tr>
   <tr><td>…</td><td>…</td><td>…</td></tr>
+  <tr><td>pulse 8</td><td>0000_0000</td><td>0 (last bit sent)</td></tr>
 </table>
-
-<h3>What You Will Build</h3>
-<p>
-  Module <code>spi_shift</code> with 8-bit <code>tx_data</code> and
-  <code>tx_shift</code>. The <code>mosi_out</code> wire always reflects
-  <code>tx_shift[7]</code>. No RX path yet — that comes in L3.
-</p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        '── Port ── input logic pclk, rst_n',
-        '── Port ── input logic load             ← capture tx_data into tx_shift',
-        '── Port ── input logic launch_pulse     ← shift left by 1 on this pulse',
-        '── Port ── input logic [7:0] tx_data',
-        '── Port ── output logic mosi_out',
-        '── Internal ── logic [7:0] tx_shift',
-        '── assign ── mosi_out = tx_shift[7];    ← always drive the top bit',
-        'always_ff: if load → tx_shift <= tx_data; else if launch_pulse → shift left',
+        'Step 1 — Module header: module spi_shift (',
+        '         input  logic       pclk, rst_n',
+        '         input  logic       load          (capture tx_data this cycle)',
+        '         input  logic       launch_pulse  (shift left by 1)',
+        '         input  logic [7:0] tx_data',
+        '         output logic       mosi_out',
+        '         );',
+        'Step 2 — Internal: logic [7:0] tx_shift;',
+        'Step 3 — assign mosi_out = tx_shift[7];   (always drive MSB)',
+        'Step 4 — always_ff @(posedge pclk or negedge rst_n):',
+        '         if (!rst_n): tx_shift <= 0',
+        '         else if (load): tx_shift <= tx_data',
+        '         else if (launch_pulse): tx_shift <= {tx_shift[6:0], 1\'b0}',
+        'Step 5 — endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 3 PASS lines should appear in the Output tab',
       ],
@@ -92,9 +115,9 @@ module spi_shift (
     if (!rst_n)
       tx_shift <= 8'b0;
     else if (load)
-      tx_shift <= tx_data;         // parallel load
+      tx_shift <= tx_data;                   // parallel load
     else if (launch_pulse)
-      tx_shift <= {tx_shift[6:0], 1'b0};  // shift left
+      tx_shift <= {tx_shift[6:0], 1'b0};    // shift left: MSB exits
   end
 
 endmodule`,
@@ -133,6 +156,7 @@ module tb;
   integer i;
 
   initial begin
+    $display("=== Shift Register: MSB-First ===");
     rst_n = 0; load = 0; launch_pulse = 0; tx_data = 0;
     repeat(2) @(posedge clk); #1;
     rst_n = 1;
@@ -182,51 +206,60 @@ endmodule`,
       title: 'L2 — LSB-First Mux',
 
       theory: `
-<h2>Bit Order: MSB-First vs LSB-First</h2>
+<h2>Two Different Newspapers: Some Start at the Front, Some at the Back</h2>
 <p>
-  Most SPI devices expect MSB-first — but not all. Some sensors and memory chips
-  transmit LSB-first. The SPI master must support both without changing the shift
-  register structure. The trick is a single mux on the output and the shift direction:
+  In some countries, newspapers are read left-to-right — start at the cover,
+  end at the back page. In others (and some technical fields), information is
+  indexed from the back. SPI devices follow the same split: most devices expect
+  the <strong>most significant bit first</strong> (like reading a cover page),
+  but a few older sensors, memories, and display controllers expect the
+  <strong>least significant bit first</strong>.
 </p>
-
+<p>
+  The SPI master must support both without redesigning the shift register.
+  The solution is a single <code>lsb_first</code> control bit that does two
+  things simultaneously: it changes which end of <code>tx_shift</code> drives
+  MOSI, and it changes which direction the register shifts:
+</p>
 <table class="truth-table">
-  <tr><th>lsb_first</th><th>mosi_out</th><th>Shift direction</th></tr>
-  <tr><td>0 (MSB-first)</td><td>tx_shift[7]</td><td>left  ← {tx_shift[6:0], 1'b0}</td></tr>
-  <tr><td>1 (LSB-first)</td><td>tx_shift[0]</td><td>right → {1'b0, tx_shift[7:1]}</td></tr>
+  <tr><th>lsb_first</th><th>mosi_out drives…</th><th>Shift direction</th><th>First bit sent</th></tr>
+  <tr><td>0 (default)</td><td>tx_shift[7]</td><td>left  ← zeros fill from right</td><td>Bit 7 (MSB)</td></tr>
+  <tr><td>1</td><td>tx_shift[0]</td><td>right → zeros fill from left</td><td>Bit 0 (LSB)</td></tr>
 </table>
 
-<p>
-  Both modes use the same parallel load. Only the output tap and shift direction
-  change. Implement this with an <code>always_comb</code> mux for <code>mosi_out</code>
-  and a conditional shift inside the <code>always_ff</code>:
-</p>
-
+<h3>One Assign, One Condition</h3>
 <pre class="code-block">
 assign mosi_out = lsb_first ? tx_shift[0] : tx_shift[7];
 
-// In always_ff:
-else if (launch_pulse) begin
-  if (lsb_first)
-    tx_shift &lt;= {1'b0, tx_shift[7:1]};   // shift right
-  else
-    tx_shift &lt;= {tx_shift[6:0], 1'b0};   // shift left
-end
+// Inside always_ff, launch_pulse branch:
+if (lsb_first)
+  tx_shift &lt;= {1'b0, tx_shift[7:1]};   // shift right: LSB exits
+else
+  tx_shift &lt;= {tx_shift[6:0], 1'b0};   // shift left:  MSB exits
 </pre>
-
-<h3>What You Will Build</h3>
 <p>
-  Extend the L1 module with an <code>lsb_first</code> input port and the mux
-  above. Testbench transmits 0xB4 in both modes and checks bit order.
+  The parallel load is unchanged — <code>tx_data</code> always loads into
+  <code>tx_shift</code> directly. Only the output tap and shift direction
+  depend on <code>lsb_first</code>.
+</p>
+<p>
+  Both modes are tested by the testbench using 0xB4 (1011_0100). In MSB-first,
+  bits leave as: 1,0,1,1,0,1,0,0. In LSB-first, bits leave as: 0,0,1,0,1,1,0,1.
+  Both correctly reconstruct to 0xB4 when received in the matching order.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        'Start from L1 spi_shift',
-        '── New port ── input logic lsb_first',
-        '── Change assign ── mosi_out = lsb_first ? tx_shift[0] : tx_shift[7];',
-        'In always_ff launch_pulse branch: if lsb_first → shift right; else → shift left',
+        'Step 1 — Start from the L1 spi_shift skeleton',
+        'Step 2 — Add new input port: input logic lsb_first',
+        'Step 3 — Change the mosi_out assign:',
+        '         assign mosi_out = lsb_first ? tx_shift[0] : tx_shift[7];',
+        'Step 4 — Change the launch_pulse branch in always_ff:',
+        '         if (lsb_first): tx_shift <= {1\'b0, tx_shift[7:1]};  (shift right)',
+        '         else:           tx_shift <= {tx_shift[6:0], 1\'b0};  (shift left)',
+        'Step 5 — endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 4 PASS lines should appear in the Output tab',
       ],
@@ -290,11 +323,12 @@ module tb;
   integer i;
 
   initial begin
+    $display("=== Shift Register: LSB/MSB Mux ===");
     rst_n = 0; load = 0; lsb_first = 0; launch_pulse = 0; tx_data = 0;
     repeat(2) @(posedge clk); #1;
     rst_n = 1;
 
-    // --- Test 1: MSB-first 0xB4 = 1011_0100 ---
+    // --- Test 1: MSB-first 0xB4 ---
     lsb_first = 0; tx_data = 8'hB4;
     load = 1; @(posedge clk); #1; load = 0;
     captured = 8'b0;
@@ -307,7 +341,7 @@ module tb;
     else
       $display("FAIL  MSB-first 0xB4: captured=0x%02h (expected 0xB4)", captured);
 
-    // --- Test 2: LSB-first 0xB4 = bit0=0,bit1=0,bit2=1,bit3=0,bit4=1,bit5=1,bit6=0,bit7=1 ---
+    // --- Test 2: LSB-first 0xB4 ---
     lsb_first = 1; tx_data = 8'hB4;
     load = 1; @(posedge clk); #1; load = 0;
     captured = 8'b0;
@@ -357,54 +391,61 @@ endmodule`,
       title: 'L3 — RX Capture',
 
       theory: `
-<h2>Receiving: Sampling MISO on Each Clock Edge</h2>
+<h2>Full-Duplex: Talking and Listening at the Same Time</h2>
 <p>
-  While MOSI shifts data out, MISO shifts data <em>in</em>. On each
-  <code>sample_pulse</code> the shift register samples the MISO line and
-  appends it to an internal receive register <code>rx_shift</code>. After
-  the full word has been received, <code>rx_shift</code> holds the complete
-  parallel value.
+  Imagine a two-way radio where both stations transmit simultaneously — one
+  on the left channel, one on the right. You can hear your partner while you're
+  talking. SPI works exactly the same way: while MOSI is shifting data out to
+  the sensor, the sensor is simultaneously shifting its own data back in on MISO.
+  Every SCK edge is both a transmit moment and a receive moment.
 </p>
-
-<h3>MSB-First RX</h3>
+<p>
+  We add a second shift register — <code>rx_shift</code> — that captures one
+  bit from MISO on every <code>sample_pulse</code>. While the TX path shifts
+  <em>left</em> (MSB out), the RX path shifts the incoming bit to the right
+  end (MSB-first receive mode):
+</p>
 <pre class="code-block">
-// First sample → MSB, last → LSB
-rx_shift &lt;= {rx_shift[6:0], miso_in};
+// MSB-first: first sample → arrives at rx_shift[0]; last → arrives after 7 shifts
+rx_shift &lt;= {rx_shift[6:0], miso_in};   // shift left, new bit at LSB position
+
+// LSB-first: first sample → arrives at rx_shift[7]; shifts right
+rx_shift &lt;= {miso_in, rx_shift[7:1]};   // shift right, new bit at MSB position
 </pre>
 
-<h3>LSB-First RX</h3>
-<pre class="code-block">
-// First sample → LSB, last → MSB
-rx_shift &lt;= {miso_in, rx_shift[7:1]};
-</pre>
-
-<h3>TX and RX Run in Parallel</h3>
+<h3>launch_pulse and sample_pulse Are Separate</h3>
 <p>
-  <code>launch_pulse</code> and <code>sample_pulse</code> are separate inputs.
-  In SPI Mode 0, launch fires on falling SCK and sample fires on rising SCK —
-  they never collide. Both can be handled in the same <code>always_ff</code> block.
+  In SPI Mode 0: the master <em>launches</em> bits on the falling SCK edge and
+  <em>samples</em> the slave's bit on the rising edge. These two events are a
+  half-period apart — they never collide. Both can live in the same
+  <code>always_ff</code> block as independent <code>if</code> branches
+  (not <code>if-else</code>).
 </p>
-
-<h3>What You Will Build</h3>
 <p>
-  Extend L2's module with <code>sample_pulse</code>, <code>miso_in</code>, and
-  <code>rx_data [7:0]</code>. The <code>rx_shift</code> register updates on
-  <code>sample_pulse</code> using the same <code>lsb_first</code> mux.
+  The testbench connects <code>miso_in = mosi_out</code> — the SPI loopback
+  pattern used for bring-up testing. Everything you transmit, you receive back.
+  With 0xA5 loaded and 8 simultaneous launch+sample pulses, the result should
+  be <code>rx_data = 0xA5</code>.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        'Start from L2 spi_shift',
-        '── New port ── input logic sample_pulse',
-        '── New port ── input logic miso_in',
-        '── New port ── output logic [7:0] rx_data',
-        '── Internal ── logic [7:0] rx_shift',
-        '── assign ── rx_data = rx_shift;',
-        'In always_ff: add else-if (sample_pulse) — shift miso_in using lsb_first mux',
-        'MSB-first: rx_shift <= {rx_shift[6:0], miso_in}',
-        'LSB-first: rx_shift <= {miso_in, rx_shift[7:1]}',
+        'Step 1 — Start from the L2 spi_shift — all existing ports remain',
+        'Step 2 — Add new input ports:',
+        '         input logic       sample_pulse',
+        '         input logic       miso_in',
+        'Step 3 — Add new output port:',
+        '         output logic [7:0] rx_data',
+        'Step 4 — Add internal register: logic [7:0] rx_shift;',
+        'Step 5 — Add assign: assign rx_data = rx_shift;',
+        'Step 6 — In always_ff, ADD a sample_pulse if-branch (independent from launch_pulse):',
+        '         if (sample_pulse):',
+        '           if (lsb_first): rx_shift <= {miso_in, rx_shift[7:1]};',
+        '           else:           rx_shift <= {rx_shift[6:0], miso_in};',
+        'Step 7 — Reset rx_shift to 0 in the rst_n branch',
+        'Step 8 — endmodule',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — all 3 PASS lines should appear in the Output tab',
       ],
@@ -451,10 +492,11 @@ endmodule`,
 // New ports:
 //   input  logic       sample_pulse
 //   input  logic       miso_in
-//   output logic [7:0] rx_data      — = rx_shift
+//   output logic [7:0] rx_data
 //
 // New internal: logic [7:0] rx_shift
-// In always_ff: sample_pulse branch shifts miso_in in (lsb_first mux)
+// assign rx_data = rx_shift;
+// In always_ff: separate sample_pulse if-branch (not else-if!)
 //
 // Delete this and start typing:
 `,
@@ -482,6 +524,7 @@ module tb;
   integer i;
 
   initial begin
+    $display("=== Shift Register: RX Capture ===");
     rst_n = 0; load = 0; lsb_first = 0;
     launch_pulse = 0; sample_pulse = 0; miso_in = 0; tx_data = 0;
     repeat(2) @(posedge clk); #1;
@@ -550,59 +593,84 @@ endmodule`,
       title: 'L4 — word_done & Checkpoint A',
 
       theory: `
-<h2>Knowing When a Word Is Complete</h2>
+<h2>The Editor's Buzzer: Signalling When the Broadcast Is Complete</h2>
 <p>
-  The shift register needs to tell the rest of the system when a full word has
-  been transmitted and received. It does this with a one-cycle
-  <strong>word_done</strong> pulse. A bit counter increments on each
-  <code>launch_pulse</code>; when it reaches <code>word_len</code> it fires
-  <code>word_done</code> and resets on the next load.
+  The journalist is mid-broadcast, transmitting bits one by one. The editor needs
+  to know the moment the eighth bit goes out — not the seventh, not the ninth.
+  They press a buzzer the instant the last word leaves the building.
 </p>
+<p>
+  In hardware, <code>word_done</code> is that buzzer: a one-cycle pulse that
+  fires exactly when <code>bit_cnt</code> reaches <code>word_len - 1</code>.
+  The FSM uses this pulse to trigger the next state: deassert CS, start the
+  next word, or stop the transfer. Getting this timing exactly right is
+  critical — one cycle late means the CS falls before the last bit is sampled.
+</p>
+
+<h3>The Bit Counter Pattern</h3>
 <pre class="code-block">
+logic [2:0] bit_cnt;
+
 always_ff @(posedge pclk or negedge rst_n) begin
-  if (!rst_n || load) bit_cnt &lt;= 3'b0;
+  if (!rst_n || load) bit_cnt &lt;= 3'b0;   // reset on reset OR on new word load
   else if (launch_pulse) bit_cnt &lt;= bit_cnt + 1;
 end
 
 assign word_done = launch_pulse &amp;&amp; (bit_cnt === word_len - 1);
 </pre>
+<p>
+  <code>word_done</code> fires <em>during</em> the last launch pulse — it is
+  combinational and depends on the current <code>bit_cnt</code> and
+  <code>launch_pulse</code> together. The next cycle, after the clock edge,
+  <code>bit_cnt</code> will have incremented past <code>word_len - 1</code>,
+  and <code>word_done</code> deasserts.
+</p>
 
-<h3>Checkpoint A — spi_clk_div + spi_shift Loopback</h3>
+<h3>Checkpoint A — Clock Divider + Shift Register Working Together</h3>
 <p>
   This lesson's testbench is the first <strong>integration test</strong> in the
-  course. It instantiates two modules wired together:
+  course. Two modules work together for the first time:
 </p>
-<ul>
-  <li><strong>spi_clk_div</strong> (spi_long2) — generates <code>rising_edge_p</code>
-      and <code>falling_edge_p</code></li>
-  <li><strong>spi_shift</strong> (this chapter) — driven by those pulses</li>
-</ul>
-
 <table class="truth-table">
-  <tr><th>spi_clk_div output</th><th>spi_shift input</th><th>Mode 0 role</th></tr>
-  <tr><td>falling_edge_p</td><td>launch_pulse</td><td>TX shifts out on falling SCK</td></tr>
-  <tr><td>rising_edge_p</td><td>sample_pulse</td><td>RX samples on rising SCK</td></tr>
+  <tr><th>spi_clk_div output</th><th>spi_shift input</th><th>SPI Mode 0 meaning</th></tr>
+  <tr><td>falling_edge_p</td><td>launch_pulse</td><td>TX shifts out on falling SCK edge</td></tr>
+  <tr><td>rising_edge_p</td><td>sample_pulse</td><td>RX samples MISO on rising SCK edge</td></tr>
 </table>
-
 <p>
-  With <code>miso_in = mosi_out</code> (loopback) and <code>tx_data = 0xA5</code>,
-  after <code>word_done</code> fires <code>rx_data</code> must equal
-  <code>0xA5</code>. This is <strong>Checkpoint A</strong>.
+  With <code>miso_in = mosi_out</code> (hardware loopback wire), loading
+  <code>0xA5</code> and running 8 SCK edges should give <code>rx_data = 0xA5</code>
+  when <code>word_done</code> fires. This is <strong>Checkpoint A</strong> — if
+  it passes, your clock divider and shift register are correctly integrated.
+</p>
+<p>
+  <strong>Note:</strong> <code>word_len = 3'd7</code> in the testbench means
+  8 bits (bit_cnt counts 0..7, fires at bit 7 which is word_len-1 = 6...
+  actually counts 8 pulses total). Check the formula: if word_len=7, done when bit_cnt==6
+  on the 7th launch, then one more = 8 total. Verify your bit_cnt reset on load.
+</p>
+<p>
+  🎓 <strong>SPI Foundations certificate:</strong> completing this lesson means
+  you have built the complete data path — clock divider, TX FIFO, RX FIFO, and
+  shift registers. The remaining modules add the control logic on top.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        'Start from L3 spi_shift',
-        '── New port ── input logic [2:0] word_len',
-        '── New port ── output logic word_done',
-        '── Internal ── logic [2:0] bit_cnt',
-        'In always_ff: reset bit_cnt on rst_n or load; increment on launch_pulse',
-        'assign word_done = launch_pulse && (bit_cnt === word_len - 1);',
+        'Step 1 — Start from the L3 spi_shift — all existing ports remain',
+        'Step 2 — Add new ports:',
+        '         input  logic [2:0] word_len',
+        '         output logic       word_done',
+        'Step 3 — Add internal: logic [2:0] bit_cnt;',
+        'Step 4 — In always_ff: reset bit_cnt on rst_n OR on load; increment on launch_pulse',
+        '         Note: bit_cnt should reset FIRST in the load branch (before tx_shift loads)',
+        'Step 5 — assign word_done = launch_pulse && (bit_cnt === word_len - 1);',
+        'Step 6 — endmodule',
         'The testbench includes spi_clk_div inline — no extra file needed',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — PASS rx_data=0xa5 and Checkpoint A PASS must appear in Output tab',
+        '🎓 SPI Foundations certificate unlocked — you built the complete data path: clkdiv, FIFOs, shift registers',
       ],
 
       hint:
@@ -681,7 +749,7 @@ module spi_clk_div (
       sck_prev <= cpol; sck_int <= cpol; div_cnt <= 0;
     end
   end
-  assign sck_out       = enable ? sck_int : cpol;
+  assign sck_out        = enable ? sck_int : cpol;
   assign rising_edge_p  = sck_int & ~sck_prev;
   assign falling_edge_p = ~sck_int & sck_prev;
 endmodule
@@ -716,9 +784,10 @@ module tb;
     .word_done(word_done)
   );
 
-  assign miso_in = mosi_out;
+  assign miso_in = mosi_out;   // loopback: receive what we transmit
 
   initial begin
+    $display("=== Checkpoint A: clk_div + shift loopback ===");
     enable = 0; cpol = 0; div = 16'd1;
     load = 0; lsb_first = 0; tx_data = 8'hA5; word_len = 3'd7;
     repeat(4) @(posedge pclk); #1;
@@ -748,4 +817,3 @@ endmodule`,
 
   ]
 });
-
