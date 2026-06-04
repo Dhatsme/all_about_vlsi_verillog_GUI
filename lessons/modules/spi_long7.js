@@ -13,133 +13,214 @@
       title: 'L1 — CS Decode & Polarity',
 
       theory: `
-<h2>CS in a Multi-Slave System: Why One Pin Is Never Enough</h2>
+<h2>Where spi_cs_ctrl Lives — and the Failure It Prevents</h2>
 <p>
-  MOSI, MISO, and SCK are shared across every device on the SPI bus.
-  Chip Select is the only thing that decides <em>which slave responds</em>.
-  In a real embedded system — say, a sensor hub with an accelerometer, a
-  barometer, a flash chip, and a DAC all on the same bus — the master must
-  assert exactly one CS line at a time, hold all others at their idle level,
-  and never glitch an inactive CS even for a single cycle. A one-nanosecond
-  glitch on an idle CS can corrupt a live EEPROM write on another slave.
+  You are building a six-module SPI master across this course. Before writing
+  any RTL, understand exactly where this block fits in the complete hardware
+  pipeline. The diagram below shows every module — this chapter builds the
+  block marked <strong>★</strong>.
 </p>
-<p>
-  The master stores a 2-bit <code>cs_sel</code> field in a control register:
-  value 0 selects slave 0, value 3 selects slave 3. But the hardware output
-  is <em>four separate pins</em>, not a 2-bit bus. The CS controller converts
-  one into the other with a <strong>one-hot decode</strong> — and then applies
-  a per-pin <strong>polarity gate</strong> because not every device uses the
-  same active level.
-</p>
-
-<h3>Where This Block Sits in the SPI Master</h3>
 <pre class="code-block">
-  APB registers
-       │  cs_sel[1:0], cs_pol[3:0]
+  APB Bus (CPU writes control registers and triggers transfers)
+       │
        ▼
-  ┌────────────────────┐      spi_csn_o[3:0]
-  │   spi_cs_ctrl      │ ──────────────────────► IC pins (4 slaves)
-  │   (this chapter)   │
-  └────────────────────┘
-       ▲          │
-       │          │ cs_transfer_active
-  FSM  │          └──────────────────────► spi_cpha (preseed_en gate)
-  (spi_long8)
+  ┌──────────────────────┐
+  │    spi_reg_block     │  holds: cs_sel, cs_pol, clk_div, cpol, cpha, word_len
+  │    (spi_long11)      │
+  └──────────┬───────────┘
+             │  config signals broadcast to every module below
+       ┌─────┴──────────────────────────────────────────────┐
+       │                                                    │
+       ▼                                                    ▼
+  ┌──────────────────┐  cs_transfer_active        ┌──────────────────┐ ★
+  │  spi_master_fsm  │ ─────────────────────────► │  spi_cs_ctrl     │
+  │   (spi_long8)    │  pre_assert, post_assert    │  (this chapter)  │
+  │   next chapter   │ ─────────────────────────► └────────┬─────────┘
+  └────────┬─────────┘                                     │
+           │ launch_pulse, sample_pulse           spi_csn_o[3:0]
+           ▼                                              │
+  ┌──────────────────┐                                    ▼
+  │    spi_cpha      │                    ┌──────────────────────────────┐
+  │   (spi_long6)    │                    │  4 SPI slave IC pins         │
+  └────────┬─────────┘                    │  CS[0] flash  CS[2] ADC      │
+           │ mode-corrected pulses         │  CS[1] IMU    CS[3] DAC      │
+           ▼                              └──────────────────────────────┘
+  ┌──────────────────┐
+  │    spi_shift     │  mosi_out ──► MOSI pin    miso_in ◄── MISO pin
+  │   (spi_long5)    │
+  └──────────────────┘
 </pre>
 <p>
-  The FSM raises <code>cs_transfer_active</code> when it enters the ASSERT_CS
-  state. That single wire drives the entire one-hot output. The CS controller
-  does not have its own state machine — it is pure combinational decode, sitting
-  between the register bank and the chip pins.
+  The FSM (next chapter) is the conductor. It raises
+  <code>cs_transfer_active</code> when entering ASSERT_CS state, signalling
+  this block to drive the correct pin. It pulses <code>pre_assert</code> and
+  <code>post_assert</code> to start the timing counters you add in L2 and L3.
+  The CS controller itself has <strong>no state machine</strong> — it reacts
+  combinationally to the FSM's commands within one gate delay.
 </p>
 
-<h2>One-Hot Decode + Polarity Gate: Two Assign Statements</h2>
+<h3>The Real Failure: a Four-Slave Sensor Hub</h3>
 <p>
-  The decode is a left-shift: <code>4'b0001 &lt;&lt; cs_sel</code> puts a
-  single 1 bit at position <code>cs_sel</code> and zeros everywhere else.
-  Gating by <code>cs_transfer_active</code> collapses the whole vector to zero
-  when no transfer is running — no active edge reaches any pin.
+  Picture a PCB with four SPI slaves sharing MOSI / MISO / SCK:
+</p>
+<table class="truth-table">
+  <tr><th>CS pin</th><th>Part</th><th>Active level</th><th>What breaks on a rogue CS glitch</th></tr>
+  <tr><td>CS[0]</td><td>W25Q128 SPI Flash</td><td>active-low</td><td>Page Program aborts silently — written page goes blank</td></tr>
+  <tr><td>CS[1]</td><td>MPU-6050 IMU</td><td>active-low</td><td>Gyro register read corrupted mid-burst</td></tr>
+  <tr><td>CS[2]</td><td>MCP3204 ADC</td><td>active-low</td><td>ADC resets conversion, returns stale sample</td></tr>
+  <tr><td>CS[3]</td><td>MCP4921 DAC</td><td><strong>active-high</strong></td><td>Spurious HIGH latches garbage value into audio output</td></tr>
+</table>
+<p>
+  Your firmware starts a W25Q128 Page Program (256-byte flash write, 3 ms
+  internal cycle). A software bug sets <code>cs_sel = 1</code> without
+  clearing <code>cs_transfer_active</code>. Without a proper decode block,
+  CS[0] glitches HIGH mid-command. The W25Q128 datasheet §8.2.7:
+  <em>"A rising edge on CS# during a Page Program terminates the operation;
+  data shifted in is discarded."</em> No error flag is raised. Firmware
+  polls STATUS, sees WIP = 0 (write complete), and continues. The page is
+  blank. This bug takes days to trace.
+</p>
+<p>
+  The fix: <code>cs_sel</code> is latched into a shadow register on transfer
+  start (in spi_long8). Only the FSM controls <code>cs_transfer_active</code>.
+  Output pins never change during a transfer — only between them.
+</p>
+
+<h2>Deriving the Two-Line Implementation</h2>
+<p>
+  Good RTL designers answer a chain of questions — each answer produces
+  exactly one line of hardware.
+</p>
+
+<h3>Step 1 — What does this block need to know?</h3>
+<p>
+  Three inputs: which slave (<code>cs_sel[1:0]</code>, binary 0–3),
+  whether a transfer is running (<code>cs_transfer_active</code>),
+  and the per-pin active level (<code>cs_pol[3:0]</code>).
+  One output: <code>spi_csn_o[3:0]</code> — one bit wired directly to each
+  IC chip-select pin. Declare these first; the logic follows from them.
+</p>
+<pre class="code-block">
+module spi_cs_ctrl (
+  input  logic [1:0] cs_sel,
+  input  logic       cs_transfer_active,
+  input  logic [3:0] cs_pol,
+  output logic [3:0] spi_csn_o
+);
+</pre>
+
+<h3>Step 2 — Why not wire cs_sel directly to the output pins?</h3>
+<p>
+  <code>cs_sel</code> is 2-bit <em>binary</em> (values 0–3). Each slave
+  needs its own dedicated wire — four independent bits, exactly one active
+  at a time. That is a <strong>one-hot vector</strong>. The left-shift
+  operator converts binary to one-hot in a single expression.
+  The <code>cs_transfer_active</code> gate collapses the vector to zero when
+  the bus is idle — no CS edge fires between transfers.
 </p>
 <pre class="code-block">
 logic [3:0] cs_active_vec;
-
-// One-hot decode, gated by transfer active flag
+//  cs_sel=0  →  4'b0001 &lt;&lt; 0  =  4'b0001   (only pin 0 high)
+//  cs_sel=1  →  4'b0001 &lt;&lt; 1  =  4'b0010   (only pin 1 high)
+//  cs_sel=2  →  4'b0001 &lt;&lt; 2  =  4'b0100   (only pin 2 high)
+//  cs_sel=3  →  4'b0001 &lt;&lt; 3  =  4'b1000   (only pin 3 high)
 assign cs_active_vec = cs_transfer_active ? (4'b0001 &lt;&lt; cs_sel) : 4'b0000;
-
-// Polarity gate: cs_pol=0 → active-low (standard)
-//                cs_pol=1 → active-high (some legacy ADCs)
-assign spi_csn_o = ~cs_active_vec ^ cs_pol;
+// gate: cs_transfer_active=0 → 4'b0000 — no CS edge when FSM is idle
 </pre>
 
-<h3>Polarity Truth Table</h3>
+<h3>Step 3 — How do we handle the active-high MCP4921 DAC on CS[3]?</h3>
+<p>
+  Most devices idle HIGH and go LOW when selected (<code>cs_pol[i]=0</code>,
+  active-low). The MCP4921 idles LOW and goes HIGH when selected
+  (<code>cs_pol[i]=1</code>, active-high). Work through all four cases to
+  find a single formula that handles both per-pin, without branching:
+</p>
 <table class="truth-table">
-  <tr><th>cs_active_vec[i]</th><th>cs_pol[i]</th><th>spi_csn_o[i]</th><th>Pin state</th></tr>
-  <tr><td>0 (not selected)</td><td>0 (active-low)</td><td>1</td><td>HIGH — slave idle ✓</td></tr>
-  <tr><td>1 (selected)</td><td>0 (active-low)</td><td>0</td><td>LOW — slave asserted ✓</td></tr>
-  <tr><td>0 (not selected)</td><td>1 (active-high)</td><td>0</td><td>LOW — slave idle ✓</td></tr>
-  <tr><td>1 (selected)</td><td>1 (active-high)</td><td>1</td><td>HIGH — slave asserted ✓</td></tr>
+  <tr><th>cs_active_vec[i]</th><th>cs_pol[i]</th><th>~active[i] ^ pol[i]</th><th>IC pin state</th></tr>
+  <tr><td>0 — not selected</td><td>0 — active-low</td><td>1 ^ 0 = <strong>1</strong></td><td>HIGH — slave idle ✓</td></tr>
+  <tr><td>1 — selected</td><td>0 — active-low</td><td>0 ^ 0 = <strong>0</strong></td><td>LOW — slave asserted ✓</td></tr>
+  <tr><td>0 — not selected</td><td>1 — active-high</td><td>1 ^ 1 = <strong>0</strong></td><td>LOW — slave idle ✓</td></tr>
+  <tr><td>1 — selected</td><td>1 — active-high</td><td>0 ^ 1 = <strong>1</strong></td><td>HIGH — slave asserted ✓</td></tr>
+</table>
+<pre class="code-block">
+assign spi_csn_o = ~cs_active_vec ^ cs_pol;
+// cs_pol=4'b0000 (all active-low):  spi_csn_o = ~cs_active_vec  (common case)
+// cs_pol=4'b1000 (CS[3] active-high): CS[3] output inverted; pins 0-2 unchanged
+</pre>
+
+<h3>Step 4 — Trace a complete scenario</h3>
+<table class="truth-table">
+  <tr><th>Scenario</th><th>cs_sel</th><th>cs_pol</th><th>cs_active_vec</th><th>spi_csn_o</th></tr>
+  <tr><td>Bus idle (no transfer)</td><td>—</td><td>4'b0000</td><td>4'b0000</td><td>4'b1111 — all slaves idle HIGH</td></tr>
+  <tr><td>Flash write (slave 0)</td><td>0</td><td>4'b0000</td><td>4'b0001</td><td>4'b1110 — CS[0] LOW ✓, others idle</td></tr>
+  <tr><td>ADC read (slave 2)</td><td>2</td><td>4'b0000</td><td>4'b0100</td><td>4'b1011 — CS[2] LOW ✓, others idle</td></tr>
+  <tr><td>DAC update (slave 3, active-high)</td><td>3</td><td>4'b1000</td><td>4'b1000</td><td>4'b1111 — CS[3] HIGH = asserted ✓</td></tr>
 </table>
 <p>
-  The formula <code>~cs_active_vec ^ cs_pol</code> is the XNOR of the selection
-  vector and the polarity register. For the overwhelmingly common case of
-  all-active-low devices, <code>cs_pol = 4'b0000</code> and
-  <code>spi_csn_o = ~cs_active_vec</code> — CS pins idle HIGH, one goes LOW
-  during a transfer. No special-casing needed.
+  No <code>always_ff</code>, no clock. Two <code>assign</code> statements —
+  the FSM raises <code>cs_transfer_active</code> and the correct CS pin
+  responds within one gate propagation delay (~1–2 ns on FPGA fabric).
 </p>
 <p>
-  In L2 you will add the pre-delay counter that makes the FSM wait a
-  programmable number of cycles between CS asserting and SCK starting — the
-  setup time required by many SPI flash and DAC datasheets.
+  In L2 you will add the pre-delay counter: after CS asserts, the FSM stalls
+  in ASSERT_CS for a programmable number of PCLK cycles before enabling SCK.
+  This enforces the t<sub>CSS</sub> setup time the W25Q128 requires — at
+  50 MHz PCLK even the minimum register value of 1 gives 20 ns, safely above
+  the 5 ns datasheet spec.
 </p>
 <p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
         'Code tab is blank — type every line.',
-        '── Port ── input logic [1:0] cs_sel      — selects which of 4 slaves',
-        '── Port ── input logic cs_transfer_active — 1 during any transfer',
-        '── Port ── input logic [3:0] cs_pol       — 0=active-low, 1=active-high per pin',
-        '── Port ── output logic [3:0] spi_csn_o   — direct to IC pins',
-        '── Internal ── logic [3:0] cs_active_vec',
-        'assign cs_active_vec = cs_transfer_active ? (4\'b0001 << cs_sel) : 4\'b0000;',
-        'assign spi_csn_o = ~cs_active_vec ^ cs_pol;',
-        'No always_ff needed — purely combinational decode',
+        'Step 1 — declare the module with 3 inputs: cs_sel[1:0], cs_transfer_active, cs_pol[3:0]',
+        '         and 1 output: spi_csn_o[3:0]  (one bit per IC chip-select pin)',
+        'Step 2 — inside the module declare: logic [3:0] cs_active_vec;',
+        'Step 3 — one-hot decode: assign cs_active_vec = cs_transfer_active ? (4\'b0001 << cs_sel) : 4\'b0000;',
+        '         self-check: trace cs_sel=2 → 4\'b0001 << 2 = 4\'b0100 — only pin 2 is 1, rest are 0',
+        'Step 4 — polarity gate: assign spi_csn_o = ~cs_active_vec ^ cs_pol;',
+        '         self-check: cs_pol=0, sel=2 → ~4\'b0100 ^ 0 = 4\'b1011 — CS[2] LOW (asserted) ✓',
+        'No always_ff — both lines are purely combinational, react within gate-delay time',
         'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
-        'Hit Run — 8 PASS lines (all cs_sel values × both polarities) then "CS decode done!" in Output tab',
+        'Hit Run — 8 PASS lines (all cs_sel × both polarities) then "CS decode done!" in Output tab',
       ],
 
       hint:
 `module spi_cs_ctrl (
-  input  logic [1:0] cs_sel,
-  input  logic       cs_transfer_active,
-  input  logic [3:0] cs_pol,
-  output logic [3:0] spi_csn_o
+  input  logic [1:0] cs_sel,             // 2-bit binary: which of 4 slaves (0–3)
+  input  logic       cs_transfer_active, // from FSM: 1 = transfer active, 0 = idle
+  input  logic [3:0] cs_pol,             // per-pin: 0=active-low (default), 1=active-high
+  output logic [3:0] spi_csn_o           // direct to IC chip-select pins
 );
-  // One-hot decode: only the selected CS line becomes active
+  // Step 2: one-hot decode — 2-bit binary → 4-bit one-hot vector
+  //   cs_sel=0 → 0001, cs_sel=1 → 0010, cs_sel=2 → 0100, cs_sel=3 → 1000
+  //   gate: cs_transfer_active=0 → 0000 (no CS edge when FSM is idle)
   logic [3:0] cs_active_vec;
   assign cs_active_vec = cs_transfer_active ? (4'b0001 << cs_sel) : 4'b0000;
 
-  // Polarity gate: ~cs_active_vec ^ cs_pol
-  //   cs_pol=0 (active-low): pin HIGH when idle, LOW when selected
-  //   cs_pol=1 (active-high): pin LOW when idle, HIGH when selected
+  // Step 3: polarity gate — ~cs_active_vec ^ cs_pol  (XNOR per bit)
+  //   cs_pol[i]=0 (active-low):  idle HIGH, selected LOW   ← most devices
+  //   cs_pol[i]=1 (active-high): idle LOW,  selected HIGH  ← MCP4921 DAC
   assign spi_csn_o = ~cs_active_vec ^ cs_pol;
+
 endmodule`,
 
       design:
-`// Type the spi_cs_ctrl module here.
-// Read Theory — it shows the one-hot decode and polarity gate.
+`// Type the spi_cs_ctrl module here. Follow Theory Steps 1–4.
 //
-// Ports:
-//   input  logic [1:0] cs_sel             — binary slave select
-//   input  logic       cs_transfer_active — gate: 0 = all CS idle
-//   input  logic [3:0] cs_pol             — per-pin polarity (0=active-low)
-//   output logic [3:0] spi_csn_o          — to chip pins
+// Step 1 — Ports:
+//   input  logic [1:0] cs_sel              — which slave (0–3)
+//   input  logic       cs_transfer_active  — 1 = FSM is in a transfer
+//   input  logic [3:0] cs_pol              — per-pin: 0=active-low (default)
+//   output logic [3:0] spi_csn_o           — one bit per IC chip-select pin
 //
-// Internal: logic [3:0] cs_active_vec
+// Step 2 — Internal:
+//   logic [3:0] cs_active_vec              — one-hot intermediate
 //
-// Two assign lines — no always_ff needed.
+// Step 3 — assign cs_active_vec = cs_transfer_active ? (4'b0001 << cs_sel) : 4'b0000;
+// Step 4 — assign spi_csn_o = ~cs_active_vec ^ cs_pol;
 //
-// Delete this and start typing:
+// No always_ff — delete this and start typing:
 `,
 
       testbench:
