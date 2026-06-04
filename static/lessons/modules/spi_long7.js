@@ -130,7 +130,7 @@ assign cs_active_vec = cs_transfer_active ? (4'b0001 &lt;&lt; cs_sel) : 4'b0000;
 // gate: cs_transfer_active=0 → 4'b0000 — no CS edge when FSM is idle
 </pre>
 
-<h3>Step 3 — How do we handle the active-high MCP4921 DAC on CS[3]?</h3>
+<h3>Step 3 — How do we handle the active-high DAC on CS[3]?</h3>
 <p>
   Most devices idle HIGH and go LOW when selected (<code>cs_pol[i]=0</code>,
   active-low). The MCP4921 idles LOW and goes HIGH when selected
@@ -166,7 +166,7 @@ assign spi_csn_o = ~cs_active_vec ^ cs_pol;
 <p>
   In L2 you will add the pre-delay counter: after CS asserts, the FSM stalls
   in ASSERT_CS for a programmable number of PCLK cycles before enabling SCK.
-  This enforces the t<sub>CSS</sub> setup time the W25Q128 requires — at
+  This enforces the t<sub>CSS</sub> setup time the NOR Flash requires — at
   50 MHz PCLK even the minimum register value of 1 gives 20 ns, safely above
   the 5 ns datasheet spec.
 </p>
