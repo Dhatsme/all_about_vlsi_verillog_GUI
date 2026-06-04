@@ -15,10 +15,10 @@
       theory: `
 <h2>Where spi_cs_ctrl Lives — and the Failure It Prevents</h2>
 <p>
-  You are building a six-module SPI master across this course. Before writing
-  any RTL, understand exactly where this block fits in the complete hardware
-  pipeline. The diagram below shows every module — this chapter builds the
-  block marked <strong>★</strong>.
+  We are building a six-module SPI master across this course. Before writing
+  any RTL, let's understand exactly where this block fits in the complete
+  hardware pipeline. The diagram below shows every module — this chapter
+  builds the block marked <strong>★</strong>.
 </p>
 <pre class="code-block">
   APB Bus (CPU writes control registers and triggers transfers)
@@ -64,25 +64,27 @@
   Picture a PCB with four SPI slaves sharing MOSI / MISO / SCK:
 </p>
 <table class="truth-table">
-  <tr><th>CS pin</th><th>Part</th><th>Active level</th><th>What breaks on a rogue CS glitch</th></tr>
-  <tr><td>CS[0]</td><td>W25Q128 SPI Flash</td><td>active-low</td><td>Page Program aborts silently — written page goes blank</td></tr>
-  <tr><td>CS[1]</td><td>MPU-6050 IMU</td><td>active-low</td><td>Gyro register read corrupted mid-burst</td></tr>
-  <tr><td>CS[2]</td><td>MCP3204 ADC</td><td>active-low</td><td>ADC resets conversion, returns stale sample</td></tr>
-  <tr><td>CS[3]</td><td>MCP4921 DAC</td><td><strong>active-high</strong></td><td>Spurious HIGH latches garbage value into audio output</td></tr>
+  <tr><th>CS pin</th><th>Device type</th><th>Active level</th><th>What breaks on a rogue CS glitch</th></tr>
+  <tr><td>CS[0]</td><td>SPI NOR Flash</td><td>active-low</td><td>Page Program aborts silently — written page goes blank</td></tr>
+  <tr><td>CS[1]</td><td>IMU (gyro + accel)</td><td>active-low</td><td>Register burst read corrupted mid-transfer</td></tr>
+  <tr><td>CS[2]</td><td>SAR ADC</td><td>active-low</td><td>Conversion reset, stale sample returned</td></tr>
+  <tr><td>CS[3]</td><td>DAC (active-high CS)</td><td><strong>active-high</strong></td><td>Spurious HIGH latches an invalid code into the DAC output</td></tr>
 </table>
 <p>
-  Your firmware starts a W25Q128 Page Program (256-byte flash write, 3 ms
-  internal cycle). A software bug sets <code>cs_sel = 1</code> without
-  clearing <code>cs_transfer_active</code>. Without a proper decode block,
-  CS[0] glitches HIGH mid-command. The W25Q128 datasheet §8.2.7:
+  Consider this scenario: a Page Program command is issued to the NOR flash
+  (256-byte write, 3 ms internal erase-write cycle). Mid-transfer, a register
+  write sets <code>cs_sel = 1</code> without clearing
+  <code>cs_transfer_active</code>. Without a proper decode block, CS[0]
+  glitches HIGH mid-command. The NOR flash datasheet states:
   <em>"A rising edge on CS# during a Page Program terminates the operation;
-  data shifted in is discarded."</em> No error flag is raised. Firmware
-  polls STATUS, sees WIP = 0 (write complete), and continues. The page is
-  blank. This bug takes days to trace.
+  data shifted in is discarded."</em> No error flag is raised. The CPU polls
+  the STATUS register, sees WIP = 0 (write complete), and the transaction
+  proceeds. The 256-byte page is blank. This class of RTL bug takes days
+  to trace.
 </p>
 <p>
   The fix: <code>cs_sel</code> is latched into a shadow register on transfer
-  start (in spi_long8). Only the FSM controls <code>cs_transfer_active</code>.
+  start (in spi_long8). Only the FSM drives <code>cs_transfer_active</code>.
   Output pins never change during a transfer — only between them.
 </p>
 
@@ -200,7 +202,7 @@ assign spi_csn_o = ~cs_active_vec ^ cs_pol;
 
   // Step 3: polarity gate — ~cs_active_vec ^ cs_pol  (XNOR per bit)
   //   cs_pol[i]=0 (active-low):  idle HIGH, selected LOW   ← most devices
-  //   cs_pol[i]=1 (active-high): idle LOW,  selected HIGH  ← MCP4921 DAC
+  //   cs_pol[i]=1 (active-high): idle LOW,  selected HIGH  ← some analog ICs
   assign spi_csn_o = ~cs_active_vec ^ cs_pol;
 
 endmodule`,
