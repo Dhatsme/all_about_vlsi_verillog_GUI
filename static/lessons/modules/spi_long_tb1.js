@@ -90,21 +90,21 @@ if (sck_out === 1'b0)    // cpol=0
     end else if (enable) begin
       if (div_cnt == div) begin
         div_cnt <= 0;
-        sck_int <= ~sck_int;   // toggle every (div+1) cycles
+        sck_int <= ~sck_int;
       end else begin
         div_cnt <= div_cnt + 1;
       end
-      sck_prev <= sck_int;     // one-cycle delay for edge detector
+      sck_prev <= sck_int;
     end else begin
-      sck_int  <= cpol;        // freeze at idle level
-      sck_prev <= cpol;        // keep edge detector quiet
-      div_cnt  <= 0;           // reset so next enable starts clean
+      sck_int  <= cpol;
+      sck_prev <= cpol;
+      div_cnt  <= 0;
     end
   end
 
   assign sck_out       = enable ? sck_int : cpol;
-  assign rising_edge_p  = sck_int & ~sck_prev;   // low-to-high
-  assign falling_edge_p = ~sck_int & sck_prev;   // high-to-low
+  assign rising_edge_p  = sck_int & ~sck_prev;
+  assign falling_edge_p = ~sck_int & sck_prev;
 
 endmodule`,
       design:
@@ -150,7 +150,6 @@ module tb;
     repeat(4) @(posedge pclk);
     rst_n = 1;
 
-    // Test 1: Frequency -- DIV=4 => period=10 pclk => ~10 rising edges in 100
     $display("=== Test 1: Frequency ===");
     enable = 1; rise_cnt = 0;
     for (i = 0; i < 100; i = i + 1) begin
@@ -163,7 +162,6 @@ module tb;
     else
       $display("FAIL  SCK edges=%0d in 100 cycles", rise_cnt);
 
-    // Test 2: CPOL idle levels
     $display("=== Test 2: CPOL idle ===");
     cpol = 0; enable = 0;
     repeat(4) @(posedge pclk); #1;
@@ -171,7 +169,6 @@ module tb;
       $display("PASS  CPOL=0: sck_out idles low");
     else
       $display("FAIL  CPOL=0: sck_out=%0b", sck_out);
-
     cpol = 1; enable = 0;
     repeat(4) @(posedge pclk); #1;
     if (sck_out === 1'b1)
@@ -179,7 +176,6 @@ module tb;
     else
       $display("FAIL  CPOL=1: sck_out=%0b", sck_out);
 
-    // Test 3: Enable gating
     $display("=== Test 3: Enable gating ===");
     cpol = 0; div = 4; enable = 1;
     repeat(20) @(posedge pclk);
@@ -190,7 +186,6 @@ module tb;
     else
       $display("FAIL  enable=0 sck_out=%0b", sck_out);
 
-    // Test 4: Edge pulse balance
     $display("=== Test 4: Edge pulses ===");
     cpol = 0; div = 2; enable = 1;
     rise_cnt = 0; fall_cnt = 0;
@@ -214,6 +209,239 @@ endmodule`,
         'PASS  CPOL=0: sck_out idles low',
         'PASS  enable=0 freezes SCK at CPOL=0',
         'Clock divider testbench complete!'
+      ]
+    },
+    {
+      id: 'spi_long_tb1l2',
+      title: 'L2 — FIFO Testbench',
+      theory: `<h2>Writing a Self-Checking FIFO Testbench</h2>
+<p>FIFOs are the most failure-prone component in digital designs because they combine pointer arithmetic, flag generation, and flow control in one module. A good FIFO testbench does not just push a few values and read them back — it deliberately drives the FIFO into every boundary condition: exactly full, exactly empty, overflow attempt, watermark crossing, and a flush. This lesson builds that testbench for the synchronous TX FIFO you designed in Chapter 3.</p>
+
+<h3>The five boundary conditions every FIFO testbench must cover</h3>
+<p>Boundary bugs hide in corners casual tests never reach. Every FIFO testbench should hit all five:</p>
+<ul>
+  <li><strong>Full detection</strong> — <code>level</code> must equal DEPTH and <code>full</code> must assert after the 8th write</li>
+  <li><strong>Overflow protection</strong> — a write when full must be silently dropped and <code>ovf_sticky</code> must latch</li>
+  <li><strong>Empty detection</strong> — <code>level</code> must reach 0 and <code>empty</code> must assert after the last read</li>
+  <li><strong>Watermarks</strong> — <code>almost_full</code> when level ≥ 6; <code>almost_empty</code> when level ≤ 2 (WM=2)</li>
+  <li><strong>Flush</strong> — one cycle of <code>flush=1</code> must reset both pointers and level to 0</li>
+</ul>
+
+<h3>Helper tasks keep the test body readable</h3>
+<p>Toggling <code>wr_en</code> or <code>rd_en</code> for exactly one clock cycle is repetitive. Factor it into tasks so the test body reads like a spec:</p>
+<pre class="code-block">task automatic fifo_write(input logic [7:0] data);
+  wr_data = data; wr_en = 1;
+  @(posedge pclk); #1;
+  wr_en = 0;
+endtask
+
+task automatic fifo_read;
+  rd_en = 1;
+  @(posedge pclk); #1;
+  rd_en = 0;
+endtask</pre>
+
+<h3>Check flags after the clock edge</h3>
+<p>Registered flags (<code>full</code>, <code>level</code>, etc.) are valid only <em>after</em> the clock edge and a <code>#1</code> settle delay. Checking before the clock edge returns the previous cycle’s value and can give false results.</p>
+<pre class="code-block">for (i = 0; i &lt; 8; i = i + 1) fifo_write(8'hA0 + i);
+// flags are now updated -- safe to check
+if (full === 1'b1 &amp;&amp; level === 4'd8)
+  $display("PASS  FIFO full: level=8 full=1");</pre>
+
+<h3>Test plan for spi_tx_fifo (DEPTH=8, WM=2)</h3>
+<table class="truth-table">
+  <tr><th>Test</th><th>Operation</th><th>Pass condition</th></tr>
+  <tr><td>Fill to full</td><td>8 writes</td><td>full=1, level=8</td></tr>
+  <tr><td>Overflow</td><td>1 write when full</td><td>ovf_sticky=1, level stays 8</td></tr>
+  <tr><td>Drain</td><td>8 reads</td><td>empty=1, level=0</td></tr>
+  <tr><td>almost_full</td><td>6 writes</td><td>almost_full=1 at level=6</td></tr>
+  <tr><td>almost_empty</td><td>4 reads from level=6</td><td>almost_empty=1 at level=2</td></tr>
+  <tr><td>Flush</td><td>4 writes then flush</td><td>empty=1, level=0</td></tr>
+</table>
+
+<h3>What you will build</h3>
+<p>Re-implement <code>spi_tx_fifo</code> from Chapter 3 with fixed parameters DEPTH=8, WIDTH=8, WM=2. The testbench is pre-wired.</p>
+<pre class="code-block">module spi_tx_fifo (
+  input  logic       pclk, rst_n, wr_en, rd_en, flush,
+  input  logic [7:0] wr_data,
+  output logic [7:0] rd_data,
+  output logic       full, empty, almost_empty, almost_full, ovf_sticky,
+  output logic [3:0] level
+);</pre>
+<p>Internal: a memory array <code>mem[0:7]</code>, 3-bit pointers <code>wr_ptr</code> and <code>rd_ptr</code>, and a 4-bit <code>lvl</code> counter that increments on valid writes and decrements on valid reads.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and implement the FIFO. Stuck? Tap 💡 Show Hint for the annotated reference implementation.</p>`,
+      tasks: [
+        'Code tab is blank — re-implement spi_tx_fifo from Chapter 3.',
+        'Declare: logic [7:0] mem [0:7];  wr_ptr [2:0], rd_ptr [2:0], lvl [3:0], ovf_sticky',
+        'Flags (combinational): full when lvl==8, empty when lvl==0, almost_full when lvl is 6 or more, almost_empty when lvl is 2 or less',
+        'assign rd_data = mem[rd_ptr]  (combinational head read)',
+        'always_ff: rst_n low or flush -- zero wr_ptr, rd_ptr, lvl, ovf_sticky',
+        'Write when not full: store wr_data into mem[wr_ptr], increment wr_ptr, increment lvl',
+        'Write when full: set ovf_sticky to 1 (drop the data silently)',
+        'Read when not empty: increment rd_ptr, decrement lvl',
+        'Simultaneous read+write (both valid): update both pointers, lvl stays the same',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
+        'Hit Run — all 5 PASS lines should appear in the Output tab',
+      ],
+      hint:
+`module spi_tx_fifo (
+  input  logic       pclk, rst_n, wr_en, rd_en, flush,
+  input  logic [7:0] wr_data,
+  output logic [7:0] rd_data,
+  output logic       full, empty, almost_empty, almost_full, ovf_sticky,
+  output logic [3:0] level
+);
+  logic [7:0] mem [0:7];
+  logic [2:0] wr_ptr, rd_ptr;
+  logic [3:0] lvl;
+
+  assign level        = lvl;
+  assign full         = (lvl == 4'd8);
+  assign empty        = (lvl == 4'd0);
+  assign almost_full  = (lvl >= 4'd6);  // DEPTH-WM = 8-2 = 6
+  assign almost_empty = (lvl <= 4'd2);  // WM = 2
+  assign rd_data      = mem[rd_ptr];
+
+  logic do_wr, do_rd;
+  assign do_wr = wr_en && !full;
+  assign do_rd = rd_en && !empty;
+
+  always_ff @(posedge pclk or negedge rst_n) begin
+    if (!rst_n) begin
+      wr_ptr <= 0; rd_ptr <= 0; lvl <= 0; ovf_sticky <= 0;
+    end else if (flush) begin
+      wr_ptr <= 0; rd_ptr <= 0; lvl <= 0; ovf_sticky <= 0;
+    end else begin
+      if (do_wr) begin
+        mem[wr_ptr] <= wr_data;
+        wr_ptr      <= wr_ptr + 1;
+      end
+      if (wr_en && full)
+        ovf_sticky <= 1;
+      if (do_rd)
+        rd_ptr <= rd_ptr + 1;
+      if      (do_wr && !do_rd) lvl <= lvl + 1;
+      else if (!do_wr && do_rd) lvl <= lvl - 1;
+    end
+  end
+endmodule`,
+      design:
+`// Re-implement spi_tx_fifo here. See Theory for the test plan.
+//
+// Fixed parameters: DEPTH=8, WIDTH=8, WM=2
+//
+// Ports:
+//   input  pclk, rst_n        -- clock and active-low async reset
+//   input  wr_en, rd_en       -- write / read enable (one operation per cycle)
+//   input  flush              -- synchronous pointer reset
+//   input  wr_data [7:0]      -- data to push
+//   output rd_data [7:0]      -- head of FIFO (combinational)
+//   output full, empty        -- capacity flags
+//   output almost_full        -- level >= 6
+//   output almost_empty       -- level <= 2
+//   output ovf_sticky         -- latches on write-when-full; cleared by rst_n or flush
+//   output level [3:0]        -- occupancy 0..8
+//
+// Internal: mem[0:7], wr_ptr [2:0], rd_ptr [2:0], lvl [3:0]
+//
+// Delete this block and start typing:
+`,
+      testbench:
+`\`timescale 1ns/1ps
+module tb;
+  logic       pclk = 0;
+  logic       rst_n, wr_en, rd_en, flush;
+  logic [7:0] wr_data;
+  logic [7:0] rd_data;
+  logic       full, empty, almost_empty, almost_full, ovf_sticky;
+  logic [3:0] level;
+
+  always #5 pclk = ~pclk;
+
+  spi_tx_fifo dut (
+    .pclk(pclk), .rst_n(rst_n),
+    .wr_en(wr_en), .rd_en(rd_en), .flush(flush),
+    .wr_data(wr_data), .rd_data(rd_data),
+    .full(full), .empty(empty),
+    .almost_empty(almost_empty), .almost_full(almost_full),
+    .ovf_sticky(ovf_sticky), .level(level)
+  );
+
+  integer i;
+
+  task automatic fifo_write(input logic [7:0] data);
+    wr_data = data; wr_en = 1;
+    @(posedge pclk); #1;
+    wr_en = 0;
+  endtask
+
+  task automatic fifo_read;
+    rd_en = 1;
+    @(posedge pclk); #1;
+    rd_en = 0;
+  endtask
+
+  initial begin
+    rst_n = 0; wr_en = 0; rd_en = 0; flush = 0; wr_data = 0;
+    repeat(4) @(posedge pclk);
+    rst_n = 1;
+    @(posedge pclk); #1;
+
+    // Test 1: Fill to full
+    $display("=== Test 1: Fill to full ===");
+    for (i = 0; i < 8; i = i + 1) fifo_write(8'hA0 + i);
+    if (full === 1'b1 && level === 4'd8)
+      $display("PASS  FIFO full: level=%0d full=1", level);
+    else
+      $display("FAIL  fill: level=%0d full=%0b", level, full);
+
+    // Test 2: Overflow protection
+    $display("=== Test 2: Overflow ===");
+    fifo_write(8'hFF);
+    if (ovf_sticky === 1'b1 && level === 4'd8)
+      $display("PASS  overflow: ovf_sticky=1 level stays 8");
+    else
+      $display("FAIL  overflow: ovf_sticky=%0b level=%0d", ovf_sticky, level);
+
+    // Test 3: Drain to empty
+    $display("=== Test 3: Drain ===");
+    for (i = 0; i < 8; i = i + 1) fifo_read();
+    if (empty === 1'b1 && level === 4'd0)
+      $display("PASS  drained: level=%0d empty=1", level);
+    else
+      $display("FAIL  drain: level=%0d empty=%0b", level, empty);
+
+    // Test 4: Watermarks
+    $display("=== Test 4: Watermarks ===");
+    for (i = 0; i < 6; i = i + 1) fifo_write(8'hB0 + i);
+    if (almost_full === 1'b1)
+      $display("PASS  almost_full at level=%0d", level);
+    else
+      $display("FAIL  almost_full: level=%0d flag=%0b", level, almost_full);
+    for (i = 0; i < 4; i = i + 1) fifo_read();
+    if (almost_empty === 1'b1)
+      $display("PASS  almost_empty at level=%0d", level);
+    else
+      $display("FAIL  almost_empty: level=%0d flag=%0b", level, almost_empty);
+
+    // Test 5: Flush
+    $display("=== Test 5: Flush ===");
+    for (i = 0; i < 4; i = i + 1) fifo_write(8'hC0 + i);
+    flush = 1; @(posedge pclk); #1; flush = 0;
+    if (empty === 1'b1 && level === 4'd0)
+      $display("PASS  flush: empty=1 level=0");
+    else
+      $display("FAIL  flush: empty=%0b level=%0d", empty, level);
+
+    $display("FIFO testbench complete!");
+    $finish;
+  end
+endmodule`,
+      expected: [
+        'PASS  FIFO full:',
+        'PASS  overflow: ovf_sticky=1',
+        'PASS  flush: empty=1 level=0',
+        'FIFO testbench complete!'
       ]
     }
   ]
