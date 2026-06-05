@@ -56,15 +56,29 @@ Build the **SPI Deep-Dive** course (`spi_long`) — a 6-month, 16-module standal
     Fallback if a row is missing: open static/lessons/modules/<moduleId>.js and
     read the final lesson's hint field for the port list.
 6.  Read agent.md — lesson schema, tier rules, Verilator testbench rules
+6a. Read docs/spi_long_writing_guide.md — MANDATORY for every session.
+    This file defines:
+      • Token budget per lesson (theory ≥ 2,500 chars; 30% more than base msv series)
+      • Voice rules: "we are building", "Imagine..." openings, designer perspective
+      • Task format: Step-based ONLY ("Step 1 — ..."), never "── Line N ──" or "── Port ──"
+      • Block diagram rule: every L1 theory must include a full system ASCII diagram
+      • No IC part numbers (no W25Q128, MCP4921, MAX31865 etc. — use generic names)
+      • Code complexity progression table
+      • Certification milestone task strings (exact wording)
+    Failure to read this file produces lessons in the wrong format that will be rejected.
 7.  Build  static/lessons/modules/<moduleId>.js
-8.  COMMIT 1 (branch: current working branch):
+8.  COMMIT 1 (branch: develop):
         files:   static/lessons/modules/<moduleId>.js
         message: 'feat(<moduleId>): <title> — <N> lessons'
-9.  COMMIT 2 (branch: current working branch):
-        files:   static/index.html
-                 static/lessons/curriculum.js
-        message: 'feat(<moduleId>): register module in index/curriculum'
-        NOTE: courses.js does not exist and is not used — skip it.
+9.  COMMIT 2 (branch: develop):
+        files:   static/lessons/courses.js
+        message: 'feat(<moduleId>): register module in courses.js'
+        ACTION: append '<moduleId>' to the modules array of the 'spi_long' course object.
+        The courses.js file exists at static/lessons/courses.js. Read it first, then push
+        the updated version. DO NOT skip this step — modules not in courses.js are invisible
+        on the landing page even if the JS file and curriculum.js are correct.
+        (index.html dynamically loads all modules listed in courses.js at page-parse time;
+         curriculum.js reads window.CURRICULUM_MODULES which is populated by those scripts.)
 10. If this chapter is an INTEGRATION CHECKPOINT (§6):
         → Verify the L4 testbench instantiates all required prior modules
         → Check that cross-module signal names match §7 Interface Contracts
@@ -72,7 +86,7 @@ Build the **SPI Deep-Dive** course (`spi_long`) — a 6-month, 16-module standal
 11. Update docs/spi_port_registry.md — add a row for the module just built.
     Copy exact port names from the final lesson's hint field.
     Also add integration wiring notes if this chapter is a checkpoint dependency.
-12. COMMIT 3 (branch: current working branch):
+12. COMMIT 3 (branch: claude/spi-master-fsm-spec-CaaqI):
         files:   docs/spi_deep_dive.md  (❌ → ✅, advance cursor)
                  docs/spi_port_registry.md  (new module row added in step 11)
         message: 'chore: mark <moduleId> done, update port registry'
@@ -202,20 +216,20 @@ ABORT_WAIT   = 7'b100_0000
 
 ## 8. Commit Protocol
 
-Every chapter produces exactly 3 commits (all to the current working branch):
+Every chapter produces exactly 3 commits:
 
 ```
-Commit 1 — current working branch
+Commit 1 — branch: develop
   Files:   static/lessons/modules/<moduleId>.js
   Format:  feat(<moduleId>): <title> — <N> lessons
 
-Commit 2 — current working branch
-  Files:   static/index.html
-           static/lessons/curriculum.js
-  Format:  feat(<moduleId>): register module in index/curriculum
-  NOTE: courses.js does NOT exist and is NOT used by app.js. Do not create it.
+Commit 2 — branch: develop
+  Files:   static/lessons/courses.js
+  Format:  feat(<moduleId>): register module in courses.js
+  ACTION:  Read courses.js first. Append '<moduleId>' to the modules array
+           of the 'spi_long' course object. Push the complete updated file.
 
-Commit 3 — current working branch
+Commit 3 — branch: claude/spi-master-fsm-spec-CaaqI
   Files:   docs/spi_deep_dive.md      (❌ → ✅, advance cursor)
            docs/spi_port_registry.md  (new row for this module)
   Format:  chore: mark <moduleId> done, update port registry
@@ -227,21 +241,46 @@ Use `mcp__github__push_files` for all commits (never `git` CLI for these three).
 
 ## 9. Registration Rules
 
-### static/index.html
-Add one `<script>` tag inside the `<!-- SCRIPTS -->` block, BEFORE `curriculum.js`:
-```html
-<script src="/lessons/modules/spi_long1.js"></script>
+### How module loading works
+
+`index.html` contains this boot script:
+```javascript
+(function () {
+  var ids = (window.COURSES || []).reduce(function (a, c) { return a.concat(c.modules); }, []);
+  ids.forEach(function (id) {
+    document.write('<script src="/lessons/modules/' + id + '.js"><\/script>');
+  });
+}());
+```
+This means **`courses.js` is the single source of truth** for which module files get loaded.
+A module that exists in `static/lessons/modules/` but is **not** listed in `courses.js` will
+never appear on the landing page. `curriculum.js` and `index.html` do not need manual edits.
+
+### static/lessons/courses.js — REQUIRED UPDATE every session
+
+File path: `static/lessons/courses.js`
+
+Find the `spi_long` course object and append the new module ID:
+```javascript
+{
+  id: 'spi_long',
+  title: 'SPI Zero to Hero (2 Month)',
+  icon: '🔬',
+  description: '...',
+  modules: ['spi_long1', 'spi_long2', ..., '<new_moduleId>'],  // ← append here
+}
 ```
 
-### static/lessons/curriculum.js
-Append the module ID to the `CURRICULUM` array (order = display order on landing page).
+Read the current file before pushing. Never overwrite without reading first.
 
-### static/lessons/courses.js — NOT USED
-`courses.js` does not exist in this repository and is not referenced by `app.js`.
-The app builds the landing page directly from the `CURRICULUM` array (populated by
-each module's `<script>` tag). **Do not create `courses.js`.**
+### static/index.html and static/lessons/curriculum.js — NOT NEEDED
 
-### docs/spi_port_registry.md
+Do **not** edit `index.html` or `curriculum.js` for spi_long modules.
+The dynamic loader in `index.html` (boot script above) handles loading automatically
+from `courses.js`. Manual `<script>` tags and `CURRICULUM` array entries are not required.
+
+### docs/spi_port_registry.md — REQUIRED UPDATE every session
+
 After every session, add a row for the newly built module. This file is the
 authoritative port manifest used by integration testbenches.
 
@@ -249,7 +288,8 @@ authoritative port manifest used by integration testbenches.
 
 ## 10. Certification Milestones
 
-Embed these as the **final task** in the final lesson of the trigger chapter:
+Embed these as the **final task** in the final lesson of the trigger chapter.
+Copy the task string **exactly** — the frontend checks for these strings.
 
 | Certificate | Trigger | Task string |
 |---|---|---|
@@ -262,20 +302,16 @@ Embed these as the **final task** in the final lesson of the trigger chapter:
 
 ## 11. Lesson Content Depth Requirements
 
-This course is a deep-dive. Every lesson must meet these minimum content standards:
+This course is a deep-dive. Every lesson must meet these minimum content standards.
+**See `docs/spi_long_writing_guide.md` for the full ruleset including token budget,
+voice rules, task format, and code complexity progression.**
 
-**Theory field:**
-- At minimum: 1 block diagram or signal-flow diagram in ASCII
-- At minimum: 1 truth table or mode table where applicable
-- Must explain the WHY, not just the what (constraints, traps, physical reality)
-- Call out the most common RTL implementation mistake for this block explicitly
-- Reference the spec signal names from §7 above — students see the same names in hardware
-
-**Testbench field:**
-- All testbenches use Verilator 5.020 rules (from agent.md)
-- Clocked testbenches run at least 20 clock cycles of meaningful stimulus
-- Every `$display` line starts with `PASS` or `FAIL`
-- Integration checkpoint testbenches print the checkpoint name: `$display("=== Checkpoint A: Clock+Shift Loopback ===")`
+Key requirements (summary — read the full guide for details):
+- Theory ≥ 2,500 chars; ~30% deeper than base msv series
+- Every L1 theory has a full system ASCII block diagram
+- Tasks use Step-based format: `Step 1 — ...`, `Step 2 — ...`
+- No IC part numbers in any field
+- "We are building" / "Imagine..." tone throughout
 
 **Known design traps (must be mentioned in the relevant chapter's theory):**
 
