@@ -1,7 +1,7 @@
 # SPI Deep-Dive — Curriculum Tracker
 
 > **This file changes every session.** After each chapter is pushed, update the status column (❌ → ✅) and advance the cursor.
-> Course ID: `spi_long` | Branch: `develop` | Docs branch: `main`
+> Course ID: `spi_long` | Branch: `develop` | Docs branch: `claude/spi-master-fsm-spec-CaaqI`
 
 ---
 
@@ -17,8 +17,8 @@
 | 6 | `spi_long6` | CPOL/CPHA Timing Engine | 2 | 3→4 | 4 | ✅ done |
 | 7 | `spi_long7` | CS Controller & Timing | 3 | 3→4 | 4 | ✅ done |
 | 8 | `spi_long8` | Master FSM | 3 | 4 | 4 | ✅ done |
-| 9 | `spi_long9` | Error Handling & Interrupt Controller | 3 | 4 | 4 | ❌ **build this next** |
-| 10 | `spi_long10` | SPI Package & Internal Interfaces | 4 | 4 | 3 | ❌ |
+| 9 | `spi_long9` | Error Handling & Interrupt Controller | 3 | 4 | 4 | ✅ done |
+| 10 | `spi_long10` | SPI Package & Internal Interfaces | 4 | 4 | 3 | ❌ **build this next** |
 | 11 | `spi_long11` | APB Register Interface | 4 | 4→5 | 4 | ❌ |
 | 12 | `spi_long12` | Full SPI Master Integration | 4 | 5 | 4 | ❌ |
 | 13 | `spi_long_tb1` | Unit Testbench Suite | 5 | 5 | 4 | ❌ |
@@ -52,8 +52,9 @@ Phase 2 complete ✅
 
 ### Phase 3 — Control Path (Month 4) | spi_long7–spi_long9
 Goal: Full SPI transfer under FSM control with error handling.
-Modules done: spi_long7, spi_long8. Remaining: spi_long9.
+Modules done: spi_long7, spi_long8, spi_long9.
 **Checkpoint B** ✅ PASSED (spi_long8 L4 — 3-word CONT_XFER burst)
+Phase 3 complete ✅
 
 ### Phase 4 — Integration (Month 5) | spi_long10–spi_long12
 Goal: All modules assembled into register-programmable APB-connected SPI master.
@@ -90,7 +91,8 @@ Goal: Production-grade verification environment.
 | 7 | 2026-06-04 | spi_long6 — CPOL/CPHA Timing Engine (4 lessons) | 5d1c572 |
 | 8 | 2026-06-04 | spi_long7 — CS Controller & Timing (4 lessons) | 14b2154 |
 | 9 | 2026-06-05 | spi_long8 — Master FSM (4 lessons, Checkpoint B) | e398afe |
+| 10 | 2026-06-05 | spi_long9 — Error Handling & Interrupt Controller (4 lessons) | 9f3867f |
 
 ---
 
-*Cursor: spi_long9 is next. Read `docs/spi_long_writing_guide.md` and `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long10 is next. Read `docs/spi_long_writing_guide.md` and `docs/spi_agent_orchestrator.md` before starting.*
