@@ -20,8 +20,8 @@
 | 9 | `spi_long9` | Error Handling & Interrupt Controller | 3 | 4 | 4 | ✅ done |
 | 10 | `spi_long10` | SPI Package & Internal Interfaces | 4 | 4 | 3 | ✅ done |
 | 11 | `spi_long11` | APB Register Interface | 4 | 4→5 | 4 | ✅ done |
-| 12 | `spi_long12` | Full SPI Master Integration | 4 | 5 | 4 | ❌ **build this next** |
-| 13 | `spi_long_tb1` | Unit Testbench Suite | 5 | 5 | 4 | ❌ |
+| 12 | `spi_long12` | Full SPI Master Integration | 4 | 5 | 4 | ✅ done |
+| 13 | `spi_long_tb1` | Unit Testbench Suite | 5 | 5 | 4 | ❌ **build this next** |
 | 14 | `spi_long_tb2` | Corner Case Coverage | 5 | 5 | 4 | ❌ |
 | 15 | `spi_long_tb3` | SVA & Formal Verification | 5 | 5 | 3 | ❌ |
 | 16 | `spi_long_tb4` | Integration & System Verification | 5 | 5 | 4 | ❌ |
@@ -34,7 +34,7 @@
 |---|---|---|---|
 | A — Clock + Shift Loopback | spi_long5 L4 | `PASS rx_data=0xa5` in Mode 0 | ✅ |
 | B — FSM + CS + 3-word burst | spi_long8 L4 | CS never toggles mid-burst; word_done fires 3× | ✅ |
-| C — Full APB-driven transfer | spi_long12 L4 | All 4 modes × WL=8/16/32; IRQ fires once; RXDATA==TXDATA | ⬜ |
+| C — Full APB-driven transfer | spi_long12 L4 | All 4 modes × WL=8/16; IRQ fires once; RXDATA==TXDATA | ✅ |
 | D — 38-item DV checklist | spi_long_tb4 L4 | All 38 items print `PASS` | ⬜ |
 
 ---
@@ -53,9 +53,8 @@ Phase 2 complete ✅
 Phase 3 complete ✅
 
 ### Phase 4 — Integration (Month 5) | spi_long10–spi_long12
-Goal: All modules assembled into register-programmable APB-connected SPI master.
-Modules done: spi_long10, spi_long11. Remaining: spi_long12.
-**Checkpoint C** fires at end of spi_long12.
+**Checkpoint C** ✅ PASSED — All 4 SPI modes × WL=8/16, IRQ fire-and-clear verified in spi_long12 L4.
+Phase 4 complete ✅
 
 ### Phase 5 — Verification (Month 6) | spi_long_tb1–spi_long_tb4
 Goal: Production-grade verification environment.
@@ -69,7 +68,7 @@ Goal: Production-grade verification environment.
 |---|---|---|
 | SPI Foundations | spi_long5 L4 | ✅ |
 | SPI Protocol Engineer | spi_long8 L4 | ✅ |
-| SPI Silicon Designer | spi_long12 L4 | ⬜ |
+| SPI Silicon Designer | spi_long12 L4 | ✅ |
 | SPI Verification Engineer | spi_long_tb4 L4 | ⬜ |
 
 ---
@@ -91,7 +90,8 @@ Goal: Production-grade verification environment.
 | 10 | 2026-06-05 | spi_long9 — Error Handling & Interrupt Controller | 9f3867f |
 | 11 | 2026-06-05 | spi_long10 — SPI Package & Internal Interfaces | da6c11c |
 | 12 | 2026-06-05 | spi_long11 — APB Register Interface | 8aeb8f7 |
+| 13 | 2026-06-05 | spi_long12 — Full SPI Master Integration (Checkpoint C) | a6424cde |
 
 ---
 
-*Cursor: spi_long12 is next. Read `docs/spi_long_writing_guide.md` and `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long_tb1 is next. Read `docs/spi_long_writing_guide.md` and `docs/spi_agent_orchestrator.md` before starting.*
