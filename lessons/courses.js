@@ -39,6 +39,7 @@ window.COURSES = [
     title: 'SPI Zero to Hero (2 Month)',
     icon: '🔬',
     description: 'Build a complete register-programmable SPI master from wire definitions to APB-connected RTL — deep-dive track',
-    modules: ['spi_long1', 'spi_long2', 'spi_long3', 'spi_long4', 'spi_long5', 'spi_long6', 'spi_long7', 'spi_long8'],
+    modules: ['spi_long1', 'spi_long2', 'spi_long3', 'spi_long4', 'spi_long5',
+              'spi_long6', 'spi_long7', 'spi_long8', 'spi_long9'],
   }
 ];
