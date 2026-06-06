@@ -24,7 +24,7 @@
 | 13 | `spi_long_tb1` | Unit Testbench Suite | 5 | 5 | 4 | ✅ done |
 | 14 | `spi_long_tb2` | Corner Case Coverage | 5 | 5 | 4 | ✅ done |
 | 15 | `spi_long_tb3` | SVA & Formal Verification | 5 | 5 | 3 | ✅ done |
-| 16 | `spi_long_tb4` | Integration & System Verification | 5 | 5 | 4 | ❌ **build this next** |
+| 16 | `spi_long_tb4` | Integration & System Verification | 5 | 5 | 4 | ✅ done |
 
 ---
 
@@ -35,7 +35,7 @@
 | A — Clock + Shift Loopback | spi_long5 L4 | `PASS rx_data=0xa5` in Mode 0 | ✅ |
 | B — FSM + CS + 3-word burst | spi_long8 L4 | CS never toggles mid-burst; word_done fires 3× | ✅ |
 | C — Full APB-driven transfer | spi_long12 L4 | All 4 modes × WL=8/16; IRQ fires once; RXDATA==TXDATA | ✅ |
-| D — 38-item DV checklist | spi_long_tb4 L4 | All 38 items print `PASS` | ⬜ |
+| D — 38-item DV checklist | spi_long_tb4 L4 | All 38 items print `PASS` | ✅ PASSED — All 38 DV checklist items, spi_long_tb4 L4 |
 
 ---
 
@@ -58,7 +58,8 @@ Phase 4 complete ✅
 
 ### Phase 5 — Verification (Month 6) | spi_long_tb1–spi_long_tb4
 Goal: Production-grade verification environment.
-**Checkpoint D** fires at end of spi_long_tb4.
+**Checkpoint D** ✅ PASSED — All 38 DV checklist items verified in spi_long_tb4 L4.
+Phase 5 complete ✅
 
 ---
 
@@ -69,7 +70,7 @@ Goal: Production-grade verification environment.
 | SPI Foundations | spi_long5 L4 | ✅ |
 | SPI Protocol Engineer | spi_long8 L4 | ✅ |
 | SPI Silicon Designer | spi_long12 L4 | ✅ |
-| SPI Verification Engineer | spi_long_tb4 L4 | ⬜ |
+| SPI Verification Engineer | spi_long_tb4 L4 | ✅ |
 
 ---
 
@@ -94,7 +95,8 @@ Goal: Production-grade verification environment.
 | 14 | 2026-06-06 | spi_long_tb1 — Unit Testbench Suite (4 lessons) | ed5712d |
 | 15 | 2026-06-06 | spi_long_tb2 — Corner Case Coverage (4 lessons) | 6a260a9 |
 | 16 | 2026-06-06 | spi_long_tb3 — SVA & Formal Verification (3 lessons) | 47ccd69 |
+| 17 | 2026-06-06 | spi_long_tb4 — Integration & System Verification (4 lessons, Checkpoint D) | 590981e |
 
 ---
 
-*Cursor: spi_long_tb4 is next. Build L1 (SPI slave model), then L2 (4 modes × 3 widths), L3 (performance), L4 (38-item DV checklist + Checkpoint D).*
+*Curriculum complete. All 16 modules built, all 4 integration checkpoints passed, all 4 certification milestones reached. The spi_long course is handoff-ready.*
