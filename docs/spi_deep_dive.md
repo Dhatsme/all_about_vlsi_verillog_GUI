@@ -21,8 +21,8 @@
 | 10 | `spi_long10` | SPI Package & Internal Interfaces | 4 | 4 | 3 | ✅ done |
 | 11 | `spi_long11` | APB Register Interface | 4 | 4→5 | 4 | ✅ done |
 | 12 | `spi_long12` | Full SPI Master Integration | 4 | 5 | 4 | ✅ done |
-| 13 | `spi_long_tb1` | Unit Testbench Suite | 5 | 5 | 4 | ❌ **build this next** |
-| 14 | `spi_long_tb2` | Corner Case Coverage | 5 | 5 | 4 | ❌ |
+| 13 | `spi_long_tb1` | Unit Testbench Suite | 5 | 5 | 4 | ✅ done |
+| 14 | `spi_long_tb2` | Corner Case Coverage | 5 | 5 | 4 | ❌ **build this next** |
 | 15 | `spi_long_tb3` | SVA & Formal Verification | 5 | 5 | 3 | ❌ |
 | 16 | `spi_long_tb4` | Integration & System Verification | 5 | 5 | 4 | ❌ |
 
@@ -91,7 +91,8 @@ Goal: Production-grade verification environment.
 | 11 | 2026-06-05 | spi_long10 — SPI Package & Internal Interfaces | da6c11c |
 | 12 | 2026-06-05 | spi_long11 — APB Register Interface | 8aeb8f7 |
 | 13 | 2026-06-05 | spi_long12 — Full SPI Master Integration (Checkpoint C) | a6424cde |
+| 14 | 2026-06-06 | spi_long_tb1 — Unit Testbench Suite (4 lessons) | ed5712d |
 
 ---
 
-*Cursor: spi_long_tb1 is next. Read `docs/spi_long_writing_guide.md` and `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long_tb2 is next. Read `docs/spi_long_writing_guide.md` and `docs/spi_agent_orchestrator.md` before starting.*
