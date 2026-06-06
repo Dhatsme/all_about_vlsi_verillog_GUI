@@ -23,8 +23,8 @@
 | 12 | `spi_long12` | Full SPI Master Integration | 4 | 5 | 4 | ✅ done |
 | 13 | `spi_long_tb1` | Unit Testbench Suite | 5 | 5 | 4 | ✅ done |
 | 14 | `spi_long_tb2` | Corner Case Coverage | 5 | 5 | 4 | ✅ done |
-| 15 | `spi_long_tb3` | SVA & Formal Verification | 5 | 5 | 3 | ❌ **build this next** |
-| 16 | `spi_long_tb4` | Integration & System Verification | 5 | 5 | 4 | ❌ |
+| 15 | `spi_long_tb3` | SVA & Formal Verification | 5 | 5 | 3 | ✅ done |
+| 16 | `spi_long_tb4` | Integration & System Verification | 5 | 5 | 4 | ❌ **build this next** |
 
 ---
 
@@ -93,7 +93,8 @@ Goal: Production-grade verification environment.
 | 13 | 2026-06-05 | spi_long12 — Full SPI Master Integration (Checkpoint C) | a6424cde |
 | 14 | 2026-06-06 | spi_long_tb1 — Unit Testbench Suite (4 lessons) | ed5712d |
 | 15 | 2026-06-06 | spi_long_tb2 — Corner Case Coverage (4 lessons) | 6a260a9 |
+| 16 | 2026-06-06 | spi_long_tb3 — SVA & Formal Verification (3 lessons) | 47ccd69 |
 
 ---
 
-*Cursor: spi_long_tb3 is next. Read `docs/spi_long_writing_guide.md` and `docs/spi_agent_orchestrator.md` before starting.*
+*Cursor: spi_long_tb4 is next. Build L1 (SPI slave model), then L2 (4 modes × 3 widths), L3 (performance), L4 (38-item DV checklist + Checkpoint D).*
