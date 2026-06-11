@@ -44,14 +44,16 @@ If any are missing, create a short standalone lesson or bridge lesson before sta
 
 | # | Module ID | Title | Lessons | Status |
 |---|---|---|---|---|
-| 1 | `i2c1` | I²C Fundamentals | L1 Open-Drain IO, L2 START/STOP Conditions, L3 Bit-Bang Controller | ❌ **build this next** |
-| 2 | `i2c2` | Clock & Data Timing | L1 SCL Generator, L2 SDA Sample & Drive, L3 Setup/Hold Checker | ❌ |
-| 3 | `i2c3` | Master Byte Operations | L1 Byte Transmitter, L2 ACK/NACK Detection, L3 Byte Receiver | ❌ |
-| 4 | `i2c4` | Full Transactions | L1 Master Write, L2 Master Read, L3 Repeated START | ❌ |
-| 5 | `i2c5` | I²C Slave Design | L1 Address Decoder, L2 Slave Byte Engine, L3 Portfolio: Register-File Slave | ❌ |
-| 6 | `i2c6` | Clock Stretching | L1 Stretch Detect, L2 Slave Clock Stretch, L3 Portfolio: Stretching Slave | ❌ |
-| 7 | `i2c7` | Multi-Master & Arbitration | L1 Bus Idle Detector, L2 Arbitration Logic, L3 Portfolio: Arbitrating Master | ❌ |
-| 8 | `i2c8` | Advanced I²C | L1 10-bit Addressing, L2 SMBus Alert, L3 Portfolio: Full I²C Subsystem | ❌ |
+| 1 | `i2c1` | I²C Fundamentals | L1 Open-Drain IO, L2 START/STOP Conditions, L3 Bit-Bang Controller | ✅ done |
+| 2 | `i2c2` | Clock & Data Timing | L1 SCL Generator, L2 SDA Sample & Drive, L3 Setup/Hold Checker | ✅ done |
+| 3 | `i2c3` | Master Byte Operations | L1 Byte Transmitter, L2 ACK/NACK Detection, L3 Byte Receiver | ✅ done |
+| 4 | `i2c4` | Full Transactions | L1 Master Write, L2 Master Read, L3 Repeated START | ✅ done |
+| 5 | `i2c5` | I²C Slave Design | L1 Address Decoder, L2 Slave Byte Engine, L3 Portfolio: Register-File Slave | ✅ done |
+| 6 | `i2c6` | Clock Stretching | L1 Stretch Detect, L2 Slave Clock Stretch, L3 Portfolio: Stretching Slave | ✅ done |
+| 7 | `i2c7` | Multi-Master & Arbitration | L1 Bus Idle Detector, L2 Arbitration Logic, L3 Portfolio: Arbitrating Master | ✅ done |
+| 8 | `i2c8` | Advanced I²C | L1 10-bit Addressing, L2 SMBus Alert, L3 Portfolio: Full I²C Subsystem | ✅ done |
+
+*I²C Design course complete. All 8 modules built and registered in courses.js.*
 
 ---
 
