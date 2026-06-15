@@ -43,5 +43,12 @@ window.COURSES = [
               'spi_long6', 'spi_long7', 'spi_long8', 'spi_long9', 'spi_long10',
               'spi_long11', 'spi_long12', 'spi_long_tb1', 'spi_long_tb2', 'spi_long_tb3',
               'spi_long_tb4'],
-  }
+  },
+  {
+    id: 'spiv',
+    title: 'SPI Verification (Verilator)',
+    icon: '🔬',
+    description: 'Flat SystemVerilog testbenches for SPI — runs in Verilator, no classes required',
+    modules: ['spiv1'],
+  },
 ];
