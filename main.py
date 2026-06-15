@@ -175,87 +175,28 @@ def uvm_info():
     info.update(_verilator_version())
     return info
 
-# ── FEEDBACK ────────────────────────────────────────────────────────────────────────────────────
+# ── FEEDBACK ──────────────────────────────────────────────────────────────────
 
-_GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-_GITHUB_REPO  = os.environ.get("GITHUB_REPO", "dhatsme/all_about_vlsi_verillog_gui")
+_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1515914856039977180/v3E209U8tqNY3ZCkd2EKAbqwlVuaLryaFAylGI207gjFHIgyJoRCxDNXcgKBVxzvO7Cw"
 
-def _post_feedback_issue(entry: dict) -> bool:
-    """Create a GitHub Issue for one feedback entry. Returns True on success."""
-    if not _GITHUB_TOKEN:
-        return False
+def _post_to_discord(entry: dict) -> None:
     stars = "★" * entry["rating"] + "☆" * (5 - entry["rating"]) if entry["rating"] else "no rating"
-    body = (
-        f"**Module:** `{entry['module']}`  \n"
-        f"**Lesson:** `{entry['lesson']}`  \n"
-        f"**Rating:** {stars} ({entry['rating']}/5)  \n"
-        f"**Time:** {entry['ts']}  \n\n"
-        f"**Comment:**\n{entry['comment'] or '_(none)_'}"
+    msg = (
+        f"**New Feedback** {stars}\n"
+        f"**Module:** {entry['module']} | **Lesson:** {entry['lesson']}\n"
+        f"**Comment:** {entry['comment'] or '_(none)_'}\n"
+        f"**Time:** {entry['ts']}"
     )
-    labels = ["feedback"]
-    if entry["module"]:
-        labels.append(entry["module"])
-    payload = json.dumps({
-        "title":  f"[Feedback] {stars} — {entry['module']} / {entry['lesson']}",
-        "body":   body,
-        "labels": labels,
-    }).encode()
-    req = urllib.request.Request(
-        f"https://api.github.com/repos/{_GITHUB_REPO}/issues",
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {_GITHUB_TOKEN}",
-            "Accept":        "application/vnd.github+json",
-            "Content-Type":  "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        method="POST",
-    )
+    payload = json.dumps({"content": msg}).encode()
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status == 201
-    except urllib.error.URLError:
-        return False
-
-_GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", "")
-_GITHUB_REPO  = os.environ.get("GITHUB_REPO", "dhatsme/all_about_vlsi_verillog_gui")
-
-def _post_feedback_issue(entry: dict) -> bool:
-    """Create a GitHub Issue for one feedback entry. Returns True on success."""
-    if not _GITHUB_TOKEN:
-        return False
-    stars = "★" * entry["rating"] + "☆" * (5 - entry["rating"]) if entry["rating"] else "no rating"
-    body = (
-        f"**Module:** `{entry['module']}`  \n"
-        f"**Lesson:** `{entry['lesson']}`  \n"
-        f"**Rating:** {stars} ({entry['rating']}/5)  \n"
-        f"**Time:** {entry['ts']}  \n\n"
-        f"**Comment:**\n{entry['comment'] or '_(none)_'}"
-    )
-    labels = ["feedback"]
-    if entry["module"]:
-        labels.append(entry["module"])
-    payload = json.dumps({
-        "title":  f"[Feedback] {stars} — {entry['module']} / {entry['lesson']}",
-        "body":   body,
-        "labels": labels,
-    }).encode()
-    req = urllib.request.Request(
-        f"https://api.github.com/repos/{_GITHUB_REPO}/issues",
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {_GITHUB_TOKEN}",
-            "Accept":        "application/vnd.github+json",
-            "Content-Type":  "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            return resp.status == 201
-    except urllib.error.URLError:
-        return False
+        urllib.request.urlopen(
+            urllib.request.Request(
+                _DISCORD_WEBHOOK, payload,
+                {"Content-Type": "application/json"}
+            ), timeout=10
+        )
+    except Exception:
+        pass  # never let Discord failure break the user's submit
 
 @app.post("/feedback")
 def submit_feedback(req: FeedbackRequest):
@@ -266,11 +207,9 @@ def submit_feedback(req: FeedbackRequest):
         "rating":  req.rating,
         "comment": req.comment,
     }
-    # Always write locally as a backup
     with open("feedback.jsonl", "a") as f:
         f.write(json.dumps(entry) + "\n")
-    # Also post to GitHub Issues if token is configured
-    _post_feedback_issue(entry)
+    _post_to_discord(entry)
     return {"ok": True}
 
 # ── SIMULATION ───────────────────────────────────────────────────────────────────────────────────
