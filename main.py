@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
-import subprocess, tempfile, os, shutil, json, datetime, logging, platform, glob
+import subprocess, tempfile, os, shutil, json, datetime, logging, platform, glob, urllib.request
 
 app = FastAPI(title="AllAboutVLSI Backend")
 
@@ -177,6 +177,27 @@ def uvm_info():
 
 # ── FEEDBACK ──────────────────────────────────────────────────────────────────
 
+_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1515914856039977180/v3E209U8tqNY3ZCkd2EKAbqwlVuaLryaFAylGI207gjFHIgyJoRCxDNXcgKBVxzvO7Cw"
+
+def _post_to_discord(entry: dict) -> None:
+    stars = "★" * entry["rating"] + "☆" * (5 - entry["rating"]) if entry["rating"] else "no rating"
+    msg = (
+        f"**New Feedback** {stars}\n"
+        f"**Module:** {entry['module']} | **Lesson:** {entry['lesson']}\n"
+        f"**Comment:** {entry['comment'] or '_(none)_'}\n"
+        f"**Time:** {entry['ts']}"
+    )
+    payload = json.dumps({"content": msg}).encode()
+    try:
+        urllib.request.urlopen(
+            urllib.request.Request(
+                _DISCORD_WEBHOOK, payload,
+                {"Content-Type": "application/json"}
+            ), timeout=10
+        )
+    except Exception:
+        pass
+
 @app.post("/feedback")
 def submit_feedback(req: FeedbackRequest):
     entry = {
@@ -188,6 +209,7 @@ def submit_feedback(req: FeedbackRequest):
     }
     with open("feedback.jsonl", "a") as f:
         f.write(json.dumps(entry) + "\n")
+    _post_to_discord(entry)
     return {"ok": True}
 
 # ── SIMULATION ────────────────────────────────────────────────────────────────
