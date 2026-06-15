@@ -26,6 +26,23 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 
 ---
 
+## Branch rule
+
+**Always commit to `develop`** unless explicitly told otherwise.
+
+| What | Branch |
+|---|---|
+| Lesson JS files | `develop` |
+| Registration edits (index.html, curriculum.js, courses.js) | `develop` |
+| Bug fixes / CSS / UI changes | `develop` |
+| CLAUDE.md updates | `develop` |
+| Docs cursor update (docs/i2cdesign.md) | `main` |
+
+Never push directly to `main` except for the docs cursor update in Step 8.
+Never create a feature branch unless the user explicitly requests one.
+
+---
+
 ## Curriculum state — update this table after every push
 
 | # | Module ID | Title | Lessons | Status |
@@ -425,6 +442,8 @@ Omitting this edit means the module loads silently but the user never sees it.
 
 ## Step 6 — push (TWO commits to stay within token limits)
 
+> **Branch rule reminder: always push to `develop`. Never push lesson/registration files to `main`.**
+
 ### Commit 1 — lesson content only
 Use `mcp__github__push_files` with just the JS file:
 ```
@@ -462,6 +481,8 @@ files: [ { path: 'docs/i2cdesign.md', content: '...' } ]
 message: 'chore: mark i2c1 done, advance curriculum cursor'
 branch: 'main'
 ```
+
+> This is the **only** commit that goes to `main`.
 
 ---
 
@@ -501,6 +522,7 @@ Add these as the final task in the last lesson of the trigger chapter:
 [ ] docs/i2cdesign.md updated: ❌ → ✅ for built chapter, cursor advanced
 [ ] I²C: inout ports used correctly; SDA/SCL released with 1'bz not 1'b1
 [ ] I²C: pullup primitive in every testbench that uses inout wires
+[ ] Push target is `develop` (not `main`, not a feature branch)
 ```
 
 ---
