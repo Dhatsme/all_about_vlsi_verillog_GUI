@@ -1,45 +1,84 @@
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
   id: 'spiv1',
-  title: 'SPI Verification: Loopback Test',
+  title: 'SPI Verification: OOP Environment',
   icon: '🔬',
   level: 'advanced',
   lessons: [
     {
       id: 'spiv1l1',
-      title: 'L1 — SPI Master Loopback Verification',
-      theory: `<h2>SPI Master — Loopback Verification</h2>
-<p>The <strong>Design tab</strong> contains a complete SPI Master (Mode 0, 8-bit, 4-deep FIFO).
-The <strong>Testbench tab</strong> drives 5 test scenarios using a loopback connection
-(<code>miso = mosi</code>). Every byte received back must equal the byte sent
-— if it does, the DUT is working correctly.</p>
-<p>This is a flat, Verilator-compatible testbench — no classes, no UVM, no virtual
-interfaces. Set <strong>--no-timing</strong> in ⚙ Options before running.</p>`,
+      title: 'L1 — Class-Based SPI Verification',
+      theory: `<h2>Class-Based OOP Verification Environment</h2>
+<p>This lesson runs a <strong>complete UVM-style verification environment</strong> built
+in pure SystemVerilog — no UVM library required. Every component is a class.
+The loopback wire (<code>miso = mosi</code>) means every received byte must equal
+the transmitted byte.</p>
+<h3>Component hierarchy</h3>
+<pre class="code-block">
+spi_if        — interface: all DUT signals + clock
+spi_transaction — rand class: one 8-bit transfer
+spi_sequencer   — TLM mailbox: test → driver
+base_sequence   — base class with virtual task body()
+  sanity_seq    — 4 directed bytes (A5/5A/00/FF)
+  boundary_seq  — 4 boundary values
+  rand_seq      — N fully-random bytes
+spi_scoreboard  — expected queue + check()
+spi_driver      — gets txn from mailbox, drives DUT
+spi_monitor     — polls rx_valid, feeds scoreboard
+spi_env         — wires all components together
+module tb       — DUT + 5 test tasks
+</pre>
+<h3>TLM data flow</h3>
+<pre class="code-block">
+test task
+  → seq.body()          puts transactions in mailbox
+  → driver.run()        gets from mailbox, drives DUT
+    ↓ push_exp(d)       registers expected value in scoreboard
+  → monitor.run()       polls rx_valid, pops byte
+    ↓ scb.check(b)      compares got vs expected
+</pre>
+<p>Set Timing Mode to <strong>--timing</strong> (not --no-timing) — fork/join and
+blocking mailbox.get() require the timing scheduler.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and hit Run.</p>`,
 
       tasks: [
         'Read the Design tab — the complete SPI Master RTL is pre-loaded.',
-        'Read the Testbench tab — 5 scenarios: sanity, boundary, burst, abort+recovery, sequential.',
-        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
-        'Hit Run — all PASS lines should appear in the Output tab',
+        'Read the Testbench tab — classes, mailbox, virtual interface, scoreboard, 5 tests.',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --timing before running',
+        'Hit Run — PASS lines from all 5 tests should appear in the Output tab',
       ],
 
       hint:
-`SPI Master loopback test — what to expect:
+`ARCHITECTURE NOTES
 
-  Loopback: miso is tied to mosi in the testbench.
-  For every normal transfer: RX byte must equal TX byte.
+  Interface (spi_if):
+    Holds all DUT signals. Driver and monitor receive a
+    virtual spi_if handle — they never touch the module directly.
 
-  T1 Sanity    : 1 transfer  → PASS  TX=a5 RX=a5
-  T2 Boundary  : 4 transfers → PASS for 00, ff, aa, 55
-  T3 Burst     : 4 transfers → PASS for de, ad, be, ef
-  T4 Abort     : abort mid-transfer → PASS  abort acknowledged
-                 recovery transfer  → PASS  TX=ad RX=ad
-  T5 Sequential: 4 transfers → PASS for 11, 22, 33, 44
+  Scoreboard race prevention:
+    Driver calls push_exp(d) BEFORE pulsing start.
+    Monitor can never see rx_valid before the expected value
+    is already in the queue.
 
-  Key signals to watch in the waveform:
-    cs_n  — low during transfer, high between words
-    sck   — toggles only while cs_n is low
-    mosi  — MSB first, changes on falling SCK edge
-    done  — 1-cycle pulse when 8 bits have been captured`,
+  TLM mailbox pattern:
+    seq.body() puts all transactions in req_mb non-blocking.
+    drv.run(seqr, n) calls req_mb.get(txn) — blocks until item.
+    Both run in parallel inside fork...join.
+
+  Transfer flow (per byte):
+    push_exp(d)            → scoreboard knows what to expect
+    tx_data=d; tx_push=1   → load FIFO
+    start=1                → FSM starts shifting
+    while(!done) @clk      → wait 8 SCK cycles
+    monitor sees rx_valid  → pops RX byte, calls scb.check()
+
+  Abort test (T5):
+    Abort signal clears cs_n and returns FSM to IDLE.
+    Check busy==0 after abort.
+    Recovery: run one clean transfer to confirm DUT is healthy.
+
+  Flags needed:
+    --timing    (required for fork/join + blocking mailbox)
+    No other flags needed.`,
 
       design:
 `// SPI Master — Mode 0 (CPOL=0, CPHA=0), 8-bit, 4-deep FIFO
@@ -131,7 +170,7 @@ module spi_master (
           if (start) begin
             if (!tx_empty) begin
               sr_tx  <= txf[txf_rp[1:0]];
-              mosi   <= txf[txf_rp[1:0]][7];  // pre-seed MSB before first SCK
+              mosi   <= txf[txf_rp[1:0]][7];
               txf_rp <= txf_rp + 1;
               cs_n <= 0; busy <= 1; bits <= '0; state <= ST_SHIFT;
             end else tx_underrun <= 1;
@@ -167,94 +206,333 @@ endmodule`,
 
       testbench:
 `\`timescale 1ns/1ps
-module tb;
-  logic clk   = 0;
-  logic rst_n = 0;
-  always #5 clk = ~clk;   // 100 MHz
+// =================================================================
+// SPI OOP Verification Environment
+// Requires: Verilator 5.026+  with  --timing
+// Features: class, virtual interface, mailbox, rand, scoreboard
+// =================================================================
 
-  logic [7:0] clk_div  = 8'd3;
-  logic [7:0] tx_data  = 8'h00;
-  logic       tx_push  = 0;
-  logic       tx_full, tx_empty;
+interface spi_if (input logic clk);
+  logic       rst_n   = 1;
+  logic [7:0] clk_div = 8'd3;
+  logic [7:0] tx_data = '0;
+  logic       tx_push = 0, tx_full, tx_empty;
   logic [7:0] rx_data;
-  logic       rx_pop   = 0;
-  logic       rx_valid;
-  logic       start    = 0;
-  logic       abort    = 0;
+  logic       rx_pop  = 0, rx_valid;
+  logic       start   = 0, abort = 0;
   logic       busy, done, tx_underrun, rx_overrun;
-  logic       sck, mosi, cs_n;
-  logic       miso;
+  logic       sck, mosi, miso, cs_n;
+endinterface
 
-  // Loopback: slave echoes every bit back to master
-  assign miso = mosi;
+// -----------------------------------------------------------------
+// Transaction
+// -----------------------------------------------------------------
+class spi_transaction;
+  rand  logic [7:0] data;
+  int unsigned      id;
+  static int        uid = 0;
+  function new(); id = uid++; endfunction
+  function string to_str();
+    return $sformatf("TXN#%0d 8'h%02h", id, data);
+  endfunction
+endclass
 
-  spi_master dut (
-    .clk(clk), .rst_n(rst_n), .clk_div(clk_div),
-    .tx_data(tx_data), .tx_push(tx_push),
-    .tx_full(tx_full),  .tx_empty(tx_empty),
-    .rx_data(rx_data),  .rx_pop(rx_pop), .rx_valid(rx_valid),
-    .start(start), .abort(abort), .busy(busy), .done(done),
-    .tx_underrun(tx_underrun), .rx_overrun(rx_overrun),
-    .sck(sck), .mosi(mosi), .miso(miso), .cs_n(cs_n)
-  );
+// -----------------------------------------------------------------
+// Sequencer — TLM mailbox (test sends, driver receives)
+// -----------------------------------------------------------------
+class spi_sequencer;
+  mailbox #(spi_transaction) req_mb;
+  function new(); req_mb = new(); endfunction
+  task send(spi_transaction t); req_mb.put(t); endtask
+endclass
 
-  // Push one byte and wait for the DUT to complete the transfer
-  task automatic do_xfer(input logic [7:0] d, output logic [7:0] r);
-    @(posedge clk); #1;
-    tx_data = d; tx_push = 1;
-    @(posedge clk); #1; tx_push = 0;
-    start = 1; @(posedge clk); #1; start = 0;
-    while (!done) @(posedge clk);
-    @(posedge clk); #1;
-    rx_pop = 1; @(posedge clk); #1;
-    r = rx_data; rx_pop = 0;
-    @(posedge clk); #1;
+// -----------------------------------------------------------------
+// Sequences
+// -----------------------------------------------------------------
+class base_sequence;
+  spi_sequencer seqr;
+  function new(spi_sequencer s); seqr = s; endfunction
+  virtual task body(); $fatal(1, "body() not overridden"); endtask
+endclass
+
+class sanity_seq extends base_sequence;
+  function new(spi_sequencer s); super.new(s); endfunction
+  virtual task body();
+    logic [7:0] d[4] = '{8'hA5, 8'h5A, 8'h00, 8'hFF};
+    foreach (d[i]) begin
+      spi_transaction t = new(); t.data = d[i]; seqr.send(t);
+    end
+  endtask
+endclass
+
+class boundary_seq extends base_sequence;
+  function new(spi_sequencer s); super.new(s); endfunction
+  virtual task body();
+    logic [7:0] d[4] = '{8'h00, 8'hFF, 8'h01, 8'hFE};
+    foreach (d[i]) begin
+      spi_transaction t = new(); t.data = d[i]; seqr.send(t);
+    end
+  endtask
+endclass
+
+class rand_seq extends base_sequence;
+  int unsigned n;
+  function new(spi_sequencer s, int unsigned cnt = 4);
+    super.new(s); n = cnt;
+  endfunction
+  virtual task body();
+    repeat (n) begin
+      spi_transaction t = new();
+      if (!t.randomize()) $fatal(1, "randomize() failed");
+      seqr.send(t);
+    end
+  endtask
+endclass
+
+// -----------------------------------------------------------------
+// Scoreboard
+// -----------------------------------------------------------------
+class spi_scoreboard;
+  logic [7:0]  exp_q[$];
+  int unsigned pass_cnt = 0, fail_cnt = 0;
+  string       name;
+  function new(string nm = "TB");
+    name = nm; exp_q.delete();
+    pass_cnt = 0; fail_cnt = 0;
+  endfunction
+  function void push_exp(logic [7:0] d); exp_q.push_back(d); endfunction
+  function void check(logic [7:0] got);
+    logic [7:0] exp;
+    if (!exp_q.size()) begin
+      $display("FAIL [%s] unexpected RX=8'h%02h", name, got);
+      fail_cnt++; return;
+    end
+    exp = exp_q.pop_front();
+    if (got === exp)
+      begin $display("PASS [%s] TX=8'h%02h RX=8'h%02h", name, exp, got); pass_cnt++; end
+    else
+      begin $display("FAIL [%s] TX=8'h%02h RX=8'h%02h (mismatch)", name, exp, got); fail_cnt++; end
+  endfunction
+  function void report();
+    $display("[SCB:%s] PASS=%0d FAIL=%0d %s",
+      name, pass_cnt, fail_cnt, (fail_cnt == 0) ? "OK" : "*** ERRORS ***");
+  endfunction
+endclass
+
+// -----------------------------------------------------------------
+// Driver — gets transaction from sequencer mailbox, drives DUT
+// -----------------------------------------------------------------
+class spi_driver;
+  virtual spi_if vif;
+  spi_scoreboard scb;
+  int unsigned   n_driven = 0;
+  function new(virtual spi_if v, spi_scoreboard s); vif = v; scb = s; endfunction
+
+  task run(spi_sequencer seqr, int unsigned n);
+    spi_transaction txn;
+    repeat (n) begin
+      seqr.req_mb.get(txn);   // TLM get — blocks until item available
+      xfer(txn.data);
+    end
   endtask
 
-  // Check loopback: received byte must equal transmitted byte
-  task automatic check(input logic [7:0] d);
-    logic [7:0] r;
-    do_xfer(d, r);
-    if (r === d)
-      $display("PASS  TX=%02h RX=%02h", d, r);
-    else
-      $display("FAIL  TX=%02h RX=%02h expected=%02h", d, r, d);
+  task xfer(logic [7:0] d);
+    scb.push_exp(d);           // register expected BEFORE any clock edges
+    @(posedge vif.clk); #1;
+    vif.tx_data = d;  vif.tx_push = 1;
+    @(posedge vif.clk); #1;  vif.tx_push = 0;
+    vif.start = 1;
+    @(posedge vif.clk); #1;  vif.start = 0;
+    // Wait for 1-cycle done pulse
+    do begin @(posedge vif.clk); #1; end while (!vif.done);
+    n_driven++;
+    $display("[DRV] xfer 8'h%02h complete (#%0d)", d, n_driven);
+  endtask
+endclass
+
+// -----------------------------------------------------------------
+// Monitor — polls rx_valid, feeds scoreboard
+// -----------------------------------------------------------------
+class spi_monitor;
+  virtual spi_if vif;
+  spi_scoreboard scb;
+  int unsigned   n_obs = 0;
+  function new(virtual spi_if v, spi_scoreboard s); vif = v; scb = s; endfunction
+
+  task run(int unsigned n);
+    logic [7:0] b;
+    repeat (n) begin
+      do begin @(posedge vif.clk); #1; end while (!vif.rx_valid);
+      b = vif.rx_data;       // combinational head-of-queue
+      vif.rx_pop = 1;
+      @(posedge vif.clk); #1;  vif.rx_pop = 0;
+      scb.check(b);
+      n_obs++;
+      $display("[MON] observed 8'h%02h (#%0d)", b, n_obs);
+    end
+  endtask
+endclass
+
+// -----------------------------------------------------------------
+// Environment
+// -----------------------------------------------------------------
+class spi_env;
+  virtual spi_if vif;
+  spi_sequencer  seqr;
+  spi_scoreboard scb;
+  spi_driver     drv;
+  spi_monitor    mon;
+
+  function new(virtual spi_if v);
+    vif = v;  seqr = new();
+    scb = new("ENV");  drv = new(v, scb);  mon = new(v, scb);
+  endfunction
+
+  task reset();
+    vif.rst_n = 0;  vif.tx_push = 0;  vif.rx_pop = 0;
+    vif.start = 0;  vif.abort   = 0;  vif.clk_div = 8'd3;
+    repeat (5) @(posedge vif.clk); #1;
+    vif.rst_n = 1;  repeat (2) @(posedge vif.clk);
+  endtask
+
+  task prep(string nm);
+    spi_transaction tmp;
+    scb = new(nm);  drv.scb = scb;  mon.scb = scb;
+    drv.n_driven = 0;  mon.n_obs = 0;
+    while (seqr.req_mb.try_get(tmp));  // drain leftover
+    reset();
+  endtask
+
+  task run_seq(base_sequence seq, int unsigned n);
+    seq.body();             // fills sequencer mailbox
+    fork
+      drv.run(seqr, n);    // driver: pops mailbox, drives DUT
+      mon.run(n);          // monitor: collects n RX bytes
+    join
+    scb.report();
+  endtask
+endclass
+
+// =================================================================
+// module tb
+// =================================================================
+module tb;
+  logic clk = 0;
+  always #5 clk = ~clk;   // 100 MHz
+
+  spi_if dut_if (.clk(clk));
+  assign dut_if.miso = dut_if.mosi;   // loopback
+
+  spi_master dut (
+    .clk          (clk),
+    .rst_n        (dut_if.rst_n),
+    .clk_div      (dut_if.clk_div),
+    .tx_data      (dut_if.tx_data),   .tx_push  (dut_if.tx_push),
+    .tx_full      (dut_if.tx_full),   .tx_empty (dut_if.tx_empty),
+    .rx_data      (dut_if.rx_data),   .rx_pop   (dut_if.rx_pop),
+    .rx_valid     (dut_if.rx_valid),
+    .start        (dut_if.start),     .abort    (dut_if.abort),
+    .busy         (dut_if.busy),      .done     (dut_if.done),
+    .tx_underrun  (dut_if.tx_underrun),
+    .rx_overrun   (dut_if.rx_overrun),
+    .sck          (dut_if.sck),
+    .mosi         (dut_if.mosi),
+    .miso         (dut_if.miso),
+    .cs_n         (dut_if.cs_n)
+  );
+
+  spi_env env;
+
+  // T1: Sanity — 4 fixed bytes
+  task automatic t1_sanity();
+    sanity_seq seq;
+    env.prep("T1_SANITY");
+    $display("\n=== T1: SANITY  0xA5 / 0x5A / 0x00 / 0xFF ===");
+    seq = new(env.seqr);
+    env.run_seq(seq, 4);
+  endtask
+
+  // T2: Boundary values
+  task automatic t2_boundary();
+    boundary_seq seq;
+    env.prep("T2_BOUNDARY");
+    $display("\n=== T2: BOUNDARY  0x00 / 0xFF / 0x01 / 0xFE ===");
+    seq = new(env.seqr);
+    env.run_seq(seq, 4);
+  endtask
+
+  // T3: Burst — 4 random bytes
+  task automatic t3_burst();
+    rand_seq seq;
+    env.prep("T3_BURST");
+    $display("\n=== T3: BURST  4 random bytes ===");
+    seq = new(env.seqr, 4);
+    env.run_seq(seq, 4);
+  endtask
+
+  // T4: Stress — 8 random bytes
+  task automatic t4_stress();
+    rand_seq seq;
+    env.prep("T4_STRESS");
+    $display("\n=== T4: STRESS  8 random bytes ===");
+    seq = new(env.seqr, 8);
+    env.run_seq(seq, 8);
+  endtask
+
+  // T5: Abort mid-transfer then recover
+  task automatic t5_abort();
+    rand_seq seq;
+    env.prep("T5_ABORT");
+    $display("\n=== T5: ABORT + RECOVERY ===");
+    // Start one transfer then abort it mid-shift
+    @(posedge clk); #1;
+    dut_if.tx_data = 8'hDE;  dut_if.tx_push = 1;
+    @(posedge clk); #1;  dut_if.tx_push = 0;
+    dut_if.start = 1;
+    @(posedge clk); #1;  dut_if.start = 0;
+    repeat (10) @(posedge clk);
+    dut_if.abort = 1;
+    @(posedge clk); #1;  dut_if.abort = 0;
+    repeat (3) @(posedge clk); #1;
+    if (!dut_if.busy) begin
+      $display("PASS [T5_ABORT] abort acknowledged: busy cleared");
+      env.scb.pass_cnt++;
+    end else begin
+      $display("FAIL [T5_ABORT] DUT still busy after abort");
+      env.scb.fail_cnt++;
+    end
+    // Recovery: one clean random transfer
+    seq = new(env.seqr, 1);  seq.body();
+    fork
+      env.drv.run(env.seqr, 1);
+      env.mon.run(1);
+    join
+    env.scb.report();
   endtask
 
   initial begin
-    repeat(5) @(posedge clk); rst_n = 1; repeat(2) @(posedge clk);
-    $display("=== SPI Master Loopback Test ===");
-
-    $display("--- T1: Sanity ---");
-    check(8'hA5);
-
-    $display("--- T2: Boundary patterns ---");
-    check(8'h00); check(8'hFF); check(8'hAA); check(8'h55);
-
-    $display("--- T3: Burst (4 bytes) ---");
-    check(8'hDE); check(8'hAD); check(8'hBE); check(8'hEF);
-
-    $display("--- T4: Abort + recovery ---");
-    @(posedge clk); #1;
-    tx_data = 8'hBB; tx_push = 1; @(posedge clk); #1;
-    tx_push = 0; start = 1; @(posedge clk); #1; start = 0;
-    repeat(4) @(posedge clk); #1;
-    abort = 1; @(posedge clk); #1; abort = 0;
-    while (busy) @(posedge clk);
-    $display("PASS  abort acknowledged");
-    check(8'hAD);
-
-    $display("--- T5: Sequential values ---");
-    check(8'h11); check(8'h22); check(8'h33); check(8'h44);
-
-    $display("=== All tests PASSED ===");
+    env = new(dut_if);
+    t1_sanity();
+    t2_boundary();
+    t3_burst();
+    t4_stress();
+    t5_abort();
+    $display("\n=== All tests PASSED ===");
     $finish;
   end
+
+  initial begin
+    #2_000_000;
+    $display("TIMEOUT: simulation exceeded 2ms");
+    $finish(2);
+  end
+
 endmodule`,
 
       expected: [
-        'PASS  TX=a5 RX=a5',
-        'PASS  abort acknowledged',
+        'PASS [T1_SANITY]',
+        '[SCB:T1_SANITY] PASS=4 FAIL=0 OK',
+        'PASS [T5_ABORT] abort acknowledged',
         '=== All tests PASSED ==='
       ]
     }
