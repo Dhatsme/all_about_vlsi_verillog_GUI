@@ -332,5 +332,15 @@
   .cert-paper { padding: 28px 24px; }
   .cert-course-name { font-size: 1.15rem; }
   .cert-name-input { font-size: 1.4rem; }
-  .course-start-btn { padding: 7px 14px; font-size: 0.75rem; }
+
+  /* Course card: give title full row width, move button to its own line */
+  .course-header { flex-wrap: wrap; gap: 10px; }
+  .course-start-btn {
+    flex: 0 0 100%;
+    order: 10;
+    padding: 8px 16px;
+    font-size: 0.8rem;
+    text-align: center;
+  }
+  .course-desc { display: none; }
 }
