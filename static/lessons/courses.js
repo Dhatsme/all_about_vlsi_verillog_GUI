@@ -51,4 +51,11 @@ window.COURSES = [
     description: 'Flat SystemVerilog testbenches for SPI — runs in Verilator, no classes required',
     modules: ['spiv1'],
   },
+  {
+    id: 'spivoop',
+    title: 'SPI OOP TB — Build It From Scratch',
+    icon: '\u{1F9EC}',
+    description: 'Build a class-based SV verification environment one component at a time: transaction → scoreboard → mailbox → driver → monitor → sequences → env',
+    modules: ['spivoop1'],
+  },
 ];
