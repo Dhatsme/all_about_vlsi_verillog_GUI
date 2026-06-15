@@ -2,28 +2,28 @@ window.COURSES = [
   {
     id: 'svzth',
     title: 'SystemVerilog Zero to Hero',
-    icon: '🏆',
+    icon: '\u{1F3C6}',
     description: 'From logic gates to serial protocols — the complete SystemVerilog path',
     modules: ['msv1', 'msv2', 'msv3', 'msv4', 'msv5', 'msv6', 'msv7'],
   },
   {
     id: 'spi',
     title: 'SPI Protocol Deep Dive',
-    icon: '🔌',
+    icon: '\u{1F50C}',
     description: 'Build SPI shift registers, master controller, slave receiver, and real-world applications',
     modules: ['spi1', 'spi2', 'spi3', 'spi4', 'spi5'],
   },
   {
     id: 'spitb',
     title: 'SPI Testbench Engineering',
-    icon: '🧪',
+    icon: '\u{1F9EA}',
     description: 'Write directed testbenches for every SPI module — from shift registers to multi-peripheral controllers',
     modules: ['spitb1', 'spitb2', 'spitb3', 'spitb4', 'spitb5', 'spitb6', 'spitb7'],
   },
   {
     id: 'i2c',
     title: 'I²C Design',
-    icon: '🔗',
+    icon: '\u{1F517}',
     description: 'Master open-drain I/O, START/STOP conditions, byte transfer, and full I²C controller design',
     modules: ['i2c1', 'i2c2', 'i2c3', 'i2c4', 'i2c5', 'i2c6', 'i2c7', 'i2c8'],
   },
@@ -37,7 +37,7 @@ window.COURSES = [
   {
     id: 'spi_long',
     title: 'SPI Zero to Hero (2 Month)',
-    icon: '🔬',
+    icon: '\u{1F52C}',
     description: 'Build a complete register-programmable SPI master from wire definitions to APB-connected RTL — deep-dive track',
     modules: ['spi_long1', 'spi_long2', 'spi_long3', 'spi_long4', 'spi_long5',
               'spi_long6', 'spi_long7', 'spi_long8', 'spi_long9', 'spi_long10',
@@ -47,7 +47,7 @@ window.COURSES = [
   {
     id: 'spiv',
     title: 'SPI Verification (Verilator)',
-    icon: '🔬',
+    icon: '\u{1F52C}',
     description: 'Flat SystemVerilog testbenches for SPI — runs in Verilator, no classes required',
     modules: ['spiv1'],
   },
@@ -56,6 +56,6 @@ window.COURSES = [
     title: 'SPI OOP TB — Build It From Scratch',
     icon: '\u{1F9EC}',
     description: 'Build a class-based SV verification environment one component at a time: transaction → scoreboard → mailbox → driver → monitor → sequences → env',
-    modules: ['spivoop1'],
+    modules: ['spivoop1', 'spivoop2'],
   },
 ];
