@@ -36,10 +36,71 @@ The GUI (HTML/CSS/JS app framework) is **frozen** — never modify:
 | Registration edits (index.html, curriculum.js, courses.js) | `develop` |
 | Bug fixes / CSS / UI changes | `develop` |
 | CLAUDE.md updates | `develop` |
+| SV verification files (`verification/`) | `develop` |
 | Docs cursor update (docs/i2cdesign.md) | `main` |
 
 Never push directly to `main` except for the docs cursor update in Step 8.
 Never create a feature branch unless the user explicitly requests one.
+
+---
+
+## SV Verification Environment
+
+A production-grade SystemVerilog class-based testbench lives at `verification/`.
+It is standalone — no UVM dependency — and targets Questa, VCS, or Xcelium.
+
+**Branch rule: all verification files go to `develop`. Never to `main`.**
+
+```
+verification/
+├── rtl/spi_master.sv        — DUT prototype (Mode 0, 8-bit, 4-deep FIFO)
+├── tb/spi_if.sv             — Interface + clocking blocks
+├── tb/spi_pkg.sv            — Full TB class hierarchy (see below)
+├── tb/tb_top.sv             — Top-level: DUT, loopback, test selection
+└── Makefile                 — VCS / Questa / Xcelium targets
+```
+
+**Running the 5 built-in tests:**
+```bash
+cd verification
+make questa TEST=test_sanity    # Questa / ModelSim
+make vcs    TEST=test_burst_8   # VCS
+make xrun   TEST=test_abort     # Xcelium
+make regress                    # all 5 tests in sequence
+```
+
+**Test selection:** pass `+TEST=<name>` plusarg:
+`test_sanity` | `test_walk` | `test_burst_8` | `test_abort` | `test_rand_20` | `all`
+
+**TB class hierarchy in `spi_pkg.sv`:**
+```
+spi_config        — clk_div, lsb_first, num_transfers
+spi_transaction   — tx_data, do_abort, abort_delay | rx_data, aborted
+spi_sequencer     — req_mbox, rsp_mbox (typed mailboxes)
+base_sequence     — abstract; send() puts/gets mailbox; completed_xfers[]
+  sanity_seq      — single byte 0xA5
+  walk_seq        — 0x00 0xFF 0xAA 0x55 0x01 0x80 0x7F 0xFE
+  burst_seq       — N consecutive bytes (random or fixed payload)
+  abort_seq       — abort mid-transfer, then verify DUT recovers
+  rand_seq        — N fully randomised transfers
+spi_driver        — pin-level driver via @(posedge clk); #1 pattern
+spi_monitor       — passive SPI bus observer; feeds analysis_port
+spi_scoreboard    — loopback check (TX==RX) + bus-level check
+spi_coverage      — covergroups for TX data values and abort
+spi_agent         — driver + monitor + sequencer + coverage
+spi_env           — agent + scoreboard
+test_base         — abstract; env.start() → body() → env.report()
+  test_sanity / test_walk / test_burst / test_abort / test_rand
+```
+
+**When expanding:**
+- New sequence → add class extending `base_sequence` in `spi_pkg.sv`
+- New test → add class in `spi_pkg.sv` + `case` branch in `tb_top.sv`
+- Swap DUT → replace `verification/rtl/spi_master.sv` with production RTL
+- Swap loopback → replace `assign dut_if.miso = dut_if.mosi` in `tb_top.sv`
+  with a proper SPI slave model
+
+**All changes to `verification/` go to `develop`. Never to `main`.**
 
 ---
 
@@ -523,6 +584,7 @@ Add these as the final task in the last lesson of the trigger chapter:
 [ ] I²C: inout ports used correctly; SDA/SCL released with 1'bz not 1'b1
 [ ] I²C: pullup primitive in every testbench that uses inout wires
 [ ] Push target is `develop` (not `main`, not a feature branch)
+[ ] Verification code (`verification/`) pushed to `develop`, never `main`
 ```
 
 ---
