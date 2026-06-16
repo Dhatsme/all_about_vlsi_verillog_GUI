@@ -60,52 +60,139 @@ endclass`
       ],
       verilatorFlags: { simulator: 'verilator', timing: '--no-timing' },
       theory: `
-<h2>What a mailbox does</h2>
-<p>A mailbox is a thread-safe FIFO channel between components. The driver puts transactions in;
-the sequencer takes them out. In SystemVerilog a <em>typed</em> mailbox lets the compiler
-catch type errors before the simulator ever runs:</p>
+<h2>What is a mailbox?</h2>
+<p>Imagine a physical postbox on a street corner. The <strong>postman (driver)</strong> drops
+envelopes in through the slot; the <strong>recipient (monitor or sequencer)</strong> opens the door
+and takes them out. Two rules never change:</p>
+<ul>
+  <li><strong>FIFO order</strong> &#8212; the first envelope dropped in is the first one taken out.</li>
+  <li><strong>Decoupled timing</strong> &#8212; the postman does not wait for the recipient, and the
+  recipient does not wait for the postman. They work independently.</li>
+</ul>
+<p>A SystemVerilog <code>mailbox</code> works exactly like that postbox, except the envelopes are
+objects and the "street corner" is a synthesized FIFO managed by the simulator.</p>
+
+<h3>Typed vs untyped mailbox</h3>
+<p>An <em>untyped</em> mailbox accepts any object class. A <em>typed</em> mailbox locks the slot
+to one class only &#8212; the compiler rejects anything else at elaboration time:</p>
 <pre class="code-block">
-mailbox #(spi_transaction) mb = new();  // typed: only spi_transaction allowed
+mailbox                    mb_any;  // untyped: no compile-time check
+mailbox #(spi_transaction) mb_spi;  // typed: ONLY spi_transaction allowed
 </pre>
+<p>Always use the typed form in real testbenches. Bugs that the compiler catches in one
+second would take an hour to track down in simulation.</p>
 
-<h3>try_put and try_get — the non-blocking pair</h3>
-<p>The blocking built-ins (<code>put</code>, <code>get</code>) suspend the caller until the mailbox is ready.
-They need <code>--timing</code> mode and <code>fork</code> blocks. The non-blocking versions return immediately—no suspension, no timing flag needed:</p>
+<h3>Blocking vs non-blocking &#8212; choose wisely</h3>
 <table class="truth-table">
-  <tr><th>Method</th><th>Returns</th><th>Behaviour</th></tr>
-  <tr><td><code>try_put(t)</code></td><td>1</td><td>unbounded mailbox: always succeeds immediately</td></tr>
-  <tr><td><code>try_get(r)</code></td><td>1</td><td>got an item — r is now valid</td></tr>
-  <tr><td><code>try_get(r)</code></td><td>0</td><td>mailbox was empty — r unchanged</td></tr>
-  <tr><td><code>num()</code></td><td>int</td><td>items currently in the queue</td></tr>
+  <tr><th>Method</th><th>Blocks?</th><th>Returns</th><th>When to use</th></tr>
+  <tr>
+    <td><code>put(t)</code></td>
+    <td>Yes &#8212; suspends until space</td>
+    <td>void</td>
+    <td>Bounded mailbox, inside <code>fork</code></td>
+  </tr>
+  <tr>
+    <td><code>get(r)</code></td>
+    <td>Yes &#8212; suspends until item</td>
+    <td>void</td>
+    <td>Blocking consumer, inside <code>fork</code></td>
+  </tr>
+  <tr>
+    <td><code>try_put(t)</code></td>
+    <td>No &#8212; returns immediately</td>
+    <td>1 = ok, 0 = full</td>
+    <td>Unbounded mailbox (always 1)</td>
+  </tr>
+  <tr>
+    <td><code>try_get(r)</code></td>
+    <td>No &#8212; returns immediately</td>
+    <td>1 = got item, 0 = empty</td>
+    <td>Polling without <code>--timing</code></td>
+  </tr>
+  <tr>
+    <td><code>num()</code></td>
+    <td>No</td>
+    <td>int count</td>
+    <td>Check queue depth any time</td>
+  </tr>
 </table>
+<p>This chapter uses <code>try_put</code> and <code>try_get</code> exclusively. Because they never suspend
+the simulation, <code>--no-timing</code> is sufficient &#8212; no <code>fork</code> blocks needed.</p>
 
-<h3>Wrapper class pattern (partial view)</h3>
+<h3>Why wrap the mailbox in a class?</h3>
+<p>Raw <code>mailbox</code> calls spread across ten components are impossible to debug.
+A thin wrapper class gives you one place to add logging, statistics, and future
+assertions &#8212; without touching every component that uses it. That is the OOP
+payoff in testbench design.</p>
+
+<h2>Building spi_mailbox &#8212; step by step</h2>
+<p>You will build the class in five steps. Each step adds exactly one method.
+Do not add anything else until the step description says to.</p>
+
+<h3>Step 1 &#8212; declare the shell and its two members</h3>
 <pre class="code-block">
 class spi_mailbox;
-  mailbox #(spi_transaction) mb;
-  string name;
-
-  function new(string n = "MB");
-    name = n;
-    mb   = new();    // no bound argument = unbounded FIFO
-  endfunction
-
-  function void put(spi_transaction t);
-    void'(mb.try_put(t));   // discard return value; unbounded never fails
-  endfunction
-  // ... get_nowait() returns spi_transaction or null
-  // ... num() wraps mb.num()
+  mailbox #(spi_transaction) mb;   // handle only; points to nothing yet
+  string                     name; // label for debug output
 endclass
 </pre>
+<p>The <code>mailbox</code> variable is a <strong>handle</strong>, not the mailbox itself. It is like declaring a
+variable of type "postbox" but not building the physical box yet. You build the box
+in <code>new()</code>.</p>
 
-<h3>What you build this chapter</h3>
-<p>The full <code>spi_mailbox</code> class. <code>spi_transaction</code> from Chapter 1 is pre-loaded —
-click the <code>spi_transaction.sv</code> tab to the left to review it.
-The pre-filled testbench verifies construction, two puts, FIFO ordering, and the null
-return from an empty <code>get_nowait()</code>.</p>
+<h3>Step 2 &#8212; constructor: allocate the inner mailbox</h3>
+<pre class="code-block">
+function new(string n = "MB");
+  name = n;
+  mb   = new();   // new() with no argument = unbounded (no size cap)
+endfunction
+</pre>
+<p>Calling <code>new()</code> on the mailbox handle allocates the actual FIFO storage. The optional
+integer argument sets a capacity bound. Omitting it means the mailbox grows without
+limit, so <code>try_put</code> always returns 1 and never blocks.</p>
 
-<p><strong>Ready?</strong> Switch to the Code tab and write <code>spi_mailbox</code>.
-Stuck? Tap \u{1F4A1} Hint.</p>
+<h3>Step 3 &#8212; put(): add a transaction to the tail</h3>
+<pre class="code-block">
+function void put(spi_transaction t);
+  void'(mb.try_put(t));  // discard the return value
+endfunction
+</pre>
+<p><code>void'(...)</code> is the SystemVerilog way to explicitly discard a return value you do not
+need. Without it Verilator raises a warning about an ignored non-void return. Because
+the mailbox is unbounded, <code>try_put</code> always returns 1 &#8212; there is nothing useful to
+check.</p>
+
+<h3>Step 4 &#8212; get_nowait(): take from the head, or return null</h3>
+<pre class="code-block">
+function spi_transaction get_nowait();
+  spi_transaction t = null;
+  if (mb.try_get(t) != 0)  // returns 1 if an item was available
+    return t;               // t is now the dequeued transaction
+  return null;              // mailbox was empty
+endfunction
+</pre>
+<p>Two Verilator rules to remember here:</p>
+<ul>
+  <li><code>try_get</code> returns a 32-bit <code>int</code>. Writing <code>!mb.try_get(t)</code> applies logical-NOT
+  to a 32-bit value and triggers <strong>WIDTHTRUNC</strong>. Always compare with <code>!= 0</code>.</li>
+  <li>Returning <code>null</code> for an empty queue is the idiomatic SystemVerilog pattern for
+  a non-blocking get. The caller checks for null before using the result.</li>
+</ul>
+
+<h3>Step 5 &#8212; num(): expose the queue depth</h3>
+<pre class="code-block">
+function int num();
+  return mb.num();  // built-in method: count of items in the FIFO
+endfunction
+</pre>
+<p>This one-liner delegates to the built-in <code>mailbox.num()</code>. Exposing it on the wrapper
+lets external code check the queue depth without reaching inside the class.</p>
+
+<p>That is the complete <code>spi_mailbox</code> in five steps. The five testbench checks map
+directly to: construction (Step 2), two puts (Step 3), FIFO ordering (Step 4), and
+null on empty (Step 4 edge case). <code>num()</code> is exercised in checks 1&#8211;3.</p>
+
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap \u{1F4A1} Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
