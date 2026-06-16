@@ -56,6 +56,6 @@ window.COURSES = [
     title: 'SPI OOP TB — Build It From Scratch',
     icon: '🧬',
     description: 'Build a class-based SV verification environment one component at a time: transaction → scoreboard → mailbox → driver → monitor → agent → env. Freshers start at Ch.1. 3+yr engineers jump to Ch.9.',
-    modules: ['spivoop1', 'spivoop2', 'spivoop3', 'spivoop4', 'spivoop5', 'spivoop6', 'spivoop7'],
+    modules: ['spivoop1', 'spivoop2', 'spivoop3', 'spivoop4', 'spivoop5', 'spivoop6', 'spivoop7', 'spivoop8'],
   },
 ];
