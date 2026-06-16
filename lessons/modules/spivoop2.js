@@ -1,7 +1,7 @@
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
   id: 'spivoop2',
   title: 'OOP TB Ch.2 — spi_scoreboard',
-  icon: '\u{1F3C6}',
+  icon: '🏆',
   level: 'advanced',
   lessons: [
     {
@@ -10,7 +10,8 @@
       files: [
         {
           name: 'spi_transaction.sv',
-          content:
+          from: 'spivoop1-spivoop1l1-design',
+          fallback:
 `class spi_transaction;
   rand  logic [7:0] data;
   int unsigned      id;
@@ -69,7 +70,7 @@ endfunction
 The pre-filled testbench calls these methods directly — no DUT, no interface needed.
 This proves the scoreboard logic is correct before you attach it to anything real.</p>
 
-<p><strong>Ready?</strong> Switch to the Code tab and type the class. Stuck? Tap \u{1F4A1} Hint.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and type the class. Stuck? Tap 💡 Hint.</p>
 `,
 
       tasks: [
@@ -83,6 +84,7 @@ This proves the scoreboard logic is correct before you attach it to anything rea
         '── Line 12 ─  check function: guard if size==0 → fail; else pop_front and compare with ===',
         '── Line 25 ─  report function: if fail_cnt==0 print ALL OK else print ERRORS',
         '── Line 28 ─  endclass',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — PASS [1], PASS [2] pass_cnt=1, PASS [3] fail_cnt=2, PASS: spi_scoreboard works',
       ],
 
