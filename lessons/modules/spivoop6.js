@@ -3,73 +3,80 @@
   title: 'Ch.6 — SPI Monitor',
   icon: '👁️',
   level: 'intermediate',
-  verilatorFlags: { simulator: 'verilator', timing: '--timing' },
-  files: [
+  lessons: [
     {
-      name: 'spi_if.sv',
-      from: 'spivoop4-spivoop4l1-design',
-      fallback:
+      id: 'spivoop6l1',
+      title: 'L1 — The Passive Observer',
+      files: [
+        {
+          name: 'spi_if.sv',
+          from: 'spivoop4-spivoop4l1-design',
+          fallback:
 `interface spi_if;
   logic sclk;
   logic cs_n;
   logic mosi;
   logic miso;
 endinterface`
-    },
-    {
-      name: 'spi_transaction.sv',
-      from: 'spivoop1-spivoop1l1-design',
-      fallback:
+        },
+        {
+          name: 'spi_transaction.sv',
+          from: 'spivoop1-spivoop1l1-design',
+          fallback:
 `class spi_transaction;
   logic [7:0] data;
   function new();
     data = 8'h00;
   endfunction
 endclass`
-    },
-    {
-      name: 'spi_driver.sv',
-      from: 'spivoop5-spivoop5l1-design',
-      fallback:
+        },
+        {
+          name: 'spi_driver.sv',
+          from: 'spivoop5-spivoop5l1-design',
+          fallback:
 `class spi_driver;
   virtual spi_if vif;
-  function new(virtual spi_if vif);
-    this.vif = vif;
+  function new(virtual spi_if v);
+    vif = v;
   endfunction
   task drive_byte(logic [7:0] data);
-    int i;
-    vif.cs_n = 0;
-    for (i = 7; i >= 0; i--) begin
+    vif.cs_n = 0; #2;
+    for (int i = 7; i >= 0; i--) begin
       vif.mosi = data[i];
       #2; vif.sclk = 1;
       #2; vif.sclk = 0;
+      #2;
     end
-    vif.cs_n = 1;
-    #4;
+    vif.cs_n = 1; #2;
   endtask
 endclass`
-    },
-    {
-      name: 'spi_slave.sv',
-      content:
-`module spi_slave (
-  input  logic       sclk, cs_n, mosi,
+        },
+        {
+          name: 'spi_slave.sv',
+          content:
+`// spi_slave.sv — SPI Mode 0 behavioral slave (CPOL=0, CPHA=0)
+// Samples MOSI on rising SCLK while CS is active, exposes received
+// byte through rx_byte. miso echo is wired in Ch.6.
+module spi_slave (
+  input  logic       sclk,
+  input  logic       cs_n,
+  input  logic       mosi,
   output logic       miso,
   output logic [7:0] rx_byte
 );
   logic [7:0] shift_reg = 8'h00;
+
   always_ff @(posedge sclk) begin
-    if (!cs_n) shift_reg <= {shift_reg[6:0], mosi};
+    if (!cs_n)
+      shift_reg <= {shift_reg[6:0], mosi};
   end
+
   assign rx_byte = shift_reg;
   assign miso    = 1'b0;
 endmodule`
-    }
-  ],
-  lessons: [
-    {
-      id: 'spivoop6l1',
-      title: 'L1 — The Passive Observer',
+        }
+      ],
+      verilatorFlags: { simulator: 'verilator', timing: '--timing' },
       theory:
 `<h2>The Passive Observer</h2>
 <p>A <strong>monitor</strong> watches bus activity and reconstructs transactions — without ever driving a signal. While the driver generates SCLK edges and MOSI data, the monitor samples those same wires in parallel and packages what it sees into transaction objects. Those objects go into a mailbox that tests read to know what actually happened on the bus.</p>
