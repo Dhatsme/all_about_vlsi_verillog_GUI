@@ -7,17 +7,14 @@
     {
       id: 'spivoop1l1',
       title: 'L1 — The Transaction Class',
+      verilatorFlags: { simulator: 'verilator', timing: '--no-timing' },
       theory: `
-<h2>Before anything else: switch to Verilator</h2>
-<p>This course uses SystemVerilog classes, mailboxes, and virtual interfaces.
-<strong>iverilog does not support any of these.</strong>
-Top-right dropdown → select <strong>verilator</strong>.
-Then <strong>⚙ Options</strong> → Timing Mode → <strong>--timing</strong>.
-Do this before hitting Run on any lesson in this course.</p>
-
 <h2>Chapter 1: the transaction class</h2>
 <p>Every OOP testbench wraps one unit of work into a class. For SPI that unit
 is one 8-bit byte transfer. That wrapper is <code>spi_transaction</code>.</p>
+<p>This course uses SystemVerilog classes, mailboxes, and virtual interfaces.
+<strong>iverilog does not support any of these.</strong>
+Verilator is auto-selected for this chapter — no setup needed.</p>
 <p>This is the only class you write this chapter — no interface, no driver, no DUT.
 If Verilator rejects this file nothing else will work, so you find out immediately.</p>
 
@@ -50,9 +47,7 @@ endclass
 `,
 
       tasks: [
-        'FIRST: top-right dropdown -> select verilator (not iverilog)',
-        'THEN: open Options -> Timing Mode -> --timing',
-        'Now open the Code tab and type the class in the Design tab.',
+        'Code tab is blank — type every line.',
         '── Line 1 ──  class spi_transaction;',
         '── Line 2 ──  rand logic [7:0] data;',
         '── Line 3 ──  int unsigned id;',
@@ -64,7 +59,7 @@ endclass
         '── Line 11 ─    return $sformatf("TXN#%0d  8\'h%02h", id, data);',
         '── Line 12 ─  endfunction',
         '── Line 13 ─  endclass',
-        'Hit Run -- PASS [1], PASS [2], PASS: spi_transaction works',
+        'Hit Run — PASS [1], PASS [2], PASS: spi_transaction works',
       ],
 
       hint:
@@ -109,7 +104,7 @@ endclass
       testbench:
 `\`timescale 1ns/1ps
 // Pre-filled test harness. Do not edit this tab.
-// Simulator must be verilator. Options -> --timing.
+// Simulator: verilator (auto-selected). Options: --no-timing (auto-applied).
 module tb;
   initial begin
     spi_transaction t;
@@ -125,7 +120,7 @@ module tb;
 
     // Test 2: randomize() must succeed
     if (t.randomize() == 0)
-      $fatal(1, "randomize() returned 0 -- use Verilator + --timing, not iverilog");
+      $fatal(1, "randomize() returned 0 -- verify Verilator is selected, not iverilog");
     $display("PASS [2] randomize ok  %s", t.to_str());
 
     $display("PASS: spi_transaction works");

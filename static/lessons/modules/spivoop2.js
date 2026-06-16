@@ -7,6 +7,20 @@
     {
       id: 'spivoop2l1',
       title: 'L1 — The Scoreboard Class',
+      files: [
+        {
+          name: 'spi_transaction.sv',
+          content:
+`class spi_transaction;
+  rand  logic [7:0] data;
+  int unsigned      id;
+  static int        uid = 0;
+  function new(); id = uid++; endfunction
+  function string to_str(); return $sformatf("TXN#%0d  8'h%02h", id, data); endfunction
+endclass`
+        }
+      ],
+      verilatorFlags: { simulator: 'verilator', timing: '--no-timing' },
       theory: `
 <h2>What a scoreboard does</h2>
 <p>A scoreboard is the testbench's referee. It keeps a FIFO queue of expected results and
@@ -14,6 +28,8 @@ checks each actual result that comes back from the DUT. When actual matches expe
 it increments a pass counter. When they differ, it increments a fail counter and logs the mismatch.</p>
 <p>At the end of every test you call <code>report()</code> once. If <code>fail_cnt</code> is zero the test
 passed. That is the entire job of a scoreboard.</p>
+<p><strong>spi_transaction is pre-loaded</strong> — click the <code>spi_transaction.sv</code> tab to the left to review it.
+Verilator is auto-selected for this course.</p>
 
 <h3>The golden reference queue</h3>
 <pre class="code-block">
@@ -57,7 +73,6 @@ This proves the scoreboard logic is correct before you attach it to anything rea
 `,
 
       tasks: [
-        'FIRST: top-right dropdown -> select verilator (not iverilog)',
         'Code tab is blank — type every line.',
         '── Line 1 ──  class spi_scoreboard;',
         '── Line 2 ──  string name;',
@@ -68,7 +83,6 @@ This proves the scoreboard logic is correct before you attach it to anything rea
         '── Line 12 ─  check function: guard if size==0 → fail; else pop_front and compare with ===',
         '── Line 25 ─  report function: if fail_cnt==0 print ALL OK else print ERRORS',
         '── Line 28 ─  endclass',
-        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — PASS [1], PASS [2] pass_cnt=1, PASS [3] fail_cnt=2, PASS: spi_scoreboard works',
       ],
 
@@ -126,6 +140,7 @@ endclass
 
       design:
 `// Chapter 2: write the spi_scoreboard class here.
+// spi_transaction is pre-loaded in the spi_transaction.sv tab to the left.
 //
 // Members:
 //   string       name        -- label printed in every $display
@@ -147,7 +162,7 @@ endclass
       testbench:
 `\`timescale 1ns/1ps
 // Pre-filled test harness — do not edit this tab.
-// Simulator: verilator.  Options: --no-timing (or --timing, both work).
+// Simulator: verilator (auto-selected). Options: --no-timing (auto-applied).
 module tb;
   initial begin
     spi_scoreboard scb;
