@@ -7,6 +7,58 @@
     {
       id: 'spivoop3l1',
       title: 'L1 — The Typed Mailbox',
+      files: [
+        {
+          name: 'spi_transaction.sv',
+          content:
+`class spi_transaction;
+  rand  logic [7:0] data;
+  int unsigned      id;
+  static int        uid = 0;
+  function new(); id = uid++; endfunction
+  function string to_str(); return $sformatf("TXN#%0d  8'h%02h", id, data); endfunction
+endclass`
+        },
+        {
+          name: 'spi_scoreboard.sv',
+          content:
+`class spi_scoreboard;
+  string       name;
+  int          pass_cnt;
+  int          fail_cnt;
+  logic [7:0]  exp_q[$];
+  function new(string n = "SCB");
+    name = n; pass_cnt = 0; fail_cnt = 0;
+  endfunction
+  function void push_exp(logic [7:0] expected);
+    exp_q.push_back(expected);
+  endfunction
+  function void check(logic [7:0] actual);
+    logic [7:0] expected;
+    if (exp_q.size() == 0) begin
+      fail_cnt++;
+      $display("FAIL [%s] unexpected: got 8'h%02h", name, actual);
+      return;
+    end
+    expected = exp_q.pop_front();
+    if (actual === expected) begin
+      pass_cnt++;
+      $display("PASS [%s] got 8'h%02h", name, actual);
+    end else begin
+      fail_cnt++;
+      $display("FAIL [%s] got 8'h%02h expected 8'h%02h", name, actual, expected);
+    end
+  endfunction
+  function void report();
+    if (fail_cnt == 0)
+      $display("[%s] PASS=%0d FAIL=%0d  ALL OK", name, pass_cnt, fail_cnt);
+    else
+      $display("[%s] PASS=%0d FAIL=%0d  ERRORS", name, pass_cnt, fail_cnt);
+  endfunction
+endclass`
+        }
+      ],
+      verilatorFlags: { simulator: 'verilator', timing: '--no-timing' },
       theory: `
 <h2>What a mailbox does</h2>
 <p>A mailbox is a thread-safe FIFO channel between components. The driver puts transactions in;
@@ -47,18 +99,18 @@ endclass
 </pre>
 
 <h3>What you build this chapter</h3>
-<p>The full <code>spi_mailbox</code> class. <code>spi_transaction</code> from Chapter 1 is already in the
-Design tab so your class can reference it straight away.
+<p>The full <code>spi_mailbox</code> class. <code>spi_transaction</code> from Chapter 1 is pre-loaded —
+click the <code>spi_transaction.sv</code> tab to the left to review it.
 The pre-filled testbench verifies construction, two puts, FIFO ordering, and the null
 return from an empty <code>get_nowait()</code>.</p>
 
-<p><strong>Ready?</strong> Switch to the Code tab and write <code>spi_mailbox</code> below the pre-included class.
+<p><strong>Ready?</strong> Switch to the Code tab and write <code>spi_mailbox</code>.
 Stuck? Tap \u{1F4A1} Hint.</p>
 `,
 
       tasks: [
-        'FIRST: top-right dropdown -> select verilator (not iverilog)',
-        'Code tab shows spi_transaction (pre-included) — scroll past it and write spi_mailbox below.',
+        'Click the spi_transaction.sv tab to the left to review the pre-loaded class.',
+        'Code tab is blank — type the spi_mailbox class.',
         '── Line 1 ──  class spi_mailbox;',
         '── Line 2 ──  mailbox #(spi_transaction) mb;',
         '── Line 3 ──  string name;',
@@ -67,12 +119,11 @@ Stuck? Tap \u{1F4A1} Hint.</p>
         '── Line 12 ─  get_nowait(): local t=null; if try_get(t)!=0 return t; return null;',
         '── Line 18 ─  num(): return mb.num();',
         '── Line 20 ─  endclass',
-        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — PASS [1] through PASS [5] and PASS: spi_mailbox works',
       ],
 
       hint:
-`// spi_transaction is already defined in the Design tab above this class.
+`// spi_transaction is pre-loaded in the spi_transaction.sv tab.
 class spi_mailbox;
   mailbox #(spi_transaction) mb;  // typed FIFO channel
   string                     name;
@@ -109,19 +160,8 @@ endclass
 `,
 
       design:
-`// Chapter 3 — spi_transaction is pre-included here so spi_mailbox can reference it.
-// Do NOT delete or modify this class.
-
-class spi_transaction;
-  rand  logic [7:0] data;
-  int unsigned      id;
-  static int        uid = 0;
-  function new(); id = uid++; endfunction
-  function string to_str(); return $sformatf("TXN#%0d  8'h%02h", id, data); endfunction
-endclass
-
-// ================================================================
-// Write spi_mailbox below this line.
+`// Chapter 3: write the spi_mailbox class here.
+// spi_transaction is pre-loaded in the spi_transaction.sv tab to the left.
 //
 // Members:
 //   mailbox #(spi_transaction)  mb    -- typed FIFO channel
@@ -141,7 +181,7 @@ endclass
       testbench:
 `\`timescale 1ns/1ps
 // Pre-filled test harness — do not edit this tab.
-// Simulator: verilator.  Options: --no-timing.
+// Simulator: verilator (auto-selected). Options: --no-timing (auto-applied).
 module tb;
   initial begin
     spi_mailbox     mbx;
