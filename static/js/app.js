@@ -361,12 +361,16 @@ function buildFileTabs(lesson) {
 
   const tabDesign = $('tab-design');
   files.forEach(f => {
+    const content = resolveFileContent(f);
+    const isOwn   = f.from && lsGet(f.from);
     const btn = document.createElement('button');
     btn.className    = 'file-tab file-tab-ro';
     btn.dataset.file = f.name;
-    btn.title        = f.name + ' — read-only library file (pre-compiled from a previous chapter)';
+    btn.title = f.name + (isOwn
+      ? ' — your code from a previous chapter'
+      : ' — reference fallback · complete the earlier chapter to use your own code');
     btn.textContent  = f.name;
-    btn.onclick = () => switchToReadonlyFile(f.name, f.content);
+    btn.onclick = () => switchToReadonlyFile(f.name, content);
     hdr.insertBefore(btn, tabDesign);
   });
 }
@@ -390,6 +394,17 @@ function switchToReadonlyFile(name, content) {
   $('lnum-design').style.display   = 'none';
   $('editor-tb').style.display     = 'none';
   $('lnum-tb').style.display       = 'none';
+}
+
+// resolveFileContent — if the file has a `from` key, try loading the student's own
+// saved code from that lesson's localStorage slot; fall back to `fallback` or a placeholder.
+function resolveFileContent(f) {
+  if (f.content !== undefined) return f.content;
+  if (f.from) {
+    const saved = lsGet(f.from);
+    return saved || f.fallback || '// ' + f.name + ': complete the earlier chapter to load your own code here.';
+  }
+  return '';
 }
 
 function applyLessonFlags(lesson) {
@@ -522,10 +537,11 @@ async function runSimulation() {
   const pill   = $('status-pill');
   const tool   = $('sim-select').value;
 
-  // Prepend any lesson library files before the student's design code
+  // Prepend any lesson library files before the student's design code.
+  // resolveFileContent loads the student's own saved code if available.
   const studentCode  = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-design`] || lesson.design;
   const tbCode       = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-tb`]     || lesson.testbench;
-  const libraryFiles = (lesson.files || []).map(f => f.content);
+  const libraryFiles = (lesson.files || []).map(f => resolveFileContent(f));
   const designCode   = [...libraryFiles, studentCode].join('\n\n');
 
   const extraFlags = (tool === 'verilator') ? getVerilatorFlags() : [];
