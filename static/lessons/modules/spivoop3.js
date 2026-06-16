@@ -1,7 +1,7 @@
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
   id: 'spivoop3',
   title: 'OOP TB Ch.3 — spi_mailbox',
-  icon: '\u{1F4EC}',
+  icon: '📬',
   level: 'advanced',
   lessons: [
     {
@@ -10,7 +10,8 @@
       files: [
         {
           name: 'spi_transaction.sv',
-          content:
+          from: 'spivoop1-spivoop1l1-design',
+          fallback:
 `class spi_transaction;
   rand  logic [7:0] data;
   int unsigned      id;
@@ -21,7 +22,8 @@ endclass`
         },
         {
           name: 'spi_scoreboard.sv',
-          content:
+          from: 'spivoop2-spivoop2l1-design',
+          fallback:
 `class spi_scoreboard;
   string       name;
   int          pass_cnt;
@@ -70,7 +72,7 @@ and takes them out. Two rules never change:</p>
   recipient does not wait for the postman. They work independently.</li>
 </ul>
 <p>A SystemVerilog <code>mailbox</code> works exactly like that postbox, except the envelopes are
-objects and the "street corner" is a synthesized FIFO managed by the simulator.</p>
+objects and the \"street corner\" is a synthesized FIFO managed by the simulator.</p>
 
 <h3>Typed vs untyped mailbox</h3>
 <p>An <em>untyped</em> mailbox accepts any object class. A <em>typed</em> mailbox locks the slot
@@ -137,7 +139,7 @@ class spi_mailbox;
 endclass
 </pre>
 <p>The <code>mailbox</code> variable is a <strong>handle</strong>, not the mailbox itself. It is like declaring a
-variable of type "postbox" but not building the physical box yet. You build the box
+variable of type \"postbox\" but not building the physical box yet. You build the box
 in <code>new()</code>.</p>
 
 <h3>Step 2 &#8212; constructor: allocate the inner mailbox</h3>
@@ -192,7 +194,7 @@ lets external code check the queue depth without reaching inside the class.</p>
 directly to: construction (Step 2), two puts (Step 3), FIFO ordering (Step 4), and
 null on empty (Step 4 edge case). <code>num()</code> is exercised in checks 1&#8211;3.</p>
 
-<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap \u{1F4A1} Show Hint for an annotated reference.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
@@ -202,10 +204,11 @@ null on empty (Step 4 edge case). <code>num()</code> is exercised in checks 1&#8
         '── Line 2 ──  mailbox #(spi_transaction) mb;',
         '── Line 3 ──  string name;',
         '── Line 5 ──  function new(string n = "MB"); name=n; mb=new(); endfunction',
-        '── Line 8 ──  put(): void\'(mb.try_put(t));',
+        "── Line 8 ──  put(): void'(mb.try_put(t));",
         '── Line 12 ─  get_nowait(): local t=null; if try_get(t)!=0 return t; return null;',
         '── Line 18 ─  num(): return mb.num();',
         '── Line 20 ─  endclass',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — PASS [1] through PASS [5] and PASS: spi_mailbox works',
       ],
 

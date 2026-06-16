@@ -1,7 +1,7 @@
 (window.CURRICULUM_MODULES = window.CURRICULUM_MODULES || []).push({
   id: 'spivoop4',
   title: 'OOP TB Ch.4 — spi_if',
-  icon: '\u{1F50C}',
+  icon: '🔌',
   level: 'advanced',
   lessons: [
     {
@@ -10,7 +10,8 @@
       files: [
         {
           name: 'spi_transaction.sv',
-          content:
+          from: 'spivoop1-spivoop1l1-design',
+          fallback:
 `class spi_transaction;
   rand  logic [7:0] data;
   int unsigned      id;
@@ -21,7 +22,8 @@ endclass`
         },
         {
           name: 'spi_scoreboard.sv',
-          content:
+          from: 'spivoop2-spivoop2l1-design',
+          fallback:
 `class spi_scoreboard;
   string       name;
   int          pass_cnt;
@@ -59,7 +61,8 @@ endclass`
         },
         {
           name: 'spi_mailbox.sv',
-          content:
+          from: 'spivoop3-spivoop3l1-design',
+          fallback:
 `class spi_mailbox;
   mailbox #(spi_transaction) mb;
   string                     name;
@@ -173,7 +176,7 @@ No modports, no clocking blocks — those come when you need them.
 The pre-filled testbench instantiates it, writes each signal, and reads it back
 to confirm all four wires are correctly declared.</p>
 
-<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap \u{1F4A1} Show Hint for an annotated reference.</p>
+<p><strong>Ready?</strong> Switch to the Code tab and type the module. Stuck? Tap 💡 Show Hint for an annotated reference.</p>
 `,
 
       tasks: [
@@ -184,6 +187,7 @@ to confirm all four wires are correctly declared.</p>
         '── Line 4 ──  logic mosi;   master-out slave-in',
         '── Line 5 ──  logic miso;   master-in slave-out',
         '── Line 6 ──  endinterface',
+        'Using Verilator: open ⚙ Options and set Timing Mode to --no-timing before running',
         'Hit Run — PASS [1] through PASS [4] and PASS: spi_if works',
       ],
 
