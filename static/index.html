@@ -138,11 +138,17 @@
 
     <!-- Editor Pane -->
     <div class="editor-pane">
-      <div class="editor-header">
-        <button class="file-tab active" id="tab-design" onclick="switchEditorTab('design')">design.sv</button>
-        <button class="file-tab"        id="tab-tb"     onclick="switchEditorTab('tb')">testbench.sv</button>
+      <div class="editor-header" id="editor-header">
+        <button class="file-tab active" id="tab-design" data-file="design" onclick="switchEditorTab('design')">design.sv</button>
+        <button class="file-tab"        id="tab-tb"     data-file="tb"     onclick="switchEditorTab('tb')">testbench.sv</button>
       </div>
       <div class="editor-wrap">
+        <!-- Readonly file viewer (populated by JS when a pre-loaded library tab is clicked) -->
+        <div class="line-nums" id="lnum-ro" style="display:none;"></div>
+        <textarea class="code-editor editor-ro" id="editor-ro"
+          readonly spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"
+          style="display:none;">
+        </textarea>
         <!-- Design editor -->
         <div class="line-nums" id="lnum-design"></div>
         <textarea class="code-editor" id="editor-design"
@@ -355,8 +361,6 @@
 <script src="/lessons/courses.js"></script>
 <script>
 // Dynamically load every module listed in courses.js.
-// document.write is synchronous during page parse — all module scripts
-// execute and populate CURRICULUM_MODULES before curriculum.js runs.
 (function () {
   var ids = (window.COURSES || []).reduce(function (a, c) { return a.concat(c.modules); }, []);
   ids.forEach(function (id) {
@@ -364,7 +368,7 @@
   });
 }());
 </script>
-<!-- Standalone modules (not part of any course) — static tags only for these -->
+<!-- Standalone modules (not part of any course) -->
 <script src="/lessons/modules/m1.js"></script>
 <script src="/lessons/modules/m2.js"></script>
 <script src="/lessons/modules/m3.js"></script>

@@ -4,17 +4,17 @@
 
 // ── STATE ────────────────────────────────────────────────────────────────────────────
 const STATE = {
-  page:           'landing',   // 'landing' | 'lesson'
+  page:           'landing',
   currentModule:  null,
   currentLesson:  null,
-  activeTab:      'design',    // 'design' | 'tb'
-  editorCache:    {},          // key: `${modId}-${lessonId}-${tab}` -> content
+  activeTab:      'design',    // 'design' | 'tb' | 'ro:<filename>'
+  editorCache:    {},
   completed:      new Set(JSON.parse(localStorage.getItem('aavlsi_done') || '[]')),
   hintVisible:    false,
 };
 
 // ── LOCAL STORAGE HELPERS ────────────────────────────────────────────────────────────────────────
-const LS_CODE = 'aavlsi_code_';   // prefix for saved editor content
+const LS_CODE = 'aavlsi_code_';
 
 function lsGet(key) {
   try { return localStorage.getItem(LS_CODE + key) || null; } catch(e) { return null; }
@@ -45,7 +45,6 @@ function openCourse(courseId) {
     return;
   }
 
-  // Find first incomplete lesson
   for (const mod of courseModules) {
     for (const lesson of mod.lessons) {
       if (!STATE.completed.has(lesson.id)) {
@@ -81,7 +80,6 @@ function buildLandingPage() {
   const courses = window.COURSES || [];
   const courseModuleIds = new Set(courses.flatMap(c => c.modules));
 
-  // Render master courses first (full-width cards)
   courses.forEach(course => {
     const courseModules = course.modules
       .map(id => CURRICULUM.find(m => m.id === id))
@@ -138,7 +136,6 @@ function buildLandingPage() {
     grid.appendChild(card);
   });
 
-  // Render standalone modules (not part of any course)
   const standaloneModules = CURRICULUM.filter(m => !courseModuleIds.has(m.id));
 
   if (standaloneModules.length && courses.length) {
@@ -269,7 +266,6 @@ function renderSidebar(mod, activeLessonId) {
     list.appendChild(item);
   });
 
-  // Progress footer
   const done  = mod.lessons.filter(l => STATE.completed.has(l.id)).length;
   const total = mod.lessons.length;
   const pct   = total ? Math.round((done / total) * 100) : 0;
@@ -334,6 +330,9 @@ function loadEditors(modId, lesson) {
   syncLineNums('design');
   syncLineNums('tb');
 
+  buildFileTabs(lesson);
+  applyLessonFlags(lesson);
+
   switchEditorTab('design');
 }
 
@@ -341,10 +340,74 @@ function switchEditorTab(tab) {
   STATE.activeTab = tab;
   $('tab-design').classList.toggle('active', tab === 'design');
   $('tab-tb').classList.toggle('active',     tab === 'tb');
+  // Clear active state on readonly file tabs and hide viewer
+  document.querySelectorAll('.file-tab-ro').forEach(b => b.classList.remove('active'));
+  $('editor-ro').style.display = 'none';
+  $('lnum-ro').style.display   = 'none';
   $('editor-design').style.display = tab === 'design' ? 'block' : 'none';
   $('lnum-design').style.display   = tab === 'design' ? 'block' : 'none';
   $('editor-tb').style.display     = tab === 'tb'     ? 'block' : 'none';
   $('lnum-tb').style.display       = tab === 'tb'     ? 'block' : 'none';
+}
+
+// ── FILE TABS (readonly pre-loaded library files) ──────────────────────────────────────────────
+function buildFileTabs(lesson) {
+  const hdr = $('editor-header');
+  // Remove file tabs injected by a previous lesson
+  hdr.querySelectorAll('.file-tab-ro').forEach(el => el.remove());
+
+  const files = lesson.files || [];
+  if (!files.length) return;
+
+  const tabDesign = $('tab-design');
+  files.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className    = 'file-tab file-tab-ro';
+    btn.dataset.file = f.name;
+    btn.title        = f.name + ' — read-only library file (pre-compiled from a previous chapter)';
+    btn.textContent  = f.name;
+    btn.onclick = () => switchToReadonlyFile(f.name, f.content);
+    hdr.insertBefore(btn, tabDesign);
+  });
+}
+
+function switchToReadonlyFile(name, content) {
+  STATE.activeTab = 'ro:' + name;
+
+  // Update active tab state
+  document.querySelectorAll('#editor-header .file-tab').forEach(b => b.classList.remove('active'));
+  const btn = $('editor-header').querySelector('[data-file="' + name + '"]');
+  if (btn) btn.classList.add('active');
+
+  // Load into readonly viewer
+  $('editor-ro').value         = content;
+  $('editor-ro').style.display = 'block';
+  $('lnum-ro').style.display   = 'block';
+  syncLineNums('ro');
+
+  // Hide editable editors
+  $('editor-design').style.display = 'none';
+  $('lnum-design').style.display   = 'none';
+  $('editor-tb').style.display     = 'none';
+  $('lnum-tb').style.display       = 'none';
+}
+
+function applyLessonFlags(lesson) {
+  const vf = lesson.verilatorFlags;
+  if (!vf) return;
+
+  if (vf.simulator) {
+    $('sim-select').value = vf.simulator;
+    onSimSelectChange();
+  }
+  if (vf.timing === '--timing') {
+    $('vf-timing').checked    = true;
+    $('vf-no-timing').checked = false;
+  } else {
+    $('vf-no-timing').checked = true;
+    $('vf-timing').checked    = false;
+  }
+  updateFlagsPreview();
 }
 
 function onEditorInput(tab) {
@@ -397,7 +460,6 @@ function updateNavButtons() {
   let hasNext = idx < mod.lessons.length - 1;
   let hasPrev = idx > 0;
 
-  // Cross-chapter navigation within a course
   const course = getCourseForModule(mod.id);
   if (course) {
     const modIdx = course.modules.indexOf(mod.id);
@@ -420,7 +482,6 @@ function navPrev() {
     return;
   }
 
-  // First lesson in this chapter — go to last lesson of previous chapter in course
   const course = getCourseForModule(mod.id);
   if (course) {
     const modIdx = course.modules.indexOf(mod.id);
@@ -441,7 +502,6 @@ function navNext() {
     return;
   }
 
-  // Last lesson in this chapter — go to first lesson of next chapter in course
   const course = getCourseForModule(mod.id);
   if (course) {
     const modIdx = course.modules.indexOf(mod.id);
@@ -462,8 +522,11 @@ async function runSimulation() {
   const pill   = $('status-pill');
   const tool   = $('sim-select').value;
 
-  const designCode = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-design`] || lesson.design;
-  const tbCode     = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-tb`]     || lesson.testbench;
+  // Prepend any lesson library files before the student's design code
+  const studentCode  = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-design`] || lesson.design;
+  const tbCode       = STATE.editorCache[`${STATE.currentModule}-${STATE.currentLesson}-tb`]     || lesson.testbench;
+  const libraryFiles = (lesson.files || []).map(f => f.content);
+  const designCode   = [...libraryFiles, studentCode].join('\n\n');
 
   const extraFlags = (tool === 'verilator') ? getVerilatorFlags() : [];
 
