@@ -59,6 +59,6 @@ window.COURSES = [
     modules: ['spivoop1', 'spivoop2', 'spivoop3', 'spivoop4', 'spivoop5',
               'spivoop6', 'spivoop7', 'spivoop8', 'spivoop9', 'spivoop10',
               'spivoop11', 'spivoop12', 'spivoop13', 'spivoop14', 'spivoop15',
-              'spivoop16', 'spivoop17', 'spivoop18', 'spivoop19'],
+              'spivoop16', 'spivoop17', 'spivoop18', 'spivoop19', 'spivoop20'],
   },
 ];
