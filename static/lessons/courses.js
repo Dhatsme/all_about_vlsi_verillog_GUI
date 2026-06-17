@@ -58,6 +58,6 @@ window.COURSES = [
     description: 'Build a class-based SV verification environment one component at a time: transaction → scoreboard → mailbox → driver → monitor → agent → env. Freshers start at Ch.1. 3+yr engineers jump to Ch.9.',
     modules: ['spivoop1', 'spivoop2', 'spivoop3', 'spivoop4', 'spivoop5',
               'spivoop6', 'spivoop7', 'spivoop8', 'spivoop9', 'spivoop10',
-              'spivoop11', 'spivoop12', 'spivoop13', 'spivoop14'],
+              'spivoop11', 'spivoop12', 'spivoop13', 'spivoop14', 'spivoop15'],
   },
 ];
