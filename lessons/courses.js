@@ -61,4 +61,11 @@ window.COURSES = [
               'spivoop11', 'spivoop12', 'spivoop13', 'spivoop14', 'spivoop15',
               'spivoop16', 'spivoop17', 'spivoop18', 'spivoop19', 'spivoop20'],
   },
+  {
+    id: 'i2coop',
+    title: 'I²C OOP TB — Build It From Scratch',
+    icon: '🔗',
+    description: 'Apply class-based verification methodology to I²C: transaction → scoreboard → driver → monitor → agent → env. Builds on spivoop skills with I²C-specific challenges: ACK/NACK, open-drain, multi-byte transfers.',
+    modules: ['i2coop1'],
+  },
 ];
