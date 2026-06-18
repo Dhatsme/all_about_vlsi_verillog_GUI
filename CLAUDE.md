@@ -6,6 +6,31 @@ Read this file completely before doing anything else.
 
 ---
 
+## Decision-Making Rules — Read Before Suggesting Anything
+
+This is a **growing product**, not a one-off script. Before suggesting any solution, ask:
+
+1. **Does this fit the bigger picture?** The site will eventually have user login, progress tracking, MCQ scores, and ~100+ students. A solution that works today but blocks that growth is the wrong solution.
+2. **Quick fix or long-term fix?** Always tell the owner explicitly: "This is a temporary fix" or "This will scale with the project." Let him decide — don't assume.
+3. **What does the owner already have?** Default to tools already in use (Gmail, GitHub, Google Sheets) before suggesting new platforms. Every new platform = new credentials, new integration, new maintenance burden.
+4. **Consolidate, don't add.** If a new need arises, check if an existing platform already handles it before introducing a new one.
+5. **Never answer the narrow question without checking the wider context in this file.**
+
+### Current infrastructure
+- **Hosting:** Railway (deployed from `develop` branch)
+- **Frontend:** Static HTML/CSS/JS — frozen, do not modify
+- **Backend:** FastAPI (`main.py`)
+- **Feedback storage:** Google Sheets via Apps Script
+- **Auth/Progress tracking:** Not yet built — planned for Supabase
+- **Owner's existing tools:** Gmail, GitHub, Google Sheets
+
+### Planned but not built yet
+- Google login (OAuth)
+- Per-user progress tracking (courses completed, MCQ scores)
+- ~100 students expected
+
+---
+
 ## Mission
 
 Build the next unchecked chapter in the curriculum table below.
