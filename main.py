@@ -177,36 +177,29 @@ def uvm_info():
 
 # ── FEEDBACK ──────────────────────────────────────────────────────────────────
 
-_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1517004912418881656/chSQbUtXId4PYuAk6-EsHFYM3kIR2LC9OoQokehdsW1zg1piWnsOZBp-Y52Il2q7pLSh"
+_SHEETS_URL = "https://script.google.com/macros/s/AKfycbxSRg_T3PXKYul6FG5UT5RQ2ZULsQC0aJaHw5sVmeaUEFsJx301v77wv_98pmSddrBp/exec"
 
-def _post_to_discord(entry: dict) -> None:
-    stars = "★" * entry["rating"] + "☆" * (5 - entry["rating"]) if entry["rating"] else "no rating"
-    msg = (
-        f"**New Feedback** {stars}\n"
-        f"**Module:** {entry['module']} | **Lesson:** {entry['lesson']}\n"
-        f"**Comment:** {entry['comment'] or '_(none)_'}\n"
-        f"**Time:** {entry['ts']}"
-    )
-    payload = json.dumps({"content": msg}).encode()
+def _post_to_sheets(entry: dict) -> None:
+    payload = json.dumps(entry).encode()
     try:
         urllib.request.urlopen(
             urllib.request.Request(
-                _DISCORD_WEBHOOK, payload,
+                _SHEETS_URL, payload,
                 {"Content-Type": "application/json"}
             ), timeout=10
         )
     except Exception as e:
-        logging.error("Discord webhook failed: %s", e)
+        logging.error("Google Sheets post failed: %s", e)
 
-@app.get("/test-discord")
-def test_discord():
+@app.get("/test-sheets")
+def test_sheets():
     try:
-        payload = json.dumps({"content": "✅ Railway is live and Discord webhook works!"}).encode()
+        payload = json.dumps({"ts": "test", "module": "test", "lesson": "test", "rating": 5, "comment": "Railway connection test"}).encode()
         urllib.request.urlopen(
-            urllib.request.Request(_DISCORD_WEBHOOK, payload, {"Content-Type": "application/json"}),
+            urllib.request.Request(_SHEETS_URL, payload, {"Content-Type": "application/json"}),
             timeout=10
         )
-        return {"ok": True, "message": "Message sent to Discord"}
+        return {"ok": True}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -221,7 +214,7 @@ def submit_feedback(req: FeedbackRequest):
     }
     with open("feedback.jsonl", "a") as f:
         f.write(json.dumps(entry) + "\n")
-    _post_to_discord(entry)
+    _post_to_sheets(entry)
     return {"ok": True}
 
 # ── SIMULATION ────────────────────────────────────────────────────────────────
