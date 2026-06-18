@@ -195,8 +195,20 @@ def _post_to_discord(entry: dict) -> None:
                 {"Content-Type": "application/json"}
             ), timeout=10
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logging.error("Discord webhook failed: %s", e)
+
+@app.get("/test-discord")
+def test_discord():
+    try:
+        payload = json.dumps({"content": "✅ Railway is live and Discord webhook works!"}).encode()
+        urllib.request.urlopen(
+            urllib.request.Request(_DISCORD_WEBHOOK, payload, {"Content-Type": "application/json"}),
+            timeout=10
+        )
+        return {"ok": True, "message": "Message sent to Discord"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.post("/feedback")
 def submit_feedback(req: FeedbackRequest):
