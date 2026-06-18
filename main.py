@@ -177,7 +177,7 @@ def uvm_info():
 
 # ── FEEDBACK ──────────────────────────────────────────────────────────────────
 
-_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1515914856039977180/v3E209U8tqNY3ZCkd2EKAbqwlVuaLryaFAylGI207gjFHIgyJoRCxDNXcgKBVxzvO7Cw"
+_DISCORD_WEBHOOK = "https://discord.com/api/webhooks/1517004912418881656/chSQbUtXId4PYuAk6-EsHFYM3kIR2LC9OoQokehdsW1zg1piWnsOZBp-Y52Il2q7pLSh"
 
 def _post_to_discord(entry: dict) -> None:
     stars = "★" * entry["rating"] + "☆" * (5 - entry["rating"]) if entry["rating"] else "no rating"
