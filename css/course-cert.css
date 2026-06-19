@@ -87,7 +87,6 @@
 }
 .cert-close:hover { color: #f76f6f; background: rgba(247,111,111,0.1); }
 
-/* The printable paper */
 .cert-paper {
   background: #fffdf8;
   color: #1a1a2e;
@@ -305,7 +304,6 @@
   transform: translateY(-1px);
 }
 
-/* ── Print: show only the certificate paper ── */
 @media print {
   body * { visibility: hidden !important; }
   #cert-paper,
@@ -332,8 +330,6 @@
   .cert-paper { padding: 28px 24px; }
   .cert-course-name { font-size: 1.15rem; }
   .cert-name-input { font-size: 1.4rem; }
-
-  /* Course card: give title full row width, move button to its own line */
   .course-header { flex-wrap: wrap; gap: 10px; }
   .course-start-btn {
     flex: 0 0 100%;
