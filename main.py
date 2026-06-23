@@ -49,7 +49,9 @@ int main(int argc, char** argv) {
     top->trace(tfp, 99);
     tfp->open("wave.vcd");
 
-    unsigned long long sim_time = 0;
+    uint64_t sim_time = 0;   // uint64_t, NOT 'unsigned long long': on Linux uint64_t is
+                             // 'unsigned long', so ull makes tfp->dump() ambiguous. See error.md
+
     while (!Verilated::gotFinish() && sim_time < 1000000ULL) {
         top->eval();
         tfp->dump(sim_time++);

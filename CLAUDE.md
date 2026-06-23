@@ -367,6 +367,9 @@ design:
 
 All of these rules are mandatory. Breaking them causes silent failures.
 
+> ⚠️ See [`error.md`](error.md) for two recurring Verilator 5.020 compile traps
+> (lowercase `verilator` comments; `--no-timing` `dump()` type) and their fixes.
+
 | Rule | Correct | WRONG |
 |---|---|---|
 | Signal type | `logic` | `reg`, `wire` |
