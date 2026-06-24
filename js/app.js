@@ -151,12 +151,15 @@ function openLesson(modId, lessonId) {
   $('result-banner').className = 'result-banner';
   $('result-banner').textContent = '';
   if (window.innerWidth <= 768) mobTab('theory');
+
+  history.pushState({}, '', `/lesson/${modId}/${lessonId}`);
 }
 
 function goHome() {
   $('lesson-page').style.display  = 'none';
   $('landing-page').style.display = 'flex';
-  buildLandingPage();
+  history.pushState({}, '', '/');
+  buildLandingPage(); // refresh progress
 }
 
 function mobTab(tab) {
