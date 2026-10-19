@@ -2,7 +2,7 @@
 Build static/data/companies.json (used by static/jobs.html) from a company CSV.
 
 Usage:
-    python tools/make_companies_json.py step2_career_pages_v3.csv
+    python tools/make_companies_json.py static/data/companies.csv
 
 The CSV just needs a header row. Column names are matched loosely
 (see COLUMNS below) — add a name there if your CSV uses a different one.
@@ -14,11 +14,12 @@ from pathlib import Path
 
 # output field  ->  CSV column names to try, in order
 COLUMNS = {
-    "name":     ["company", "name", "company_name"],
+    "name":     ["company name", "company", "name", "company_name"],
     "country":  ["country", "hq_country"],
     "city":     ["city", "location", "canada_site", "hq_city"],
     "category": ["category", "type", "segment"],
-    "careers":  ["careers_url", "career_url", "careers_page", "careers", "url", "website"],
+    "careers":  ["job website", "careers_url", "career_url", "careers_page", "careers",
+                 "url", "website", "official website"],   # falls back to main site
 }
 
 OUT = Path(__file__).parent.parent / "static" / "data" / "companies.json"
@@ -43,11 +44,12 @@ def main(csv_path):
         companies, seen = [], set()
         for row in reader:
             c = {field: pick(row, names) for field, names in COLUMNS.items()}
-            if not c["name"] or c["name"].lower() in seen:
-                continue                      # skip blanks and duplicates
+            key = (c["name"].lower(), c["city"].lower(), c["country"].lower())
+            if not c["name"] or key in seen:
+                continue                      # skip blanks and duplicate offices
             if c["careers"] and not c["careers"].startswith("http"):
                 c["careers"] = "https://" + c["careers"]
-            seen.add(c["name"].lower())
+            seen.add(key)               # same company in another city is kept
             companies.append(c)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
