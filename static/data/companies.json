@@ -1,0 +1,10 @@
+[
+ {"name": "AMD", "country": "Canada", "city": "Markham", "category": "Chip design", "careers": "https://careers.amd.com"},
+ {"name": "Tenstorrent", "country": "Canada", "city": "Toronto", "category": "AI chips", "careers": "https://tenstorrent.com/careers"},
+ {"name": "Cognichip", "country": "Canada", "city": "Toronto", "category": "AI for EDA", "careers": "https://www.cognichip.ai"},
+ {"name": "Ciena", "country": "Canada", "city": "Ottawa", "category": "Telecom", "careers": "https://www.ciena.com/careers"},
+ {"name": "Cadence", "country": "USA", "city": "San Jose", "category": "EDA", "careers": "https://www.cadence.com/en_US/home/company/careers.html"},
+ {"name": "Synopsys", "country": "USA", "city": "Sunnyvale", "category": "EDA", "careers": "https://careers.synopsys.com"},
+ {"name": "Arm", "country": "UK", "city": "Cambridge", "category": "IP", "careers": "https://careers.arm.com"},
+ {"name": "Axelera AI", "country": "Netherlands", "city": "Eindhoven", "category": "AI chips", "careers": "https://www.axelera.ai/careers"}
+]
