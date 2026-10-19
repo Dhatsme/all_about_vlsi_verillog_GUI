@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semiconductor Job Board — All About VLSI</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<!-- Reuse the site theme: colours, fonts, nav and logo styles -->
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* style.css locks the page height for the IDE; this page needs to scroll */
+  html, body { height: auto; overflow: auto; }
+
+  .jobs-wrap   { max-width: 1100px; margin: 0 auto; padding: 32px 20px; }
+  .jobs-title  { font-family: var(--head); font-size: 1.8rem; margin-bottom: 6px; }
+  .jobs-title span { color: var(--accent); }
+  .jobs-sub    { color: var(--dim); margin-bottom: 24px; }
+
+  .filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+  .filters input, .filters select {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border2); border-radius: 6px;
+    padding: 8px 10px; font-family: var(--body); font-size: 0.9rem;
+  }
+  .filters input { flex: 1; min-width: 200px; }
+  .filters input:focus, .filters select:focus { outline: none; border-color: var(--accent); }
+
+  .count { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); margin-bottom: 10px; }
+
+  table { width: 100%; border-collapse: collapse; background: var(--surface);
+          border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  th { font-family: var(--mono); font-size: 0.7rem; text-transform: uppercase;
+       color: var(--dim); background: var(--panel); }
+  tr:hover td { background: var(--card); }
+  td a { color: var(--accent); text-decoration: none; }
+  td a:hover { text-decoration: underline; }
+
+  @media (max-width: 640px) {
+    .landing-nav { padding: 0 16px; }
+    .col-cat { display: none; }       /* hide category column on phones */
+  }
+</style>
+</head>
+<body>
+
+<nav class="landing-nav">
+  <a href="./" class="logo" style="text-decoration:none">
+    <div class="logo-chip">⬡</div>
+    All About <em>&nbsp;VLSI</em>
+  </a>
+</nav>
+
+<div class="jobs-wrap">
+  <h1 class="jobs-title">Semiconductor <span>Job Board</span></h1>
+  <p class="jobs-sub">Chip-design, verification and EDA companies with links to their careers pages.</p>
+
+  <div class="filters">
+    <input id="search" type="text" placeholder="Search company or city…">
+    <select id="country"><option value="">All countries</option></select>
+    <select id="category"><option value="">All categories</option></select>
+  </div>
+
+  <div class="count" id="count"></div>
+
+  <table>
+    <thead>
+      <tr><th>Company</th><th>Country</th><th>City</th><th class="col-cat">Category</th><th>Careers</th></tr>
+    </thead>
+    <tbody id="rows"></tbody>
+  </table>
+</div>
+
+<script>
+// Data lives in data/companies.json — one object per company:
+// { "name": "...", "country": "...", "city": "...", "category": "...", "careers": "https://..." }
+let companies = [];
+
+// Fill a <select> with the unique, sorted values of one field
+function fillSelect(id, field) {
+  const values = [...new Set(companies.map(c => c[field]).filter(Boolean))].sort();
+  const select = document.getElementById(id);
+  values.forEach(v => select.add(new Option(v, v)));
+}
+
+// Re-draw the table using the current filter values
+function render() {
+  const text     = document.getElementById('search').value.toLowerCase();
+  const country  = document.getElementById('country').value;
+  const category = document.getElementById('category').value;
+
+  const shown = companies.filter(c =>
+    (!country  || c.country  === country) &&
+    (!category || c.category === category) &&
+    (c.name + ' ' + (c.city || '')).toLowerCase().includes(text)
+  );
+
+  document.getElementById('rows').innerHTML = shown.map(c => `
+    <tr>
+      <td>${c.name}</td>
+      <td>${c.country || ''}</td>
+      <td>${c.city || ''}</td>
+      <td class="col-cat">${c.category || ''}</td>
+      <td>${c.careers ? `<a href="${c.careers}" target="_blank" rel="noopener">Open ↗</a>` : ''}</td>
+    </tr>`).join('');
+
+  document.getElementById('count').textContent = `${shown.length} of ${companies.length} companies`;
+}
+
+// Load the data once, then wire up the filters
+fetch('data/companies.json')
+  .then(r => r.json())
+  .then(data => {
+    companies = data.sort((a, b) => a.name.localeCompare(b.name));
+    fillSelect('country', 'country');
+    fillSelect('category', 'category');
+    ['search', 'country', 'category'].forEach(id =>
+      document.getElementById(id).addEventListener('input', render));
+    render();
+  })
+  .catch(err => {
+    document.getElementById('count').textContent = 'Could not load companies.json: ' + err;
+  });
+</script>
+</body>
+</html>
