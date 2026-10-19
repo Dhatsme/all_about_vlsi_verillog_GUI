@@ -38,7 +38,7 @@
 
   @media (max-width: 640px) {
     .landing-nav { padding: 0 16px; }
-    .col-cat { display: none; }       /* hide category column on phones */
+    .col-cat, .col-emp { display: none; }  /* hide category + employees columns on phones */
   }
 </style>
 </head>
@@ -59,13 +59,14 @@
     <input id="search" type="text" placeholder="Search company or city…">
     <select id="country"><option value="">All countries</option></select>
     <select id="category"><option value="">All categories</option></select>
+    <select id="type"><option value="">All company types</option></select>
   </div>
 
   <div class="count" id="count"></div>
 
   <table>
     <thead>
-      <tr><th>Company</th><th>Country</th><th>City</th><th class="col-cat">Category</th><th>Careers</th></tr>
+      <tr><th>Company</th><th>Country</th><th>City</th><th class="col-cat">Category</th><th>Type</th><th class="col-emp">Employees</th><th>Careers</th></tr>
     </thead>
     <tbody id="rows"></tbody>
   </table>
@@ -73,7 +74,8 @@
 
 <script>
 // Data lives in data/companies.json — one object per company:
-// { "name": "...", "country": "...", "city": "...", "category": "...", "careers": "https://..." }
+// { "name", "country", "city", "category", "type", "employees", "careers" }
+// Rebuild it from data/companies.csv with: python tools/make_companies_json.py static/data/companies.csv
 let companies = [];
 
 // Fill a <select> with the unique, sorted values of one field
@@ -88,10 +90,12 @@ function render() {
   const text     = document.getElementById('search').value.toLowerCase();
   const country  = document.getElementById('country').value;
   const category = document.getElementById('category').value;
+  const type     = document.getElementById('type').value;
 
   const shown = companies.filter(c =>
     (!country  || c.country  === country) &&
     (!category || c.category === category) &&
+    (!type     || c.type     === type) &&
     (c.name + ' ' + (c.city || '')).toLowerCase().includes(text)
   );
 
@@ -101,6 +105,8 @@ function render() {
       <td>${c.country || ''}</td>
       <td>${c.city || ''}</td>
       <td class="col-cat">${c.category || ''}</td>
+      <td>${c.type || ''}</td>
+      <td class="col-emp">${c.employees || ''}</td>
       <td>${c.careers ? `<a href="${c.careers}" target="_blank" rel="noopener">Open ↗</a>` : ''}</td>
     </tr>`).join('');
 
@@ -114,7 +120,8 @@ fetch('data/companies.json')
     companies = data.sort((a, b) => a.name.localeCompare(b.name));
     fillSelect('country', 'country');
     fillSelect('category', 'category');
-    ['search', 'country', 'category'].forEach(id =>
+    fillSelect('type', 'type');
+    ['search', 'country', 'category', 'type'].forEach(id =>
       document.getElementById(id).addEventListener('input', render));
     render();
   })

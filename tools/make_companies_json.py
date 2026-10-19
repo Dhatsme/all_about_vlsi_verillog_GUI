@@ -18,6 +18,8 @@ COLUMNS = {
     "country":  ["country", "hq_country"],
     "city":     ["city", "location", "canada_site", "hq_city"],
     "category": ["category", "type", "segment"],
+    "type":     ["company type"],                  # MNC / Startup / Service-based / ...
+    "employees": ["employees at this location"],
     "careers":  ["job website", "careers_url", "career_url", "careers_page", "careers",
                  "url", "website", "official website"],   # falls back to main site
 }
@@ -44,6 +46,10 @@ def main(csv_path):
         companies, seen = [], set()
         for row in reader:
             c = {field: pick(row, names) for field, names in COLUMNS.items()}
+            # no office headcount? show the company-wide figure, labelled as such
+            total = (row.get("company total employees") or "").strip()
+            if not c["employees"] and total:
+                c["employees"] = total + " (company total)"
             key = (c["name"].lower(), c["city"].lower(), c["country"].lower())
             if not c["name"] or key in seen:
                 continue                      # skip blanks and duplicate offices
