@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>All About VLSI — Lesson Studio</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="stylesheet" href="/css/style.css">
+<style>
+/* Lesson Studio (/dev) — builds on style.css tokens. Layout: author pane | live theory | editor | output */
+#studio { display:flex; flex-direction:column; height:100%; }
+
+.studio-nav { display:flex; align-items:center; gap:8px; padding:0 14px; min-height:var(--nav-h); background:var(--surface); border-bottom:1px solid var(--border); flex-wrap:wrap; padding-block:8px; }
+.studio-brand { font-family:var(--head); font-weight:700; font-size:0.9rem; color:var(--text); display:flex; align-items:center; gap:8px; margin-right:6px; white-space:nowrap; }
+.studio-brand .tag { font-family:var(--mono); font-size:0.58rem; font-weight:500; color:var(--accent3); border:1px solid rgba(247,147,79,0.4); padding:2px 6px; border-radius:4px; letter-spacing:0.06em; text-transform:uppercase; }
+.meta-fields { display:flex; gap:6px; flex:1; min-width:0; flex-wrap:wrap; }
+.meta-field { display:flex; flex-direction:column; gap:2px; flex:1; min-width:130px; }
+.meta-field label { font-family:var(--mono); font-size:0.55rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; }
+.meta-field input { background:var(--panel); border:1px solid var(--border); color:var(--text); font-family:var(--body); font-size:0.8rem; padding:5px 8px; border-radius:5px; width:100%; }
+.meta-field input:focus, .author-area:focus, .author-input:focus { outline:none; border-color:var(--accent); }
+.studio-actions { display:flex; gap:6px; align-items:center; }
+.submit-btn { font-family:var(--head); font-weight:700; font-size:0.78rem; background:var(--accent3); color:var(--bg); border:none; padding:7px 14px; border-radius:6px; cursor:pointer; white-space:nowrap; }
+.submit-btn:hover { filter:brightness(1.08); }
+.submit-btn:focus-visible, .run-btn:focus-visible, .fmt-btn:focus-visible, .author-tab:focus-visible { outline:2px solid var(--accent2); outline-offset:2px; }
+
+/* Author pane replaces the lesson sidebar */
+.author-pane { width:360px; min-width:300px; background:var(--surface); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+.author-tabs { display:flex; border-bottom:1px solid var(--border); }
+.author-tab { flex:1; background:none; border:none; border-bottom:2px solid transparent; color:var(--dim); font-family:var(--mono); font-size:0.68rem; padding:10px 6px; cursor:pointer; }
+.author-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+.author-body { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:12px; }
+.author-body[hidden] { display:none !important; }
+.fmt-row { display:flex; align-items:center; gap:6px; }
+.fmt-row .lbl { font-family:var(--mono); font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; margin-right:auto; }
+.fmt-btn { font-family:var(--mono); font-size:0.66rem; background:var(--panel); border:1px solid var(--border); color:var(--dim); padding:4px 10px; border-radius:4px; cursor:pointer; }
+.fmt-btn.active { background:rgba(0,212,170,0.1); border-color:var(--accent); color:var(--accent); }
+.author-area, .author-input { width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:0.74rem; line-height:1.55; padding:10px; border-radius:6px; resize:vertical; }
+.author-area.theory-src { flex:1; min-height:320px; }
+.field-label { font-family:var(--mono); font-size:0.6rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; display:block; margin-bottom:5px; }
+.field-help { font-size:0.7rem; color:var(--muted); margin-top:4px; line-height:1.45; }
+.live-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--success); margin-right:6px; vertical-align:middle; }
+
+/* Submit dialog */
+.studio-modal-bg { position:fixed; inset:0; background:rgba(4,6,10,0.72); display:flex; align-items:center; justify-content:center; z-index:50; padding:16px; }
+.studio-modal-bg[hidden] { display:none !important; }
+.studio-modal { background:var(--surface); border:1px solid var(--border2); border-radius:10px; width:min(760px,100%); max-height:90vh; display:flex; flex-direction:column; overflow:hidden; }
+.studio-modal header { padding:14px 16px; border-bottom:1px solid var(--border); display:flex; gap:10px; align-items:baseline; }
+.studio-modal h3 { font-family:var(--head); font-size:1rem; }
+.studio-modal .path { font-family:var(--mono); font-size:0.68rem; color:var(--accent); word-break:break-all; }
+.studio-modal .msg { padding:12px 16px; font-size:0.82rem; color:var(--dim); line-height:1.5; }
+.studio-modal .msg.err { color:var(--warn); }
+.studio-modal pre { margin:0 16px; padding:12px; background:var(--bg); border:1px solid var(--border); border-radius:6px; font-family:var(--mono); font-size:0.68rem; color:var(--text); overflow:auto; flex:1; min-height:120px; white-space:pre; }
+.studio-modal footer { padding:12px 16px; display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+.ghost-btn { font-family:var(--mono); font-size:0.7rem; background:var(--panel); border:1px solid var(--border); color:var(--dim); padding:7px 12px; border-radius:6px; cursor:pointer; }
+
+.preview-note { font-family:var(--mono); font-size:0.6rem; color:var(--muted); margin-left:auto; }
+
+@media (max-width: 768px) {
+  .author-pane { display:none; position:absolute; top:0; left:0; right:0; bottom:52px; width:100% !important; min-width:0 !important; border-right:none; }
+  .author-pane.mob-active { display:flex; }
+  .meta-field { min-width:100px; }
+  .studio-brand .tag { display:none; }
+}
+</style>
+</head>
+<body>
+<div id="studio">
+
+  <nav class="studio-nav">
+    <div class="studio-brand"><div class="logo-chip">⬡</div>Lesson Studio <span class="tag">dev</span></div>
+    <div class="meta-fields">
+      <div class="meta-field"><label for="f-course">Course</label><input id="f-course" placeholder="e.g. SystemVerilog Zero to Hero"></div>
+      <div class="meta-field"><label for="f-chapter">Chapter</label><input id="f-chapter" placeholder="e.g. Combinational Logic"></div>
+      <div class="meta-field"><label for="f-title">Lesson title</label><input id="f-title" placeholder="e.g. 2-to-1 Multiplexer"></div>
+    </div>
+    <div class="studio-actions">
+      <select class="sim-select" id="sim-select" title="Simulator">
+        <option value="iverilog">iverilog</option>
+        <option value="verilator">verilator</option>
+      </select>
+      <button class="run-btn" id="run-btn" onclick="runSimulation()">
+        <svg viewBox="0 0 10 10"><polygon points="1,0 10,5 1,10"/></svg> Run
+      </button>
+      <button class="submit-btn" id="submit-btn" onclick="openSubmit()">Final submit</button>
+    </div>
+  </nav>
+
+  <div class="lesson-body">
+
+    <!-- 1. Author pane -->
+    <aside class="author-pane" id="pane-write">
+      <div class="author-tabs" role="tablist">
+        <button class="author-tab active" id="atab-theory" onclick="authorTab('theory')">Theory</button>
+        <button class="author-tab" id="atab-checks" onclick="authorTab('checks')">Tasks &amp; checks</button>
+      </div>
+
+      <div class="author-body" id="abody-theory">
+        <div class="fmt-row">
+          <span class="lbl">Write in</span>
+          <button class="fmt-btn" id="fmt-markdown" onclick="setFormat('markdown')">Markdown</button>
+          <button class="fmt-btn" id="fmt-html" onclick="setFormat('html')">HTML</button>
+        </div>
+        <textarea class="author-area theory-src" id="theory-src" spellcheck="true"></textarea>
+        <div class="field-help" id="fmt-help"></div>
+      </div>
+
+      <div class="author-body" id="abody-checks" hidden>
+        <div>
+          <label class="field-label" for="f-tasks">Tasks · one per line</label>
+          <textarea class="author-input" id="f-tasks" rows="4"></textarea>
+        </div>
+        <div>
+          <label class="field-label" for="f-hint">Hint</label>
+          <textarea class="author-input" id="f-hint" rows="5"></textarea>
+        </div>
+        <div>
+          <label class="field-label" for="f-expected">Expected output · one per line</label>
+          <textarea class="author-input" id="f-expected" rows="3"></textarea>
+          <div class="field-help">The lesson counts as complete when every line here appears in the simulation output.</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 2. Live theory preview (same look as the lesson page) -->
+    <div class="theory-pane" id="pane-preview">
+      <div class="pane-header">
+        <span class="pane-label">&#128218; Theory</span>
+        <span class="preview-note"><span class="live-dot"></span>live preview</span>
+      </div>
+      <div class="theory-content" id="theory-content"></div>
+    </div>
+
+    <!-- 3. Code -->
+    <div class="editor-pane" id="pane-code">
+      <div class="editor-header">
+        <button class="file-tab active" id="tab-design" onclick="switchEditorTab('design')">design.sv</button>
+        <button class="file-tab" id="tab-tb" onclick="switchEditorTab('tb')">testbench.sv</button>
+      </div>
+      <div class="editor-wrap">
+        <div class="line-nums" id="lnum-design"></div>
+        <textarea class="code-editor" id="editor-design" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off"></textarea>
+        <div class="line-nums" id="lnum-tb" style="display:none;"></div>
+        <textarea class="code-editor" id="editor-tb" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" style="display:none;"></textarea>
+      </div>
+    </div>
+
+    <!-- 4. Output -->
+    <div class="output-pane" id="pane-output">
+      <div class="output-header">
+        <span class="pane-label">Console</span>
+        <span class="status-pill" id="status-pill">idle</span>
+      </div>
+      <div id="console-output"></div>
+      <div class="result-banner" id="result-banner"></div>
+      <div class="wave-pane" id="wave-pane">
+        <div class="wave-header">
+          <span class="pane-label">&#9201; Waveform</span>
+          <span id="wave-info" style="font-family:var(--mono);font-size:0.6rem;color:var(--muted);"></span>
+          <div style="margin-left:auto;display:flex;gap:4px;">
+            <button class="ghost-btn" style="padding:2px 7px" onclick="Waveform.zoomOut()" title="Zoom out">&#8722;</button>
+            <button class="ghost-btn" style="padding:2px 7px" onclick="Waveform.zoomIn()" title="Zoom in">+</button>
+            <button class="ghost-btn" style="padding:2px 7px" onclick="Waveform.zoomFit()" title="Fit">fit</button>
+          </div>
+        </div>
+        <div class="wave-scroll-area" id="wave-scroll"><canvas id="wave-canvas"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Mobile tabs -->
+    <div class="mob-tab-bar" id="mob-tab-bar">
+      <button class="mob-tab" id="mob-tab-write" onclick="mobTab('write')"><span class="mob-tab-icon">&#9998;</span><span>Write</span></button>
+      <button class="mob-tab" id="mob-tab-preview" onclick="mobTab('preview')"><span class="mob-tab-icon">&#128218;</span><span>Preview</span></button>
+      <button class="mob-tab" id="mob-tab-code" onclick="mobTab('code')"><span class="mob-tab-icon">&#128187;</span><span>Code</span></button>
+      <button class="mob-tab" id="mob-tab-output" onclick="mobTab('output')"><span class="mob-tab-icon">&#9654;</span><span>Output</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- Submit dialog -->
+<div class="studio-modal-bg" id="submit-modal" hidden>
+  <div class="studio-modal" role="dialog" aria-labelledby="submit-h">
+    <header><h3 id="submit-h">Submit lesson for review</h3></header>
+    <div class="msg" id="submit-msg"></div>
+    <div style="padding:0 16px 8px;"><span class="path" id="submit-path"></span></div>
+    <pre id="submit-file"></pre>
+    <footer>
+      <button class="ghost-btn" onclick="closeSubmit()">Back to editing</button>
+      <button class="ghost-btn" onclick="copySubmission()" id="copy-btn">Copy file</button>
+      <button class="submit-btn" id="confirm-submit" onclick="confirmSubmit()">Submit for review</button>
+    </footer>
+  </div>
+</div>
+
+<script>/* Starter example, shown until the developer saves a draft */
+window.STUDIO_SAMPLE = {"f-course": "SystemVerilog Zero to Hero", "f-chapter": "Combinational Logic", "f-title": "2-to-1 Multiplexer", "f-tasks": "Run the given design and testbench\nCheck that y follows a when sel=0 and b when sel=1\nOpen the waveform and find the moment sel changes", "f-hint": "The conditional operator works like an if/else in one line:\n  assign y = sel ? b : a;", "f-expected": "sel=1 a=0 b=1 -> y=1\nMUX TEST PASSED", "editor-design": "// 2-to-1 multiplexer: sel picks which input reaches y\nmodule mux2 (\n  input  wire a,\n  input  wire b,\n  input  wire sel,\n  output wire y\n);\n  assign y = sel ? b : a;\nendmodule\n", "editor-tb": "module tb;\n  reg a, b, sel;\n  wire y;\n\n  mux2 dut (.a(a), .b(b), .sel(sel), .y(y));\n\n  initial begin\n    $dumpfile(\"wave.vcd\");\n    $dumpvars(0, tb);\n    a = 0; b = 1; sel = 0; #10;\n    $display(\"sel=%b a=%b b=%b -> y=%b\", sel, a, b, y);\n    sel = 1; #10;\n    $display(\"sel=%b a=%b b=%b -> y=%b\", sel, a, b, y);\n    a = 1; b = 0; #10;\n    $display(\"sel=%b a=%b b=%b -> y=%b\", sel, a, b, y);\n    sel = 0; #10;\n    $display(\"sel=%b a=%b b=%b -> y=%b\", sel, a, b, y);\n    $display(\"MUX TEST PASSED\");\n    $finish;\n  end\nendmodule\n", "theory-src": "## What a multiplexer does\nA **multiplexer** (mux) is a switch for signals. It has several data inputs and one output, and a **select** line decides which input reaches the output.\n\nThink of a TV remote: many channels come in, but the button you press picks the one you see.\n\n## The 2-to-1 mux\n| sel | y |\n|---|---|\n| 0 | a |\n| 1 | b |\n\nIn Verilog this is one line, using the conditional operator:\n\n```\nassign y = sel ? b : a;\n```\n\n> Read it as: *if `sel` is 1, `y` takes `b`; otherwise `y` takes `a`.*\n\n## Where you meet it in a chip\nMuxes are everywhere: choosing between a register value and a bypass path, picking a read port in a register file, or selecting test-mode inputs during scan.\n"};</script>
+<script src="/js/vendor/marked.min.js"></script>
+<script src="/js/waveform.js"></script>
+<script>
+/* ═══ Lesson Studio ═══ */
+const SIM_URL    = window.STUDIO_SIM_URL || '/simulate';
+const SUBMIT_URL = window.STUDIO_SUBMIT_URL || '/dev/submit';
+const $ = id => document.getElementById(id);
+const SUBMIT_ENABLED = false;  // turn on once the /dev/submit endpoint exists
+const STUDIO = { format: window.STUDIO_DEFAULT_FORMAT || 'markdown', tab: 'design', submission: null };
+const DRAFT_KEY = 'aavlsi-studio-draft-v1';
+
+const SAMPLE = window.STUDIO_SAMPLE || null;
+
+/* ── Theory rendering ── */
+function theoryHtml() {
+  const src = $('theory-src').value;
+  if (STUDIO.format === 'html') return src;
+  const html = marked.parse(src, { gfm: true, breaks: false });
+  // Map plain Markdown output onto the site's own lesson styles
+  const box = document.createElement('div');
+  box.innerHTML = html;
+  box.querySelectorAll('pre').forEach(p => { p.classList.add('code-block'); });
+  box.querySelectorAll('table').forEach(t => { if (!t.className) t.classList.add('truth-table'); });
+  return box.innerHTML;
+}
+
+function lines(id) { return $(id).value.split('\n').map(s => s.trim()).filter(Boolean); }
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderPreview() {
+  const tc = $('theory-content');
+  tc.innerHTML = theoryHtml();
+  const tasks = lines('f-tasks');
+  if (tasks.length) {
+    const box = document.createElement('div');
+    box.className = 'tasks-box';
+    box.innerHTML = `<div class="tasks-title">✏ Your Tasks</div>` +
+      tasks.map((t, i) => `<div class="task-item" id="task-${i}"><div class="task-check"></div><span>${t}</span></div>`).join('');
+    tc.appendChild(box);
+  }
+  if ($('f-hint').value.trim()) {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `<button class="hint-toggle" onclick="toggleHint()">💡 Show Hint</button>
+      <div class="hint-box" id="hint-box"><pre class="hint-pre">${esc($('f-hint').value)}</pre></div>`;
+    tc.appendChild(wrap);
+  }
+  saveDraft();
+}
+function toggleHint() {
+  const b = $('hint-box'); if (!b) return;
+  b.classList.toggle('show');
+}
+
+let renderTimer;
+function scheduleRender() { clearTimeout(renderTimer); renderTimer = setTimeout(renderPreview, 120); }
+
+function setFormat(fmt) {
+  STUDIO.format = fmt;
+  $('fmt-markdown').classList.toggle('active', fmt === 'markdown');
+  $('fmt-html').classList.toggle('active', fmt === 'html');
+  $('fmt-help').innerHTML = fmt === 'markdown'
+    ? 'Markdown: <code>##</code> heading, <code>**bold**</code>, <code>`code`</code>, tables with <code>|</code>, code blocks with <code>```</code>. HTML tags also work here.'
+    : 'HTML: the same tags the lessons use today, e.g. <code>&lt;h2&gt;</code>, <code>&lt;table class="truth-table"&gt;</code>, <code>&lt;pre class="code-block"&gt;</code>.';
+  renderPreview();
+}
+
+function authorTab(t) {
+  $('abody-theory').hidden = t !== 'theory';
+  $('abody-checks').hidden = t !== 'checks';
+  $('atab-theory').classList.toggle('active', t === 'theory');
+  $('atab-checks').classList.toggle('active', t === 'checks');
+}
+
+/* ── Code editors ── */
+function switchEditorTab(tab) {
+  STUDIO.tab = tab;
+  ['design','tb'].forEach(t => {
+    $(`editor-${t}`).style.display = t === tab ? '' : 'none';
+    $(`lnum-${t}`).style.display   = t === tab ? '' : 'none';
+    $(`tab-${t}`).classList.toggle('active', t === tab);
+  });
+  syncLineNums(tab);
+}
+function syncLineNums(tab) {
+  const ta = $(`editor-${tab}`), ln = $(`lnum-${tab}`);
+  ln.innerHTML = Array.from({ length: ta.value.split('\n').length }, (_, i) => `<span>${i + 1}</span>`).join('');
+  ln.scrollTop = ta.scrollTop;
+}
+['design','tb'].forEach(t => {
+  const ta = $(`editor-${t}`);
+  ta.addEventListener('input', () => { syncLineNums(t); saveDraft(); });
+  ta.addEventListener('scroll', () => { $(`lnum-${t}`).scrollTop = ta.scrollTop; });
+  ta.addEventListener('keydown', e => {
+    if (e.key !== 'Tab') return;
+    e.preventDefault();
+    const s = ta.selectionStart;
+    ta.value = ta.value.slice(0, s) + '  ' + ta.value.slice(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = s + 2;
+    syncLineNums(t);
+  });
+});
+
+/* ── Console & simulation ── */
+function addConsoleLine(text, cls) {
+  const out = $('console-output'), span = document.createElement('span');
+  if (cls) span.className = cls;
+  span.textContent = text;
+  out.appendChild(span);
+  out.appendChild(document.createTextNode('\n'));
+}
+function clearConsole() { $('console-output').innerHTML = ''; addConsoleLine('// Console ready. Hit ▶ Run to simulate.', 'o-info'); }
+function showBanner(kind, text) { const b = $('result-banner'); b.className = 'result-banner ' + kind; b.textContent = text; }
+
+function showResult(data, expected, recorded) {
+  const pill = $('status-pill');
+  if (!data.success) {
+    pill.className = 'status-pill err'; pill.textContent = 'error';
+    addConsoleLine('Compilation error:', 'o-err');
+    data.output.split('\n').forEach(l => l.trim() && addConsoleLine(l, 'o-err'));
+    showBanner('fail', '✗ Compilation failed — fix errors above');
+    return;
+  }
+  data.output.split('\n').forEach(l => l.trim() && addConsoleLine(l, l.includes('$finish') ? 'o-dim' : 'o-ok'));
+  pill.className = 'status-pill ok'; pill.textContent = recorded ? 'recorded' : 'passed';
+  const missing = expected.filter(ex => !data.output.includes(ex));
+  if (!expected.length)       showBanner('pass', '✓ Simulation ran. Add expected output lines to check it.');
+  else if (!missing.length)   showBanner('pass', `✓ All ${expected.length} expected line(s) found. A student would complete this lesson.`);
+  else                        showBanner('fail', `✗ Missing expected output: ${missing.join(' · ')}`);
+  if (data.vcd && data.vcd.trim()) {
+    const parsed = Waveform.parseVCD(data.vcd);
+    Waveform.render(parsed);
+    $('wave-info').textContent = `${Object.keys(parsed.signals).length} signals`;
+  }
+}
+
+async function runSimulation() {
+  const btn = $('run-btn'), pill = $('status-pill'), tool = $('sim-select').value;
+  const design = $('editor-design').value, tb = $('editor-tb').value, expected = lines('f-expected');
+  btn.disabled = true; pill.className = 'status-pill run'; pill.textContent = 'running';
+  $('result-banner').className = 'result-banner';
+  clearConsole();
+  addConsoleLine(`$ ${tool === 'verilator' ? 'verilator --cc --sv --trace design.sv tb.sv' : 'iverilog -g2012 design.v testbench.v'}`, 'o-info');
+  try {
+    const res = await fetch(SIM_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ design, testbench: tb, tool, extra_flags: [], use_uvm: false }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    showResult(await res.json(), expected, false);
+  } catch (err) {
+    const rec = window.STUDIO_RECORDED;
+    if (rec && design.trim() === rec.design.trim() && tb.trim() === rec.testbench.trim()) {
+      addConsoleLine('// Preview: simulator not reachable here, showing a recorded iverilog run of this exact code.', 'o-dim');
+      showResult(rec.result, expected, true);
+    } else {
+      pill.className = 'status-pill err'; pill.textContent = 'offline';
+      addConsoleLine('Cannot reach the simulator: ' + err.message, 'o-err');
+      showBanner('fail', rec ? '✗ This preview cannot reach the simulator. On code.allaboutvlsi.com/dev, Run uses the real one.' : '✗ Simulator not reachable');
+    }
+  }
+  if (window.innerWidth <= 768) mobTab('output');
+  btn.disabled = false;
+}
+
+/* ── Submission ── */
+function slug(s) { return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'untitled'; }
+
+function buildSubmission() {
+  const course = $('f-course').value.trim(), chapter = $('f-chapter').value.trim(), title = $('f-title').value.trim();
+  const problems = [];
+  if (!course)  problems.push('course');
+  if (!chapter) problems.push('chapter');
+  if (!title)   problems.push('lesson title');
+  if (!$('theory-src').value.trim())   problems.push('theory');
+  if (!$('editor-design').value.trim()) problems.push('design.sv');
+  if (!$('editor-tb').value.trim())     problems.push('testbench.sv');
+  const stamp = new Date().toISOString();
+  const lesson = {
+    id: `sub-${slug(title)}`,
+    title,
+    theory: theoryHtml(),
+    tasks: lines('f-tasks'),
+    hint: $('f-hint').value,
+    expected: lines('f-expected'),
+    design: $('editor-design').value,
+    testbench: $('editor-tb').value,
+  };
+  const record = { course, chapter, submittedAt: stamp, theoryFormat: STUDIO.format, theorySource: $('theory-src').value, lesson };
+  const path = `submissions/${slug(course)}/${slug(chapter)}/${slug(title)}.js`;
+  const file = `// Lesson submission — review before adding to a course.\n// Course: ${course}\n// Chapter: ${chapter}\n// Submitted: ${stamp}\n(window.LESSON_SUBMISSIONS = window.LESSON_SUBMISSIONS || []).push(${JSON.stringify(record, null, 2)});\n`;
+  return { problems, path, file, record };
+}
+
+function openSubmit() {
+  const s = buildSubmission();
+  STUDIO.submission = s;
+  $('submit-path').textContent = s.path;
+  $('submit-file').textContent = s.file;
+  const msg = $('submit-msg');
+  if (s.problems.length) {
+    msg.className = 'msg err';
+    msg.textContent = 'Fill in before submitting: ' + s.problems.join(', ') + '.';
+    $('confirm-submit').disabled = true;
+  } else if (!SUBMIT_ENABLED) {
+    msg.className = 'msg';
+    msg.textContent = 'Sending for review is not switched on yet. Copy this file and send it to Dhatri. It will go into submissions/ and will not change any course until it is approved.';
+    $('confirm-submit').disabled = true;
+  } else {
+    msg.className = 'msg';
+    msg.textContent = 'This file goes to the repo as a commit for review. It stays in submissions/ and does not change any course until it is approved.';
+    $('confirm-submit').disabled = false;
+  }
+  $('submit-modal').hidden = false;
+}
+function closeSubmit() { $('submit-modal').hidden = true; }
+
+async function confirmSubmit() {
+  const s = STUDIO.submission, msg = $('submit-msg'), btn = $('confirm-submit');
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    const res = await fetch(SUBMIT_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: s.path, content: s.file, course: s.record.course, chapter: s.record.chapter, title: s.record.lesson.title }) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    msg.className = 'msg';
+    msg.innerHTML = `Submitted. Review request: <a href="${data.url}" target="_blank" rel="noopener" style="color:var(--accent)">${esc(data.url)}</a>`;
+    btn.textContent = 'Submitted';
+  } catch (err) {
+    msg.className = 'msg err';
+    msg.textContent = window.STUDIO_RECORDED
+      ? 'Preview only: the submit service is not connected yet. On the live page this button creates the commit for review.'
+      : 'Could not submit: ' + err.message + '. Your draft is kept in this browser; try again.';
+    btn.textContent = 'Submit for review'; btn.disabled = false;
+  }
+}
+
+async function copySubmission() {
+  const text = $('submit-file').textContent;
+  try { await navigator.clipboard.writeText(text); $('copy-btn').textContent = 'Copied'; }
+  catch { const r = document.createRange(); r.selectNodeContents($('submit-file')); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); $('copy-btn').textContent = 'Selected, press Ctrl+C'; }
+  setTimeout(() => $('copy-btn').textContent = 'Copy file', 2000);
+}
+
+/* ── Draft autosave (this browser only) ── */
+const FIELDS = ['f-course','f-chapter','f-title','theory-src','f-tasks','f-hint','f-expected','editor-design','editor-tb'];
+function saveDraft() {
+  try { const d = { format: STUDIO.format }; FIELDS.forEach(id => d[id] = $(id).value); localStorage.setItem(DRAFT_KEY, JSON.stringify(d)); } catch {}
+}
+function loadDraft() {
+  try { const d = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); if (d && d.format === STUDIO.format) return d; } catch {}
+  return null;
+}
+
+/* ── Mobile ── */
+function mobTab(name) {
+  const map = { write: 'pane-write', preview: 'pane-preview', code: 'pane-code', output: 'pane-output' };
+  Object.entries(map).forEach(([k, id]) => {
+    $(id).classList.toggle('mob-active', k === name);
+    $(`mob-tab-${k}`).classList.toggle('active', k === name);
+  });
+  if (name === 'output') setTimeout(() => Waveform.draw && Waveform.draw(), 50);
+}
+
+/* ── Boot ── */
+(function boot() {
+  const d = loadDraft() || (SAMPLE ? Object.assign({}, SAMPLE) : null);
+  if (d) FIELDS.forEach(id => { if (d[id] != null) $(id).value = d[id]; });
+  ['f-tasks','f-hint','f-expected'].forEach(id => $(id).addEventListener('input', scheduleRender));
+  ['f-course','f-chapter','f-title'].forEach(id => $(id).addEventListener('input', saveDraft));
+  $('theory-src').addEventListener('input', scheduleRender);
+  Waveform.init($('wave-canvas'), $('wave-scroll'));
+  switchEditorTab('design');
+  setFormat(STUDIO.format);
+  clearConsole();
+  if (window.innerWidth <= 768) mobTab('write');
+})();
+</script>
+</body>
+</html>
