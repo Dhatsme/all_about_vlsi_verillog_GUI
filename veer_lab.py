@@ -31,6 +31,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
@@ -239,14 +240,23 @@ def veer_run_uvm(req: UvmRequest):
         if "VEER_UVM_ROOT" in os.environ:
             cmd.append(f"UVM_ROOT={UVM_ROOT}")
         t0 = time.time()
+        # cwd must be VEER_ROOT: VeeR's config script writes its snapshot
+        # relative to the launch folder. start_new_session puts make and every
+        # compiler it spawns in one process group, so a timeout can stop all
+        # of them (otherwise orphaned g++ jobs keep eating the CPU).
+        proc = subprocess.Popen(cmd, cwd=VEER_ROOT, stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True,
+                                env=_veer_env(), start_new_session=True)
         try:
-            # cwd must be VEER_ROOT: VeeR's config script writes its snapshot
-            # relative to the launch folder.
-            run = subprocess.run(cmd, cwd=VEER_ROOT, capture_output=True, text=True,
-                                 timeout=UVM_TIMEOUT_S, env=_veer_env())
-            raw, rc = run.stdout + run.stderr, run.returncode
+            raw, _ = proc.communicate(timeout=UVM_TIMEOUT_S)
+            rc = proc.returncode
         except subprocess.TimeoutExpired:
-            raw, rc = f"Build/run stopped after {UVM_TIMEOUT_S} s (time limit).", -1
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.communicate()
+            raw = (f"Build/run stopped after {UVM_TIMEOUT_S} s (time limit).\n"
+                   "Files already compiled are kept, so running again continues "
+                   "where this run stopped.")
+            rc = -1
         secs = round(time.time() - t0, 1)
 
         # Drop the compiler command lines (hundreds of them) — keep what a
