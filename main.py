@@ -441,6 +441,12 @@ def simulate(req: SimRequest):
             "vcd":     vcd_content,
         }
 
+# ── VeeR EL2 LAB (static/veer.html) ───────────────────────────────────────────
+# Separate router so the VeeR/UVM setup (its own Verilator 5.052) stays
+# isolated from /simulate, which the lessons use with the system Verilator.
+from veer_lab import router as veer_router  # noqa: E402
+app.include_router(veer_router)
+
 # ── STATIC FILES ──────────────────────────────────────────────────────────────
 _static_dir = Path(__file__).parent / "static"
 if not _static_dir.is_dir():

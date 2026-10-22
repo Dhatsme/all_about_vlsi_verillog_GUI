@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VeeR EL2 Lab — All About VLSI</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<!-- Reuse the site theme: colours, fonts, nav and logo styles -->
+<link rel="stylesheet" href="css/style.css">
+<style>
+  /* style.css locks the page height for the IDE; this page needs to scroll */
+  html, body { height: auto; overflow: auto; }
+
+  .lab-wrap  { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+  .lab-title { font-family: var(--head); font-size: 1.8rem; margin-bottom: 6px; }
+  .lab-title span { color: var(--accent); }
+  .lab-sub   { color: var(--dim); max-width: 760px; margin-bottom: 14px; line-height: 1.55; }
+  .status    { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); margin-bottom: 22px; }
+  .status b  { color: var(--dim); font-weight: 500; }
+  .dot       { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin: 0 5px 1px 0; background: var(--muted); }
+  .dot.ok    { background: var(--success); }
+  .dot.bad   { background: var(--warn); }
+
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tab  { background: none; border: none; color: var(--dim); font-family: var(--body); font-size: 0.95rem;
+          padding: 10px 14px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tab:hover  { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab small  { font-family: var(--mono); color: var(--muted); margin-right: 6px; }
+
+  .pane { display: none; }
+  .pane.active { display: block; }
+
+  .card  { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; margin-bottom: 16px; }
+  .card h2 { font-family: var(--head); font-size: 1.05rem; margin-bottom: 8px; }
+  .card p  { color: var(--dim); line-height: 1.55; margin-bottom: 8px; }
+  .card p:last-child { margin-bottom: 0; }
+  .card code { font-family: var(--mono); font-size: 0.85em; color: var(--accent); }
+  .exercise { border-color: var(--accent3); }
+  .exercise h2 { color: var(--accent3); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  select, input[type=text] {
+    background: var(--panel); color: var(--text); border: 1px solid var(--border2);
+    border-radius: 6px; padding: 8px 10px; font-family: var(--body); font-size: 0.9rem;
+  }
+  select:focus, input:focus { outline: none; border-color: var(--accent); }
+  .btn { background: var(--accent); color: var(--bg); border: none; border-radius: 6px; padding: 9px 16px;
+         font-family: var(--body); font-weight: 600; font-size: 0.9rem; cursor: pointer; }
+  .btn:disabled { opacity: 0.5; cursor: wait; }
+  .btn.ghost { background: none; color: var(--dim); border: 1px solid var(--border2); font-weight: 500; }
+  .btn.ghost:hover { color: var(--text); border-color: var(--dim); }
+  .about { color: var(--dim); font-size: 0.85rem; }
+
+  .verdict { font-family: var(--mono); font-size: 0.8rem; padding: 3px 9px; border-radius: 4px; }
+  .verdict.pass { background: rgba(79,219,143,.12); color: var(--success); }
+  .verdict.fail { background: rgba(247,111,111,.12); color: var(--warn); }
+  .verdict.run  { background: rgba(79,142,247,.12); color: var(--accent2); }
+
+  .out-tabs { display: flex; gap: 4px; margin: 14px 0 0; }
+  .out-tab  { background: var(--panel); border: 1px solid var(--border); border-bottom: none; color: var(--dim);
+              font-family: var(--mono); font-size: 0.72rem; padding: 6px 10px; border-radius: 6px 6px 0 0; cursor: pointer; }
+  .out-tab.active { color: var(--text); background: var(--card); }
+  pre.out { background: var(--card); border: 1px solid var(--border); border-radius: 0 6px 6px 6px;
+            font-family: var(--mono); font-size: 0.76rem; line-height: 1.5; color: var(--text);
+            padding: 12px; max-height: 460px; overflow: auto; white-space: pre-wrap; word-break: break-word; margin: 0; }
+  pre.out.solo { border-radius: 6px; margin-top: 14px; }
+  .out .e { color: var(--warn); }
+  .out .w { color: var(--accent3); }
+  .out .p { color: var(--success); }
+
+  .editor-grid { display: grid; grid-template-columns: 230px 1fr; gap: 14px; }
+  .files { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 8px; align-self: start; }
+  .file  { display: block; width: 100%; text-align: left; background: none; border: none; color: var(--dim);
+           font-family: var(--mono); font-size: 0.74rem; padding: 7px 8px; border-radius: 5px; cursor: pointer; }
+  .file:hover  { background: var(--panel); color: var(--text); }
+  .file.active { background: var(--card); color: var(--accent); }
+  .file .mod   { color: var(--accent3); margin-left: 4px; }
+  .file .role  { display: block; font-family: var(--body); font-size: 0.7rem; color: var(--muted); margin-top: 1px; }
+  textarea.code { width: 100%; height: 460px; resize: vertical; background: var(--card); color: var(--text);
+                  border: 1px solid var(--border2); border-radius: 8px; padding: 12px; tab-size: 2;
+                  font-family: var(--mono); font-size: 0.78rem; line-height: 1.55; white-space: pre; }
+  textarea.code:focus { outline: none; border-color: var(--accent); }
+  .editor-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+  .editor-bar .spacer { flex: 1; }
+  .counts { font-family: var(--mono); font-size: 0.76rem; color: var(--dim); }
+  .counts b { color: var(--text); }
+
+  @media (max-width: 760px) {
+    .landing-nav { padding: 0 16px; }
+    .lab-title { font-size: 1.45rem; }
+    .editor-grid { grid-template-columns: 1fr; }
+    .files { display: flex; overflow-x: auto; gap: 4px; }
+    .file  { width: auto; white-space: nowrap; }
+    .file .role { display: none; }
+    textarea.code { height: 360px; }
+  }
+</style>
+</head>
+<body>
+
+<nav class="landing-nav">
+  <a href="./" class="logo" style="text-decoration:none">
+    <div class="logo-chip">⬡</div>
+    All About <em>&nbsp;VLSI</em>
+  </a>
+</nav>
+
+<div class="lab-wrap">
+  <h1 class="lab-title">VeeR EL2 <span>Lab</span></h1>
+  <p class="lab-sub">
+    A real, open-source RISC-V core (VeeR EL2, from CHIPS Alliance) and its real UVM testbench,
+    simulated with Verilator on our server. Run programs on the CPU, then open the UVM testbench,
+    change it, and rerun it.
+  </p>
+  <div class="status" id="status"><span class="dot"></span>Checking server…</div>
+
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-pane="cpu" role="tab"><small>01</small>Run the CPU</button>
+    <button class="tab" data-pane="uvm" role="tab"><small>02</small>UVM testbench</button>
+  </div>
+
+  <!-- ── 1. CPU ─────────────────────────────────────────────────────────── -->
+  <section class="pane active" id="pane-cpu">
+    <div class="card">
+      <h2>What happens when you press Run</h2>
+      <p>The server loads a compiled RISC-V program into the core's memory as <code>program.hex</code>,
+         then runs a Verilator model of the full VeeR EL2 core. The program writes text to a
+         memory-mapped console address and finally reports <code>TEST_PASSED</code> or <code>TEST_FAILED</code>.</p>
+      <p>The <b>Instruction trace</b> shows every instruction the CPU retired, with register updates —
+         the same log verification engineers compare against a reference model.</p>
+    </div>
+
+    <div class="row">
+      <select id="cpu-test" aria-label="Program to run"></select>
+      <button class="btn" id="cpu-run">▶ Run on VeeR</button>
+      <span id="cpu-verdict"></span>
+    </div>
+    <p class="about" id="cpu-about" style="margin-top:8px"></p>
+
+    <div class="out-tabs" id="cpu-out-tabs">
+      <button class="out-tab active" data-out="console">Program output</button>
+      <button class="out-tab" data-out="output">Simulation log</button>
+      <button class="out-tab" data-out="exec_log">Instruction trace</button>
+    </div>
+    <pre class="out" id="cpu-out">Pick a program and press Run.</pre>
+  </section>
+
+  <!-- ── 2. UVM ─────────────────────────────────────────────────────────── -->
+  <section class="pane" id="pane-uvm">
+    <div class="card">
+      <h2>The DCCM UVM testbench</h2>
+      <p>This testbench verifies VeeR's data memory (DCCM) on its own. It has every standard UVM piece:
+         a sequence item, sequences, a sequencer, a driver, a monitor, an agent, a scoreboard and a test.
+         Pick a file on the left to read it. Edit anything, then press Run — the server rebuilds only what
+         changed and runs the test.</p>
+      <p>Runs are queued one at a time. An unchanged run takes seconds; a big edit can take a few minutes
+         because the UVM library is large.</p>
+    </div>
+
+    <div class="card exercise">
+      <h2>Exercise: a test that passes but checks nothing</h2>
+      <p>Run the test unchanged. It prints <code>DCCM TEST PASSED</code> with 0 errors. Now count how often the
+         scoreboard prints <code>READ DATA Match</code> or <code>READ DATA Mismatch</code> in the log.</p>
+      <p>Then open <code>dccm_monitor.sv</code>: the monitor creates one transaction object and reuses it for every
+         bus cycle, and <code>wr_en</code> is set but never cleared. Fix it so the scoreboard really checks reads.
+         What does the scoreboard report now?</p>
+    </div>
+
+    <div class="editor-grid">
+      <div class="files" id="files" aria-label="Testbench files"></div>
+      <div>
+        <textarea class="code" id="code" spellcheck="false" aria-label="File editor"></textarea>
+        <div class="editor-bar">
+          <label class="about" for="uvm-test">Test</label>
+          <input type="text" id="uvm-test" value="mem_wr_rd_test" size="18">
+          <button class="btn" id="uvm-run">▶ Build &amp; run</button>
+          <span id="uvm-verdict"></span>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="reset-file">Reset file</button>
+          <button class="btn ghost" id="reset-all">Reset all</button>
+        </div>
+      </div>
+    </div>
+    <div class="counts" id="uvm-counts" style="margin-top:14px"></div>
+    <pre class="out solo" id="uvm-out">Output appears here after a run.</pre>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const store = {   // per-viewer convenience only; works without storage
+    get(k) { try { return localStorage.getItem('veer:' + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem('veer:' + k, v); } catch {} },
+    del(k) { try { localStorage.removeItem('veer:' + k); } catch {} },
+  };
+
+  // Colour error / warning / pass lines in a log.
+  function paint(text) {
+    return esc(text).split('\n').map(l =>
+      /UVM_(ERROR|FATAL)|%Error|TEST_FAILED|Mismatch|\bFAIL\b/.test(l) ? `<span class="e">${l}</span>` :
+      /UVM_WARNING|%Warning/.test(l) ? `<span class="w">${l}</span>` :
+      /PASSED|Match\b|UVM_ERROR :\s+0/.test(l) ? `<span class="p">${l}</span>` : l
+    ).join('\n');
+  }
+  function verdict(el, kind, text) { el.innerHTML = `<span class="verdict ${kind}">${esc(text)}</span>`; }
+  function ticker(el) {      // "running 12 s" while a request is in flight
+    const t0 = Date.now();
+    const tick = () => verdict(el, 'run', `running ${Math.round((Date.now() - t0) / 1000)} s`);
+    tick(); return setInterval(tick, 1000);
+  }
+
+  // ── tabs ──────────────────────────────────────────────────────────────────
+  document.querySelectorAll('.tab').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x === b));
+    document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + b.dataset.pane));
+    if (b.dataset.pane === 'uvm') loadFiles();
+  });
+
+  // ── server status ─────────────────────────────────────────────────────────
+  let info = null;
+  fetch('/veer/info').then(r => r.json()).then(d => {
+    info = d;
+    const dot = ok => `<span class="dot ${ok ? 'ok' : 'bad'}"></span>`;
+    $('status').innerHTML = `${dot(d.cpu_ready)}CPU model <b>${d.cpu_ready ? 'ready' : 'not built'}</b>` +
+      ` &nbsp; ${dot(d.uvm_ready)}UVM testbench <b>${d.uvm_ready ? 'ready' : 'not built'}</b>` +
+      ` &nbsp; · &nbsp;${esc(d.verilator)}`;
+    $('cpu-test').innerHTML = d.cpu_tests.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
+    showAbout();
+  }).catch(() => {
+    $('status').innerHTML = '<span class="dot bad"></span>Simulation server not reachable from this page.';
+  });
+
+  // ── 1. CPU run ────────────────────────────────────────────────────────────
+  let cpuResult = null, cpuView = 'console';
+  function showAbout() {
+    const t = info && info.cpu_tests.find(x => x.name === $('cpu-test').value);
+    $('cpu-about').textContent = t ? t.about : '';
+  }
+  $('cpu-test').onchange = showAbout;
+
+  function showCpu() {
+    if (!cpuResult) return;
+    const text = cpuResult[cpuView] || (cpuView === 'console'
+      ? '(this program printed nothing to the console — see the Simulation log)' : '(empty)');
+    $('cpu-out').innerHTML = paint(text);
+  }
+  document.querySelectorAll('#cpu-out-tabs .out-tab').forEach(b => b.onclick = () => {
+    document.querySelectorAll('#cpu-out-tabs .out-tab').forEach(x => x.classList.toggle('active', x === b));
+    cpuView = b.dataset.out; showCpu();
+  });
+
+  $('cpu-run').onclick = async () => {
+    const btn = $('cpu-run'); btn.disabled = true;
+    const t = ticker($('cpu-verdict'));
+    try {
+      const r = await fetch('/veer/run-cpu', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                               body: JSON.stringify({ test: $('cpu-test').value }) });
+      cpuResult = await r.json();
+      clearInterval(t);
+      verdict($('cpu-verdict'), cpuResult.success ? 'pass' : 'fail',
+              `${cpuResult.success ? 'TEST_PASSED' : 'FAILED'}${cpuResult.seconds != null ? ' · ' + cpuResult.seconds + ' s' : ''}`);
+      showCpu();
+    } catch (e) {
+      clearInterval(t); verdict($('cpu-verdict'), 'fail', 'request failed');
+      $('cpu-out').textContent = String(e);
+    } finally { btn.disabled = false; }
+  };
+
+  // ── 2. UVM editor ─────────────────────────────────────────────────────────
+  const ROLES = {
+    'dccm_transaction_sequence_item.sv': 'one bus transaction',
+    'dccm_sequence.sv': 'stimulus generators',
+    'dccm_sequencer.sv': 'feeds items to driver',
+    'dccm_driver.sv': 'drives the pins',
+    'dccm_monitor.sv': 'watches the pins',
+    'dccm_agent.sv': 'driver + monitor + sequencer',
+    'dccm_scoreboard.sv': 'checks the results',
+    'dccm_base_test.sv': 'builds the env',
+    'dccm_memtest.sv': 'the test that runs',
+    'dccm_interface.sv': 'signal bundle',
+    'tbench_top.sv': 'top: DUT + clock',
+  };
+  let original = null, current = null;
+
+  async function loadFiles() {
+    if (original) return;
+    try {
+      original = await (await fetch('/veer/uvm-files')).json();
+    } catch { $('uvm-out').textContent = 'Could not load the testbench files.'; return; }
+    const names = Object.keys(original);
+    const order = n => { const i = Object.keys(ROLES).indexOf(n); return i < 0 ? 99 : i; };
+    names.sort((a, b) => order(a) - order(b));
+    current = store.get('current') || names[0];
+    if (!original[current]) current = names[0];
+    $('files').innerHTML = names.map(n =>
+      `<button class="file" data-name="${esc(n)}">${esc(n)}<span class="mod"></span>` +
+      `<span class="role">${esc(ROLES[n] || '')}</span></button>`).join('');
+    $('files').querySelectorAll('.file').forEach(b => b.onclick = () => open(b.dataset.name));
+    open(current);
+  }
+  const edited = n => store.get('file:' + n);
+  function mark() {
+    $('files').querySelectorAll('.file').forEach(b => {
+      const n = b.dataset.name;
+      b.classList.toggle('active', n === current);
+      const e = edited(n);
+      b.querySelector('.mod').textContent = e !== null && e !== original[n] ? '●' : '';
+    });
+  }
+  function open(name) {
+    current = name; store.set('current', name);
+    const e = edited(name);
+    $('code').value = e !== null ? e : original[name];
+    mark();
+  }
+  $('code').addEventListener('input', () => {
+    const v = $('code').value;
+    if (v === original[current]) store.del('file:' + current); else store.set('file:' + current, v);
+    mark();
+  });
+  $('code').addEventListener('keydown', ev => {   // Tab inserts two spaces
+    if (ev.key !== 'Tab') return;
+    ev.preventDefault();
+    const ta = ev.target, s = ta.selectionStart;
+    ta.setRangeText('  ', s, ta.selectionEnd, 'end');
+    ta.dispatchEvent(new Event('input'));
+  });
+  $('reset-file').onclick = () => { store.del('file:' + current); open(current); };
+  $('reset-all').onclick = () => {
+    if (!confirm('Discard all your edits to the testbench files?')) return;
+    Object.keys(original).forEach(n => store.del('file:' + n)); open(current);
+  };
+
+  $('uvm-run').onclick = async () => {
+    if (!original) return;
+    const files = {};
+    Object.keys(original).forEach(n => { const e = edited(n); if (e !== null && e !== original[n]) files[n] = e; });
+    const btn = $('uvm-run'); btn.disabled = true;
+    $('uvm-counts').textContent = Object.keys(files).length
+      ? `Rebuilding with your edits to: ${Object.keys(files).join(', ')}` : 'Running the original testbench';
+    const t = ticker($('uvm-verdict'));
+    try {
+      const r = await fetch('/veer/run-uvm', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files, test: $('uvm-test').value.trim() || 'mem_wr_rd_test' }) });
+      const d = await r.json();
+      clearInterval(t);
+      const label = d.busy ? 'server busy' : d.success ? 'UVM PASS' : d.compiled ? 'UVM FAIL' : 'build failed';
+      verdict($('uvm-verdict'), d.success ? 'pass' : 'fail', label + (d.seconds != null ? ` · ${d.seconds} s` : ''));
+      const c = d.counts || {};
+      $('uvm-counts').innerHTML = d.compiled
+        ? `UVM_ERROR <b>${c.error ?? '?'}</b> · UVM_FATAL <b>${c.fatal ?? '?'}</b> · UVM_WARNING <b>${c.warning ?? '?'}</b>`
+        : '';
+      $('uvm-out').innerHTML = paint(d.output || '');
+    } catch (e) {
+      clearInterval(t); verdict($('uvm-verdict'), 'fail', 'request failed');
+      $('uvm-out').textContent = String(e);
+    } finally { btn.disabled = false; }
+  };
+})();
+</script>
+</body>
+</html>
