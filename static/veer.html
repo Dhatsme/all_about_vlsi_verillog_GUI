@@ -230,9 +230,28 @@
       ` &nbsp; · &nbsp;${esc(d.verilator)}`;
     $('cpu-test').innerHTML = d.cpu_tests.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
     showAbout();
+    if (!d.cpu_ready || !d.cpu_tests.length) notReady('cpu');
+    if (!d.uvm_ready) notReady('uvm');
   }).catch(() => {
     $('status').innerHTML = '<span class="dot bad"></span>Simulation server not reachable from this page.';
+    notReady('cpu'); notReady('uvm');
   });
+
+  // The VeeR tools are installed separately from the rest of the site; until
+  // they are, say so plainly instead of letting runs fail.
+  const NOT_READY = 'The VeeR simulator is still being installed on this server. ' +
+                    'Please check back soon — the rest of All About VLSI works as usual.';
+  function notReady(which) {
+    if (which === 'cpu') {
+      $('cpu-run').disabled = true; $('cpu-test').disabled = true;
+      $('cpu-out').textContent = NOT_READY;
+    } else {
+      $('uvm-run').disabled = true;
+      $('uvm-out').textContent = NOT_READY;
+      uvmBlocked = true;
+    }
+  }
+  let uvmBlocked = false;
 
   // ── 1. CPU run ────────────────────────────────────────────────────────────
   let cpuResult = null, cpuView = 'console';
@@ -290,8 +309,17 @@
     if (original) return;
     try {
       original = await (await fetch('/veer/uvm-files')).json();
-    } catch { $('uvm-out').textContent = 'Could not load the testbench files.'; return; }
+    } catch { $('uvm-out').textContent = 'Could not load the testbench files.'; original = null; return; }
     const names = Object.keys(original);
+    if (!names.length) {          // tools not installed on this server yet
+      original = null;
+      $('files').innerHTML = '';
+      $('code').value = '';
+      $('code').placeholder = 'The testbench files appear here once the VeeR simulator is installed.';
+      $('code').disabled = true;
+      if (!uvmBlocked) notReady('uvm');
+      return;
+    }
     const order = n => { const i = Object.keys(ROLES).indexOf(n); return i < 0 ? 99 : i; };
     names.sort((a, b) => order(a) - order(b));
     current = store.get('current') || names[0];
