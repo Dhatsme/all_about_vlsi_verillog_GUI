@@ -1,61 +1,21 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# AllAboutVLSI — production image
+# AllAboutVLSI — production image (built by Railway)
 #
-# Ubuntu 24.04 ships Verilator 5.x (required for --timing / UVM).
+# All simulation tools come prebuilt in the BASE image, which GitHub Actions
+# builds, self-tests and publishes (see docker/base.Dockerfile and
+# .github/workflows/base-image.yml). This file only adds the app, so Railway
+# builds take about a minute.
+#
+# To change tools (Verilator, UVM, VeeR, ...): edit docker/base.Dockerfile,
+# push to develop, wait for the "Base image → GHCR" workflow to publish a new
+# tag, then update BASE_IMAGE below to that tag.
+#
 # To build & run locally:
 #   docker build -t aavlsi .
 #   docker run -p 8080:8080 aavlsi
 # ─────────────────────────────────────────────────────────────────────────────
-FROM ubuntu:24.04
-ENV DEBIAN_FRONTEND=noninteractive
-
-# ── system deps ───────────────────────────────────────────────────────────────
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        iverilog \
-        verilator \
-        g++ \
-        make \
-        git \
-        python3 \
-        python3-pip \
-    && rm -rf /var/lib/apt/lists/*
-
-# ── UVM for Verilator ─────────────────────────────────────────────────────────
-# Antmicro's Verilator-compatible UVM base-class library.
-# Strips the DPI / feature-macros that Verilator can't handle, keeping the
-# standard UVM component hierarchy, factory, config_db, sequences, TLM, etc.
-RUN git clone --depth=1 \
-        https://github.com/antmicro/uvm-verilator.git \
-        /opt/uvm
-
-ENV UVM_HOME=/opt/uvm
-
-# uvm_sequencer.svh has a parameterized-type bug with Verilator 5.020 that
-# cannot be suppressed with a flag — it is a hard %Error. The hello-world
-# and basic UVM lessons only need uvm_test / phases / reporting; they don't
-# use sequencers. Commenting out the sequencer include in uvm_pkg.sv lets
-# the package compile cleanly without removing anything the lessons use.
-RUN sed -i 's|`include "uvm_seq.svh"|// `include "uvm_seq.svh"  // disabled: sequencer has Verilator 5.020 type compat issue|' \
-        /opt/uvm/src/uvm_pkg.sv
-
-# Pre-warm the UVM package: compile it to C++ once during the image build so
-# that the expensive elaboration step does NOT have to run on every user request.
-# We compile a minimal "uvm_only" stub whose sole job is to import the UVM pkg;
-# this forces Verilator to generate and compile all the UVM C++ files.
-# The resulting obj_dir is cached in the image at /opt/uvm-cache.
-RUN mkdir -p /opt/uvm-warmup && \
-    printf '`timescale 1ns/1ps\nmodule uvm_top_stub; import uvm_pkg::*; endmodule\n' \
-        > /opt/uvm-warmup/uvm_stub.sv && \
-    verilator --cc --sv --timing --build-jobs 0 \
-        --Wno-fatal --Wno-TIMESCALEMOD --Wno-STMTDLY \
-        --Wno-WIDTHTRUNC --Wno-WIDTHEXPAND --Wno-REALCVT \
-        --Wno-CONSTRAINTIGN --Wno-MULTIDRIVEN --Wno-MODDUP \
-        --Wno-UNPACKED --Wno-BLKANDNBLK --Wno-CASEINCOMPLETE \
-        --Wno-UNOPTFLAT --Wno-MISINDENT --Wno-CASTCONST \
-        +incdir+/opt/uvm/src \
-        /opt/uvm/src/uvm_pkg.sv \
-        /opt/uvm-warmup/uvm_stub.sv \
-        -Mdir /opt/uvm-warmup/obj_dir 2>&1 | tail -5 || true
+ARG BASE_IMAGE=ghcr.io/dhatsme/aavlsi-base:20261022-72c3969
+FROM ${BASE_IMAGE}
 
 # ── Python deps ───────────────────────────────────────────────────────────────
 WORKDIR /app
