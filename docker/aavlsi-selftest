@@ -1,0 +1,55 @@
+#!/bin/bash
+# aavlsi-selftest — checks every tool in the base image works.
+# Run by CI before the image is published:  docker run --rm IMAGE aavlsi-selftest
+# Prints one PASS/FAIL line per check; exit code 0 only if all pass.
+set -u
+fails=0
+pass() { echo "PASS  $1"; }
+fail() { echo "FAIL  $1"; fails=$((fails+1)); }
+T=$(mktemp -d)
+
+# ── 1. Lesson tools (must be unchanged) ──────────────────────────────────────
+v=$(verilator --version 2>&1)
+case "$v" in "Verilator 5.020"*) pass "system Verilator is 5.020 (lessons)";; *) fail "system Verilator: $v";; esac
+
+cat > "$T/tb.sv" <<'EOF'
+`timescale 1ns/1ps
+module tb;
+  logic a = 1, b = 0;
+  initial begin
+    if ((a & ~b) === 1) $display("PASS  lesson-style tb"); else $display("FAIL  lesson-style tb");
+    $finish;
+  end
+endmodule
+EOF
+( cd "$T" && verilator --binary --timing -Wno-fatal tb.sv -Mdir obj >/dev/null 2>&1 && ./obj/Vtb ) | grep -q "PASS  lesson-style tb" \
+  && pass "system Verilator compiles and runs a lesson-style testbench" \
+  || fail "system Verilator lesson-style testbench"
+
+( cd "$T" && iverilog -g2012 -o tb.vvp tb.sv 2>/dev/null && vvp tb.vvp ) | grep -q "PASS  lesson-style tb" \
+  && pass "Icarus Verilog compiles and runs a testbench" \
+  || fail "Icarus Verilog"
+
+[ -f /opt/uvm/src/uvm_pkg.sv ] && [ -d /opt/uvm-warmup/obj_dir ] \
+  && pass "lesson UVM library and warm-up present" || fail "lesson UVM library / warm-up missing"
+
+# ── 2. VeeR EL2 Lab ──────────────────────────────────────────────────────────
+v=$("$VEER_VERILATOR_BIN/verilator" --version 2>&1)
+case "$v" in "Verilator 5.052"*) pass "VeeR Verilator is 5.052";; *) fail "VeeR Verilator: $v";; esac
+
+mkdir -p "$T/cpu" && cp "$VEER_ROOT/testbench/hex/user_mode0/hello_world.hex" "$T/cpu/program.hex" \
+  && ( cd "$T/cpu" && timeout 60 "$VEER_CPU_EXE" ) 2>&1 | grep -q TEST_PASSED \
+  && pass "VeeR CPU model runs hello_world" || fail "VeeR CPU model hello_world"
+
+out=$(cd "$VEER_ROOT" && PATH="$VEER_VERILATOR_BIN:$PATH" RV_ROOT="$VEER_ROOT" \
+      timeout 600 make -C testbench/uvm/mem simulate -j"$(nproc)" UVM_TEST=mem_wr_rd_test 2>&1)
+if echo "$out" | grep -q "UVM_ERROR :    0" && echo "$out" | grep -q "UVM_FATAL :    0"; then
+  pass "VeeR DCCM UVM testbench runs (prebuilt, no rebuild needed)"
+else
+  fail "VeeR DCCM UVM testbench"; echo "$out" | grep -v "^ccache\|^g++" | tail -20
+fi
+
+rm -rf "$T"
+echo "----"
+[ $fails -eq 0 ] && echo "ALL CHECKS PASSED" || echo "$fails CHECK(S) FAILED"
+exit $fails

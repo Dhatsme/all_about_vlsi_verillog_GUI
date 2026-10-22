@@ -5,39 +5,7 @@
 # To build & run locally:
 #   docker build -t aavlsi .
 #   docker run -p 8080:8080 aavlsi
-#
-# Two Verilators live in this image:
-#   /usr/bin/verilator            5.020 (Ubuntu package) — used by /simulate
-#                                 and every lesson. Unchanged.
-#   /opt/verilator-veer/bin/...   5.052 (built below)    — used only by the
-#                                 VeeR EL2 Lab (static/veer.html, veer_lab.py).
 # ─────────────────────────────────────────────────────────────────────────────
-
-# ── Stage 1: Verilator 5.052 for the VeeR EL2 Lab ─────────────────────────────
-# Built from source once; Docker caches this stage until the version changes.
-# Verified 2026-10-22: VeeR EL2 + its DCCM UVM testbench pass with this version
-# and Antmicro's uvm-verilator "current-patches" branch.
-FROM ubuntu:24.04 AS verilator-veer
-ARG VEER_VERILATOR_VERSION=v5.052
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        git ca-certificates make autoconf g++ flex bison libfl-dev libfl2 \
-        help2man perl python3 zlib1g-dev ccache \
-    && rm -rf /var/lib/apt/lists/*
-# Fail-safe: if this build fails, an empty folder is left so the main image
-# still builds and the rest of the site deploys; the VeeR page shows "not built".
-RUN ( git clone https://github.com/verilator/verilator /src/verilator \
-      && cd /src/verilator \
-      && git checkout ${VEER_VERILATOR_VERSION} \
-      && autoconf \
-      && ./configure --prefix=/opt/verilator-veer \
-      && make -j"$(nproc)" \
-      && make install ) \
-    || ( echo "WARNING: VeeR Verilator build failed - VeeR Lab disabled" \
-         && rm -rf /opt/verilator-veer && mkdir -p /opt/verilator-veer ) ; \
-    rm -rf /src/verilator
-
-# ── Stage 2: production image ─────────────────────────────────────────────────
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -88,62 +56,6 @@ RUN mkdir -p /opt/uvm-warmup && \
         /opt/uvm/src/uvm_pkg.sv \
         /opt/uvm-warmup/uvm_stub.sv \
         -Mdir /opt/uvm-warmup/obj_dir 2>&1 | tail -5 || true
-
-# ── VeeR EL2 Lab (static/veer.html) ───────────────────────────────────────────
-# Real RISC-V core (CHIPS Alliance VeeR EL2) + its DCCM UVM testbench, run with
-# the separate Verilator 5.052 from stage 1. Everything is prebuilt here so a
-# learner's run only recompiles what they changed.
-#
-# Pinned versions (verified together on 2026-10-22):
-ARG VEER_COMMIT=45c9b425f4c666c095a17e21fce4d3b0721cbfa0
-ARG VEER_UVM_COMMIT=2e667ac506c12e91d81bde62fe2c08d992731bd4
-
-# Extra runtime needs: perl JSON (VeeR's config script), ccache, zlib headers.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        perl libjson-perl ccache zlib1g-dev ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY --from=verilator-veer /opt/verilator-veer /opt/verilator-veer
-ENV VEER_ROOT=/opt/veer \
-    VEER_VERILATOR_BIN=/opt/verilator-veer/bin \
-    VEER_CPU_EXE=/opt/veer-runs/hello/obj_dir/Vtb_top \
-    CCACHE_DIR=/opt/ccache
-
-# Every VeeR step below is fail-safe ("|| echo ..."): a failure only disables
-# the VeeR Lab page (it reports "not built"); the image, /simulate and all
-# lessons still build and deploy exactly as before.
-RUN ( git clone https://github.com/chipsalliance/Cores-VeeR-EL2 /opt/veer \
-      && cd /opt/veer && git checkout ${VEER_COMMIT} \
-      && git clone -b current-patches https://github.com/antmicro/uvm-verilator \
-           /opt/veer/testbench/uvm/mem/uvm \
-      && cd /opt/veer/testbench/uvm/mem/uvm && git checkout ${VEER_UVM_COMMIT} \
-      && cp -r /opt/veer/testbench/uvm/mem/hdl /opt/veer/testbench/uvm/mem/hdl.pristine ) \
-    || echo "WARNING: VeeR checkout failed - VeeR Lab disabled"
-
-# CPU model (~1 min). Uses the bundled .hex programs, no RISC-V gcc needed.
-RUN mkdir -p /opt/veer-runs/hello && cd /opt/veer-runs/hello \
-    && ( PATH=/opt/verilator-veer/bin:$PATH RV_ROOT=/opt/veer \
-         make -f /opt/veer/tools/Makefile verilator > build.log 2>&1 \
-         && grep -q TEST_PASSED build.log \
-         || ( echo "WARNING: VeeR CPU model build failed - CPU tab disabled" \
-              && tail -20 build.log ; rm -rf obj_dir ) )
-
-# UVM testbench (slow: ~25 min on 2 cores, faster with more).
-# Two rules, both learned the hard way:
-#  1. Run from /opt/veer with make -C: VeeR's config script writes its
-#     snapshot relative to the launch folder.
-#  2. Use exactly the make command veer_lab.py uses (no UVM_ROOT override).
-#     Verilator writes source paths into its C++, so any difference forces a
-#     full ~25 min rebuild on the first learner run.
-RUN mkdir -p /opt/veer-runs \
-    && ( cd /opt/veer \
-         && PATH=/opt/verilator-veer/bin:$PATH RV_ROOT=/opt/veer \
-            make -C testbench/uvm/mem simulate -j"$(nproc)" UVM_TEST=mem_wr_rd_test \
-            > /opt/veer-runs/uvm_first_run.log 2>&1 \
-         && grep -q "UVM_ERROR :    0" /opt/veer-runs/uvm_first_run.log \
-         || ( echo "WARNING: VeeR UVM prebuild failed - UVM tab disabled" \
-              && tail -20 /opt/veer-runs/uvm_first_run.log ; \
-              rm -f /opt/veer/testbench/uvm/mem/mem_tb-sim/mem_tb ) )
 
 # ── Python deps ───────────────────────────────────────────────────────────────
 WORKDIR /app

@@ -18,6 +18,7 @@ This is a **growing product**, not a one-off script. Before suggesting any solut
 
 ### Current infrastructure
 - **Hosting:** Railway (deployed from `develop` branch)
+- **Simulation tools image:** `docker/base.Dockerfile` (Verilator 5.020 + Icarus + UVM for lessons; separate Verilator 5.052 + VeeR EL2 for `static/veer.html`) is built, self-tested (`docker/aavlsi-selftest`) and published to `ghcr.io/dhatsme/aavlsi-base` by `.github/workflows/base-image.yml`. Change tools there, not in the Railway `Dockerfile`, so Railway builds stay fast.
 - **Frontend:** Static HTML/CSS/JS — frozen, do not modify
 - **Backend:** FastAPI (`main.py`)
 - **Feedback storage:** Google Sheets via Apps Script
