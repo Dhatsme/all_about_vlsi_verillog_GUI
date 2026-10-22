@@ -30,8 +30,12 @@ EOF
   && pass "Icarus Verilog compiles and runs a testbench" \
   || fail "Icarus Verilog"
 
-[ -f /opt/uvm/src/uvm_pkg.sv ] && [ -d /opt/uvm-warmup/obj_dir ] \
-  && pass "lesson UVM library and warm-up present" || fail "lesson UVM library / warm-up missing"
+[ -f /opt/uvm/src/uvm_pkg.sv ] && [ "$UVM_HOME" = /opt/uvm ] \
+  && pass "lesson UVM library present (UVM_HOME=/opt/uvm)" || fail "lesson UVM library missing"
+# The warm-up step (copied unchanged from the original Dockerfile) ends in
+# "|| true", and main.py never reads its output, so it is informational only.
+[ -d /opt/uvm-warmup/obj_dir ] && echo "INFO  lesson UVM warm-up output present" \
+  || echo "INFO  lesson UVM warm-up produced no output (same as the original image; not used by main.py)"
 
 # ── 2. VeeR EL2 Lab ──────────────────────────────────────────────────────────
 v=$("$VEER_VERILATOR_BIN/verilator" --version 2>&1)
