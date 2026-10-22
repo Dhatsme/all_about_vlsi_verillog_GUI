@@ -154,8 +154,9 @@
          a sequence item, sequences, a sequencer, a driver, a monitor, an agent, a scoreboard and a test.
          Pick a file on the left to read it. Edit anything, then press Run — the server rebuilds only what
          changed and runs the test.</p>
-      <p>Runs are queued one at a time. An unchanged run takes seconds; a big edit can take a few minutes
-         because the UVM library is large.</p>
+      <p>Runs are queued one at a time. Most edits rebuild and run in under a minute. An edit that uses a
+         class in a new way (for example a new <code>type_id::create</code> call) makes Verilator regenerate
+         much of the UVM library, which can take several minutes — leave the page open while it builds.</p>
     </div>
 
     <div class="card exercise">
