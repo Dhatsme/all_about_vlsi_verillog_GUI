@@ -42,11 +42,34 @@ jobs:
           echo "image=ghcr.io/${owner}/aavlsi-base" >> "$GITHUB_OUTPUT"
           echo "tag=$(date -u +%Y%m%d)-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
-      - name: Build base image (~1 h)
-        run: docker build -f docker/base.Dockerfile -t aavlsi-base:test docker/
+      - uses: docker/setup-buildx-action@v3
+
+      # Layer cache in GitHub's Actions cache: a rerun after a small change
+      # (e.g. to the self-test) takes minutes instead of rebuilding everything.
+      - name: Build base image (~20 min cold, minutes when cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: docker
+          file: docker/base.Dockerfile
+          tags: aavlsi-base:test
+          load: true
+          cache-from: type=gha,scope=aavlsi-base
+          cache-to: type=gha,scope=aavlsi-base,mode=max
 
       - name: Self-test (lesson tools + VeeR Lab)
-        run: docker run --rm aavlsi-base:test aavlsi-selftest
+        run: |
+          set +e
+          docker run --rm aavlsi-base:test aavlsi-selftest > selftest.log 2>&1
+          rc=$?
+          cat selftest.log
+          # Surface failures as annotations (visible on the run page and via the API).
+          grep -E "^(PASS|FAIL)  " selftest.log | while read -r line; do
+            case "$line" in FAIL*) echo "::error title=self-test::$line";; esac
+          done
+          if [ $rc -ne 0 ]; then
+            echo "::error title=self-test detail::$(grep -v '^PASS' selftest.log | tail -25 | tr '\n' '|' | cut -c1-3500)"
+          fi
+          exit $rc
 
       - name: Log in to GitHub Container Registry
         run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
