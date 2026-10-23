@@ -348,4 +348,222 @@ their data in the DCCM, so the core rarely waits for memory.`,
       },
     ],
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'vf3',
+    track: 'Foundation',
+    title: 'vf3 — Tests as specifications',
+    lessons: [
+      // ── L1 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf3l1',
+        title: 'L1 — What a directed test proves',
+        level: 'G2',
+        tab: 'cpu',
+        program: 'illegal_instruction',
+        rebuild: 'none',
+        output_view: 'exec_log',
+        theory: `
+<h2>A test is a promise written in code</h2>
+<p>A <strong>directed test</strong> checks one specific behaviour the specification promises. Reading
+one tells you exactly what the designers expected the hardware to do. The pattern is always the same:
+<strong>state what should happen, make it happen, then compare</strong>.</p>
+<p>The RISC-V specification promises that when the core meets an instruction it cannot decode, it must
+stop, record the reason in the <code>mcause</code> register, and jump to a <strong>trap handler</strong>.
+Here is the whole <code>illegal_instruction</code> test:</p>
+<pre class="code-block">illegal_instruction:
+    li x4, 0x2          # expected mcause: 2 = illegal instruction
+    li x5, 0x0          # expected mscause (VeeR's extra detail): 0
+    .word 0             # an all-zero instruction is illegal
+    j fail_if_not_serviced   # 15 nops, then fail: the trap never came</pre>
+<p>The shared trap handler reads <code>mcause</code> and <code>mscause</code>, compares them with
+<code>x4</code> and <code>x5</code>, and writes <code>0x01</code> to the mailbox if either differs.
+If both match, it returns, and the program writes <code>0xFF</code>.</p>
+<h3>Trap causes you will meet in this chapter</h3>
+<table class="truth-table">
+  <tr><th>mcause</th><th>Meaning</th></tr>
+  <tr><td>0x2</td><td>Illegal instruction</td></tr>
+  <tr><td>0x1</td><td>Instruction access fault (fetching code from a forbidden place)</td></tr>
+  <tr><td>0x5</td><td>Load access fault (reading data that cannot be read)</td></tr>
+  <tr><td>0x80000007</td><td>Machine timer interrupt (top bit set = interrupt, not error)</td></tr>
+  <tr><td>0x80000003</td><td>Machine software interrupt</td></tr>
+  <tr><td>0x0</td><td>Non-maskable interrupt (NMI), on VeeR EL2</td></tr>
+</table>
+<p><strong>Ready?</strong> Run <code>illegal_instruction</code> and find the trap in the Instruction trace.</p>`,
+        tasks: [
+          'Press ▶ Run on VeeR (the trace opens; the whole test is only 33 instructions)',
+          'Find the line where the illegal instruction retires (mnemonic ".short 0")',
+          'Look at the pc of the next line: the core jumped to the trap handler',
+          'Find "csrrs sp,csr_342,zero": csr_342 is mcause. What value did it read?',
+          'Explain what would happen if the core ignored the bad instruction',
+        ],
+        hint:
+`        87 :      #19 0 8000025a 00000000   ; .short  0      <- the illegal instruction
+        94 :      #20 0 80000200 30401073   ; csrrw ...      <- trap handler (mtvec = 80000200)
+        99 :      #22 0 80000208 34202173  sp=00000002  ; csrrs sp,csr_342,zero
+
+mcause read back as 2 = illegal instruction, matching x4.
+If the core ignored the instruction, it would run into
+fail_if_not_serviced: 15 nops, then write 0x01 -> TEST_FAILED.`,
+        expected: ['sp=00000002', 'minstret = 33', 'TEST_PASSED'],
+      },
+
+      // ── L2 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf3l2',
+        title: 'L2 — Interrupts (irq)',
+        level: 'G2',
+        tab: 'cpu',
+        program: 'irq',
+        rebuild: 'none',
+        output_view: 'console',
+        theory: `
+<h2>Interrupts: the outside world taps the core on the shoulder</h2>
+<p>An <strong>interrupt</strong> is a signal from outside the program — a timer expiring, another core
+asking for attention — that makes the core pause and run a handler. Unlike an error, it is expected
+and normal. The core can choose to ignore most interrupts: the <code>MIE</code> bit in the
+<code>mstatus</code> register is the master on/off switch.</p>
+<p>One kind cannot be switched off: the <strong>NMI</strong> (non-maskable interrupt), used for
+emergencies such as a hardware failure.</p>
+<h3>What the specification promises</h3>
+<table class="truth-table">
+  <tr><th>Interrupt</th><th>MIE = 0</th><th>MIE = 1</th></tr>
+  <tr><td>NMI</td><td>Taken</td><td>Taken</td></tr>
+  <tr><td>Timer</td><td>Ignored</td><td>Taken</td></tr>
+  <tr><td>Software</td><td>Ignored</td><td>Taken</td></tr>
+</table>
+<p>The <code>irq</code> test (written in C) fires all three interrupts twice — once with MIE=0, once with
+MIE=1 — and asks the testbench to raise each interrupt line. Every trap it takes is recorded. At the end
+it compares the recorded list with a <strong>golden list</strong> of the four traps the table predicts,
+in order. Any extra, missing or out-of-order trap means <code>TEST_FAILED</code>.</p>
+<p><strong>Ready?</strong> Run <code>irq</code>. Before you look, predict how many traps the test should take.</p>`,
+        tasks: [
+          'Predict the number of traps from the table above',
+          'Press ▶ Run on VeeR and read the Program output',
+          'Under "Machine mode, MIE=0", which interrupts caused a "trap!" line?',
+          'Under "Machine mode, MIE=1", match each "trap!" mcause to the interrupt that caused it',
+          'Find "traps taken" and compare it with your prediction',
+        ],
+        hint:
+`Four traps, exactly as the table predicts:
+
+  MIE=0:  NMI           -> mcause=0x0
+          timer, soft   -> ignored (no trap line)
+  MIE=1:  NMI           -> mcause=0x0
+          timer         -> mcause=0x80000007
+          soft          -> mcause=0x80000003
+
+  traps taken: 4
+
+The top bit (0x80000000) of mcause means "interrupt".`,
+        expected: ['mcause=0x80000007', 'mcause=0x80000003', 'traps taken: 4', 'TEST_PASSED'],
+      },
+
+      // ── L3 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf3l3',
+        title: 'L3 — Errors on purpose (ecc)',
+        level: 'G2',
+        tab: 'cpu',
+        program: 'ecc',
+        rebuild: 'none',
+        output_view: 'console',
+        theory: `
+<h2>Breaking memory on purpose to prove it can heal</h2>
+<p>Memory bits occasionally flip by themselves — a particle from space can do it. VeeR's DCCM (data
+memory) and ICCM (instruction memory) store extra <strong>ECC</strong> (error-correcting code) bits next
+to every word. With them the core can <strong>correct</strong> any single flipped bit and
+<strong>detect</strong> two flipped bits, raising a trap instead of using bad data.</p>
+<p>How do you test that, when real bit flips are rare? You cause them. The <code>ecc</code> program
+asks the testbench to corrupt memory, using extra command bytes on the same mailbox you met in vf1:</p>
+<table class="truth-table">
+  <tr><th>Byte to mailbox</th><th>Testbench action</th></tr>
+  <tr><td>0xE2</td><td>Flip 1 bit in the next DCCM write</td></tr>
+  <tr><td>0xE3</td><td>Flip 2 bits in the next DCCM write</td></tr>
+  <tr><td>0xE4</td><td>Stop injecting errors</td></tr>
+</table>
+<h3>The experiment</h3>
+<ul>
+  <li><strong>ECC checks off:</strong> write <code>0x12345678</code> with 1 bit flipped and
+      <code>0xDEADBEEF</code> with 2 flipped. The program reads back the damaged values.</li>
+  <li><strong>ECC checks on:</strong> the single-bit error reads back correct. The double-bit error
+      raises a trap, and the handler confirms it was the expected kind.</li>
+  <li>The program then reboots (a counter in DCCM survives the reboot) and repeats the idea for ICCM,
+      by running code from a corrupted instruction memory. Third boot: <code>Finished</code>.</li>
+</ul>
+<p><strong>Ready?</strong> Run <code>ecc</code> and compare the values with ECC off and on.</p>`,
+        tasks: [
+          'Press ▶ Run on VeeR and read the Program output',
+          'Boot 1, ECC off: which bit changed in 0x12345678? (the leading 0 is not printed)',
+          'Boot 1, ECC on: what did the single-bit value read back as?',
+          'Find "DCCM double bit error" and "ICCM double bit error": why is a trap the correct result here?',
+          'Find "Boot count: 3" and "Finished"',
+        ],
+        hint:
+`ECC off:  DCCM value: 0x2345678    <- 0x12345678 with bit 28 flipped
+          DCCM value: 0x9eadbeee   <- 0xDEADBEEF with 2 bits flipped
+ECC on:   DCCM value: 0x12345678   <- single-bit error corrected
+          DCCM double bit error    <- detected, trap taken (mcause 5 or 7)
+
+Boot 2 does the same for ICCM: executing corrupted code
+traps with an instruction access fault -> "ICCM double bit error".
+
+A trap is the correct result: using two-bit-damaged data
+silently would be far worse than stopping.`,
+        expected: ['DCCM value: 0x12345678', 'DCCM double bit error', 'ICCM double bit error', 'TEST_PASSED'],
+      },
+
+      // ── L4 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf3l4',
+        title: 'L4 — Memory protection (pmp)',
+        level: 'G2',
+        tab: 'cpu',
+        program: 'pmp',
+        rebuild: 'none',
+        output_view: 'console',
+        theory: `
+<h2>Fences inside memory</h2>
+<p><strong>PMP</strong> (Physical Memory Protection) lets software draw regions in memory and say what is
+allowed in each: <strong>R</strong>ead, <strong>W</strong>rite, e<strong>X</strong>ecute. A region
+marked <code>R--</code> can be read but not changed; code cannot run from a region without
+<code>X</code>. Access that breaks a rule must trap.</p>
+<p>The <code>pmp</code> test walks through every combination of R, W and X for a test area, and for each
+one checks writing, reading and executing:</p>
+<table class="truth-table">
+  <tr><th>Case</th><th>Permissions</th><th>What the test does</th></tr>
+  <tr><td>00, 01, 03, 04, 05, 07</td><td>---, R--, RW-, --X, R-X, RWX</td><td>Tests W, R and X, expects pass</td></tr>
+  <tr><td>02, 06</td><td>-W-, -WX</td><td>Skipped: write-without-read is reserved by the RISC-V spec</td></tr>
+  <tr><td>08</td><td>Locked region</td><td>Executes from it and <em>expects</em> a trap (mcause 0x1)</td></tr>
+</table>
+<p>Two lessons hide in this output. First, a test can pass <em>because</em> a trap happened: case 08
+is checking that forbidden code is stopped. Second, notice the test prints its own score
+(<code>9/9 passed</code>) before the testbench prints <code>TEST_PASSED</code>. The program decides,
+then reports through the mailbox — the same pattern as every test in this chapter.</p>
+<p>In the next chapter you leave the CPU and open a different kind of test: a UVM testbench, where the
+checking happens outside the core.</p>
+<p><strong>Ready?</strong> Run <code>pmp</code> (about 5 seconds) and find each case's verdict.</p>`,
+        tasks: [
+          'Press ▶ Run on VeeR and read the Program output',
+          'Pick case 01 (R--): what did the test try, and what passed?',
+          'Find cases 02 and 06: what happens after "configuring PMP..."?',
+          'Find case 08: which mcause did the trap report, and why does the test say pass?',
+          'Find the final score line and "*** PASSED ***"',
+        ],
+        hint:
+`Case 02 and 06 print only "configuring PMP..." and move on:
+write-only permissions are reserved, so there is nothing to test.
+
+Case 08:
+  Trap! mcause=0x00000001 ...   <- instruction access fault
+  pass                          <- the trap was the expected outcome
+
+End of output:
+  9/9 passed
+  *** PASSED ***`,
+        expected: ['9/9 passed', '*** PASSED ***', 'TEST_PASSED'],
+      },
+    ],
+  },
 ];
