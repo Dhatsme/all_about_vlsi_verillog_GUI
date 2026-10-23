@@ -74,8 +74,8 @@ Technical threads that run alongside the analogy:
 
 ## 4. Lesson format (every lesson)
 
-- **One idea per lesson**, 120–200 words of theory, one main task, one run.
-  Extra detail behind a "Learn more" fold.
+- **One idea per lesson**, one main task, one run (or one quiz for theory
+  lessons). Lesson length follows the chapter's complexity rating (section 4a).
 - **Depth over breadth:** every claim is shown with evidence — a source line, an
   RTL line, or a log/trace line the learner finds themselves.
 - **The three-part thread:** *the spec says → the RTL does → the test checks.*
@@ -84,6 +84,79 @@ Technical threads that run alongside the analogy:
 - **Kitchen first, then the real thing.**
 - **Check your understanding:** one question at the end, answer in the hint.
 - `expected` strings come from real runs (skill section 6). Never use `mcycle`.
+
+## 4a. Complexity rating (judge every chapter before writing it)
+
+**Rule: for each chapter, act as a judge and rate it on two separate scales —
+how hard the *theory* is and how hard the *coding* is — as Simple, Medium or
+Difficult. The rating decides how long and how deep its lessons are.**
+
+### What each level means
+
+| Level | Theory means… | Coding means… |
+|---|---|---|
+| **Simple** | One familiar idea; no new vocabulary beyond 1–2 terms | Read or run existing code; no edits, or a one-line edit |
+| **Medium** | New concepts that build on each other; 3–4 new terms | Read unfamiliar code and follow it across files; small edits inside existing functions |
+| **Difficult** | Several interacting mechanisms (pipelines, traps, UVM phases); easy to misunderstand | Write or fix real code; changes that create new objects/classes; debugging with no answer given |
+
+### How the rating changes the lesson
+
+| Rating | Theory per lesson | Each new term gets | Diagrams |
+|---|---|---|---|
+| Simple | 120–200 words | One plain sentence | Only if a flow is involved |
+| Medium | 250–400 words | **What it is, why it exists, the kitchen equivalent, a real VeeR example, one common confusion** | Required when there is a flow or a structure |
+| Difficult | 400–600 words, split across two lessons if longer | Same as Medium, plus a step-by-step worked example | Required; reuse the master diagrams |
+
+- **Few terms, explained fully.** Never introduce more than 3–4 new terms in one
+  lesson. A term that is not needed for the lesson's task is left out.
+- **Coding difficulty adds steps, not words:** Medium/Difficult coding lessons
+  break the task into numbered steps, give a predicted output first, and keep a
+  reference solution in the hint (Difficult: design notes only, as in the main
+  course's tier 4/5).
+
+### Diagrams
+
+- Use a **flowchart-style diagram** whenever a lesson describes a process (a
+  sequence of steps) or a structure (parts connected to each other).
+- **One master kitchen diagram** (`veerKitchen(highlight)` in `static/veer-lab/chapters.js`)
+  is drawn once and reused in every chapter, with the station the lesson is
+  about highlighted. Other reusable diagrams: any vertical flowchart (`veerFlow(steps, highlight)`)
+  and the VeeR core block diagram (`veerCore(highlight)`).
+- Diagrams are inline SVG using the site's colour variables, so they follow the
+  page theme; on phones they scroll sideways inside their own box.
+
+### Ratings
+
+| Chapter | Theory | Coding | Notes |
+|---|---|---|---|
+| `o1` The big picture | **Medium** | Simple | Many first-time ideas (RTL, simulation, compiler, hex) — explain each in depth |
+| `o2` Specs | **Medium** | Simple | Layered specs and the spec → RTL → test thread |
+| `o3` Design overview | **Difficult** | Medium | Pipeline and units interacting; reading real RTL across files |
+| `o4` Run the design | Medium | Medium | Writing a small SV testbench around real VeeR blocks |
+| `vf1` Lab tour and first run | Simple | Simple | Run and observe |
+| `vf2` Reading an instruction trace | Medium | Simple | Trace columns, non-blocking loads, IPC |
+| `vf3` Tests as specifications | **Difficult** | Medium | Traps, interrupts, ECC, PMP; reading C and assembly tests |
+| `vf4` UVM tour | **Difficult** | Medium | Many UVM roles and phases at once |
+| `vf5` Changing stimulus | Simple | Medium | Small edits, predict-then-check |
+| `vf6` Reading results critically | Medium | Medium | Handle reuse and false passes |
+| `vd1` Flip-flop library | Simple | Simple | First RTL written by the learner |
+| `vd2` ECC encoder | Medium | Medium | Hamming code; XOR trees |
+| `vd3` PMP address match | **Difficult** | **Difficult** | Address-matching modes, priority |
+| `vd4` ALU subset | Medium | **Difficult** | Datapath with many operations |
+| `vp1` Fix the monitor | Medium | Medium | Slow rebuild |
+| `vp2` Fix the scoreboard model | Medium | Medium | Associative arrays |
+| `vp3` Debug reads returning 0 | **Difficult** | **Difficult** | Open-ended debugging |
+| `vp4` Directed sequences | Medium | Medium | |
+| `vp5` New test + factory override | **Difficult** | Medium | UVM factory |
+| `vp6` Functional coverage | **Difficult** | **Difficult** | Verilator support to prove first |
+| `vp7` Assertions | **Difficult** | **Difficult** | Verilator support to prove first |
+| `vp8` Signoff | Medium | Simple | Reading reports, writing a signoff note |
+
+Live chapters written before this rule (`o2`, `vf1`–`vf6`) are re-judged and
+lengthened when they are rewritten. **`o1` was rebuilt to this rule on
+2026-10-23:** 5 lessons, 260–330 words each, every term explained with what /
+why / kitchen / VeeR example / common confusion, 8 diagrams (master kitchen map
+reused 4×, core block diagram, 3 flowcharts).
 
 ## 5. Course structure
 
