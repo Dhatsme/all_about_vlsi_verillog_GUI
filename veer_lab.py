@@ -68,7 +68,7 @@ CPU_TESTS = {
     "dhry":             "Dhrystone integer benchmark",
     "cmark":            "CoreMark benchmark (code + data in external memory)",
     "cmark_dccm":       "CoreMark with data and stack in DCCM (faster)",
-    "irq":              "External interrupt handling",
+    "irq":              "NMI, timer and software interrupts, with interrupts off and on",
     "ecc":              "Memory ECC error injection and detection",
     "illegal_instruction": "Executes an illegal opcode and checks the trap",
     "pmp":              "Physical memory protection checks",

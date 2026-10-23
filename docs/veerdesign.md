@@ -20,8 +20,8 @@ deploy rules) and `CLAUDE.md` (branch rules, voice and tone).
 |---|---|---|---|---|
 | 1 | `vf1` | Lab tour and first run | L1 Meet VeeR EL2, L2 How a program talks to the testbench, L3 Same program, different memory | ✅ done |
 | 2 | `vf2` | Reading an instruction trace | L1 Trace anatomy, L2 Matching source to trace, L3 Instructions per cycle | ✅ done |
-| 3 | `vf3` | Tests as specifications | L1 What a directed test proves, L2 Interrupts (`irq`), L3 Errors on purpose (`ecc`, `illegal_instruction`), L4 Memory protection (`pmp`) | ❌ **build this next** |
-| 4 | `vf4` | UVM tour | L1 Stimulus: item and sequence, L2 Drive and observe: driver and monitor, L3 Checking: scoreboard and test, L4 The report summary | ❌ |
+| 3 | `vf3` | Tests as specifications | L1 What a directed test proves (`illegal_instruction`), L2 Interrupts (`irq`), L3 Errors on purpose (`ecc`), L4 Memory protection (`pmp`) | ✅ done |
+| 4 | `vf4` | UVM tour | L1 Stimulus: item and sequence, L2 Drive and observe: driver and monitor, L3 Checking: scoreboard and test, L4 The report summary | ❌ **build this next** |
 | 5 | `vf5` | Changing stimulus | L1 Predict, edit, check (loop count), L2 Verbosity and what you can see, L3 Breaking it on purpose (syntax errors) | ❌ |
 | 6 | `vf6` | Reading results critically | L1 Count the checks, L2 A pass that proves nothing, L3 What a real fix needs (bridge to Professional track) | ❌ |
 
