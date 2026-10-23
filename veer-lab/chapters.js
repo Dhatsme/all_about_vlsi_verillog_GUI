@@ -6,6 +6,111 @@
 // (they vary slightly between runs). CPU lessons may only use programs listed
 // in CPU_TESTS in veer_lab.py.
 // ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Reusable diagrams (inline SVG, themed with the site's CSS variables).
+// Use inside a lesson's theory:  ${veerKitchen('rtl')}  ${veerCore('lsu')}
+//                                ${veerFlow([{t:'Step', s:'detail', k:'kitchen'}, ...])}
+// Highlight keys are listed next to each function. Wrapped in .diagram, which
+// scrolls sideways on narrow screens instead of shrinking the text.
+// ─────────────────────────────────────────────────────────────────────────────
+function veerEsc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function veerBox(x, y, w, h, top, bottom, on) {
+  const fill = on ? 'rgba(0,212,170,.13)' : 'var(--card)';
+  const stroke = on ? 'var(--accent)' : 'var(--border2)';
+  const sw = on ? 2.5 : 1.2;
+  return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>` +
+    `<text x="${x + w / 2}" y="${y + h / 2 - 5}" text-anchor="middle" font-size="13" font-weight="700" ` +
+    `fill="var(--accent3)" font-family="DM Sans, sans-serif">${veerEsc(top)}</text>` +
+    `<text x="${x + w / 2}" y="${y + h / 2 + 13}" text-anchor="middle" font-size="11.5" ` +
+    `fill="${on ? 'var(--text)' : 'var(--dim)'}" font-family="DM Sans, sans-serif">${veerEsc(bottom)}</text></g>`;
+}
+const VEER_ARROW_DEFS = `<defs><marker id="veer-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--dim)"/></marker></defs>`;
+function veerLine(d, label, lx, ly, dashed) {
+  return `<path d="${d}" fill="none" stroke="var(--dim)" stroke-width="1.6" marker-end="url(#veer-arrow)"${dashed ? ' stroke-dasharray="5 4"' : ''}/>` +
+    (label ? `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="JetBrains Mono, monospace">${veerEsc(label)}</text>` : '');
+}
+
+// Master kitchen map. Keys: spec, rtl, crew, kitchen, recipe, translator, board, inspector, verdict
+function veerKitchen(hl) {
+  const on = k => [].concat(hl || []).includes(k);
+  const W = 140, H = 60;
+  return `<div class="diagram"><svg viewBox="0 0 680 385" role="img" aria-label="The kitchen map: spec, design, tests, testbench" style="min-width:560px;max-width:780px;margin:0 auto">` +
+    VEER_ARROW_DEFS +
+    // design path (top row)
+    veerBox(15, 20, W, H, 'Head office rules', 'Specification', on('spec')) +
+    veerBox(185, 20, W, H, 'Blueprint', 'RTL in SystemVerilog', on('rtl')) +
+    veerBox(355, 20, W, H, 'Construction crew', 'Verilator + g++', on('crew')) +
+    veerLine('M155,50 H183', '', 0, 0) +
+    veerLine('M325,50 H353', '', 0, 0) +
+    veerLine('M495,50 H595 V148', '', 0, 0) +
+    `<text x="603" y="102" font-size="11" fill="var(--muted)" font-family="JetBrains Mono, monospace">builds</text>` +
+    // test path (middle row)
+    veerBox(15, 150, W, H, 'Owner’s recipe', 'Test in C / assembly', on('recipe')) +
+    veerBox(185, 150, W, H, 'Translator', 'RISC-V GCC compiler', on('translator')) +
+    veerBox(355, 150, W, H, 'Recipe on the board', 'program.hex in memory', on('board')) +
+    veerBox(525, 150, W, H, 'Working kitchen', 'Simulated VeeR core', on('kitchen')) +
+    veerLine('M155,180 H183', '', 0, 0) +
+    veerLine('M325,180 H353', '', 0, 0) +
+    veerLine('M495,180 H523', '', 0, 0) +
+    // checking path (bottom row)
+    veerBox(525, 280, W, H, 'Inspector', 'Testbench', on('inspector')) +
+    veerBox(355, 280, W, H, 'Verdict', 'TEST_PASSED / FAILED', on('verdict')) +
+    veerLine('M595,210 V278', 'watches', 630, 250) +
+    veerLine('M525,310 H497', '', 0, 0) +
+    veerLine('M15,50 H6 V372 H612 V342', 'checks against the rules', 300, 366, true) +
+    `</svg></div>`;
+}
+
+// Vertical flowchart. steps: [{t:'Title', s:'detail line', k:'kitchen name (optional)', e:'label on the arrow below'}]
+// hl: index (or array of indexes) to highlight.
+function veerFlow(steps, hl) {
+  const on = i => [].concat(hl === undefined ? [] : hl).includes(i);
+  const W = 470, H = 58, GAP = 34, X = 25;
+  const height = 20 + steps.length * H + (steps.length - 1) * GAP + 20;
+  let out = `<div class="diagram"><svg viewBox="0 0 520 ${height}" role="img" aria-label="Flowchart" style="min-width:360px;max-width:560px;margin:0 auto">` + VEER_ARROW_DEFS;
+  steps.forEach((st, i) => {
+    const y = 20 + i * (H + GAP);
+    const lit = on(i);
+    out += `<rect x="${X}" y="${y}" width="${W}" height="${H}" rx="9" fill="${lit ? 'rgba(0,212,170,.13)' : 'var(--card)'}" ` +
+      `stroke="${lit ? 'var(--accent)' : 'var(--border2)'}" stroke-width="${lit ? 2.5 : 1.2}"/>` +
+      `<text x="${X + 16}" y="${y + 24}" font-size="13.5" font-weight="700" fill="var(--text)" font-family="DM Sans, sans-serif">${veerEsc(st.t)}</text>` +
+      `<text x="${X + 16}" y="${y + 44}" font-size="11.5" fill="var(--dim)" font-family="JetBrains Mono, monospace">${veerEsc(st.s || '')}</text>` +
+      (st.k ? `<text x="${X + W - 14}" y="${y + 24}" text-anchor="end" font-size="11.5" fill="var(--accent3)" font-family="DM Sans, sans-serif">${veerEsc(st.k)}</text>` : '');
+    if (i < steps.length - 1) {
+      const y1 = y + H, y2 = y + H + GAP - 2;
+      out += veerLine(`M${X + W / 2},${y1} V${y2}`, '', 0, 0);
+      if (st.e) out += `<text x="${X + W / 2 + 12}" y="${y1 + GAP / 2 + 4}" font-size="11" fill="var(--muted)" font-family="JetBrains Mono, monospace">${veerEsc(st.e)}</text>`;
+    }
+  });
+  return out + `</svg></div>`;
+}
+
+// VeeR EL2 core block diagram. Keys: iccm, ifu, dec, exu, lsu, dccm, bus
+function veerCore(hl) {
+  const on = k => [].concat(hl || []).includes(k);
+  return `<div class="diagram"><svg viewBox="0 0 680 345" role="img" aria-label="VeeR EL2 core block diagram" style="min-width:560px;max-width:780px;margin:0 auto">` +
+    VEER_ARROW_DEFS +
+    `<rect x="3" y="8" width="674" height="235" rx="12" fill="none" stroke="var(--border)" stroke-dasharray="6 5"/>` +
+    `<text x="664" y="232" text-anchor="end" font-size="11" fill="var(--muted)" font-family="JetBrains Mono, monospace">VeeR EL2 core</text>` +
+    veerBox(10, 40, 120, 60, 'Instruction mem.', 'ICCM', on('iccm')) +
+    veerBox(165, 40, 140, 60, 'Fetch', 'ifu/', on('ifu')) +
+    veerBox(340, 40, 150, 60, 'Decode + traps', 'dec/  (tlu = traps)', on('dec')) +
+    veerBox(525, 40, 140, 60, 'Execute', 'exu/  ALU, mul, div', on('exu')) +
+    veerBox(340, 160, 150, 60, 'Load / store', 'lsu/', on('lsu')) +
+    veerBox(525, 160, 140, 60, 'Data memory', 'DCCM', on('dccm')) +
+    veerLine('M130,70 H163', '', 0, 0) +
+    veerLine('M305,70 H338', '', 0, 0) +
+    veerLine('M490,70 H523', '', 0, 0) +
+    veerLine('M415,100 V158', 'load/store', 452, 133) +
+    veerLine('M490,190 H523', '', 0, 0) +
+    veerBox(165, 270, 325, 60, 'System bus (AXI4)', 'external memory: testbench models imem / lmem', on('bus')) +
+    veerLine('M235,100 V268', 'fetch', 262, 185) +
+    veerLine('M415,220 V268', '', 0, 0) +
+    `</svg></div>`;
+}
+
 window.VEER_CHAPTERS = [
   // ═══════════════════════════════════════════════════════════════════════════
   // PART A — ORIENTATION   (spec: docs/veer_course_plan.md, section 5)
@@ -15,211 +120,317 @@ window.VEER_CHAPTERS = [
     id: 'o1',
     track: 'Orientation',
     title: 'o1 — The big picture',
+    // Complexity (docs/veer_course_plan.md §4a): theory MEDIUM, coding SIMPLE.
     lessons: [
       // ── L1 ──────────────────────────────────────────────────────────────────
       {
         id: 'o1l1',
-        title: 'L1 — What is in this lab',
+        title: 'L1 — The four parts of a chip project',
         level: 'G1',
         tab: null,
         rebuild: 'none',
         theory: `
 <div class="kitchen"><span class="kitchen-tag">The kitchen</span>
-<p>Picture a restaurant kitchen. Someone drew the <strong>blueprint</strong> of the kitchen. A crew
-<strong>built</strong> it. Owners write <strong>recipes</strong> for the chef. And an inspector checks that the
-food that comes out is right. This whole course uses that kitchen to explain a real processor.</p></div>
-<h2>Four things make up a chip project</h2>
-<table class="truth-table">
-  <tr><th>Piece</th><th>Kitchen</th><th>In this lab</th></tr>
-  <tr><td>Specification</td><td>The rules the kitchen must follow</td><td>RISC-V spec + the VeeR manual</td></tr>
-  <tr><td>Design (RTL)</td><td>The blueprint</td><td>VeeR EL2, written in SystemVerilog</td></tr>
-  <tr><td>Tests</td><td>Recipes that exercise the kitchen</td><td>Programs in C and assembly</td></tr>
-  <tr><td>Testbench + tools</td><td>The inspector and the construction crew</td><td>SystemVerilog testbenches, Verilator, compilers</td></tr>
-</table>
-<p>The <strong>design</strong> describes hardware: wires, logic gates and flip-flops, written as code. You cannot
-run a blueprint, so a tool called <strong>Verilator</strong> turns the design into a program that behaves
-exactly like the chip, cycle by cycle — a <strong>simulation</strong>.</p>
-<p>A <strong>test</strong> gives that simulated chip something to do. A <strong>testbench</strong> is the code
-around the chip that feeds it, watches it, and decides whether it behaved correctly.</p>
-<p>Everything here is real: VeeR EL2 is an open-source RISC-V processor core from Western Digital, now
-maintained by CHIPS Alliance, used as the basis for real silicon.</p>
-<p><strong>Ready?</strong> Read the table again, then answer the question below.</p>`,
+<p>Throughout this course, a processor project is a restaurant kitchen. Head office writes the rules. An architect
+draws the blueprint. A crew builds the kitchen. The owner writes recipes for the chef. An inspector watches what
+comes out and gives a verdict. Keep this map in mind — every chapter comes back to it.</p></div>
+${veerKitchen()}
+<h2>Four words you will use in every chapter</h2>
+<h3>1. Specification — the rules</h3>
+<p>A <strong>specification</strong> (spec) is a document that says what the chip must do, without saying how. It
+exists so that designers, testers and customers agree on one definition of "correct". For VeeR there are two main
+ones: the RISC-V specification (rules every RISC-V processor follows) and the VeeR manual (choices specific to this
+core). <em>Common confusion:</em> the spec is not the code. When code and spec disagree, the code is wrong.</p>
+<h3>2. Design — the blueprint</h3>
+<p>The <strong>design</strong> is a description of the hardware, written as code in a hardware language — here,
+SystemVerilog. It describes wires, logic gates and storage, not steps for a computer to follow. VeeR's design is about
+30,550 lines. <em>Common confusion:</em> although it looks like software, nothing "runs" it line by line; it
+describes circuits that all work at the same time.</p>
+<h3>3. Test — a recipe</h3>
+<p>A <strong>test</strong> is a scenario that exercises the design. Because VeeR is a processor, many of its tests
+are small programs (for example <code>hello_world</code>) that the processor runs. A good test is written to check one
+promise from the spec.</p>
+<h3>4. Testbench — the inspector</h3>
+<p>A <strong>testbench</strong> is code wrapped around the design: it feeds it (loads the program, drives the clock),
+watches it, and decides <strong>pass or fail</strong>. It is never part of the final chip. <em>Common confusion:</em>
+the test and the testbench are different things — the recipe and the inspector. One testbench can run many tests.</p>
+<p><strong>Ready?</strong> Study the diagram, then answer the question below.</p>`,
         tasks: [
-          'Match each of the four pieces to its kitchen equivalent',
-          'Say in one sentence why a design must be simulated before it can be tested',
+          'Find each of the four words on the kitchen map',
+          'Say in your own words the difference between a test and a testbench',
+          'Name the two specs VeeR has to follow',
         ],
         hint:
-`Specification  = the rules           (RISC-V spec, VeeR manual)
-Design (RTL)   = the blueprint       (VeeR EL2 in SystemVerilog)
-Tests          = the recipes         (C / assembly programs)
-Testbench      = the inspector       (SystemVerilog code around the chip)
-Tools          = construction crew   (Verilator, compilers)
+`Specification = rules          -> RISC-V spec + VeeR manual
+Design (RTL)  = blueprint      -> ~30,550 lines of SystemVerilog
+Test          = recipe         -> e.g. the hello_world program
+Testbench     = inspector      -> feeds the design, watches, gives the verdict
 
-A design is a description of hardware, not a program,
-so a simulator must turn it into something that can run.`,
+A test says WHAT to try. A testbench is the setup that runs any
+test and judges the result. One testbench, many tests.`,
         quiz: {
-          q: 'In the kitchen picture, what is the VeeR SystemVerilog RTL?',
-          options: ['The recipe', 'The blueprint of the kitchen', 'The inspector', 'The chef’s logbook'],
+          q: 'The design and the specification disagree about what should happen. What does that mean?',
+          options: [
+            'The spec must be updated to match the code',
+            'The design has a bug: the spec defines what is correct',
+            'Both are fine, as long as the test passes',
+            'The testbench is wrong',
+          ],
           answer: 1,
-          why: 'RTL describes how the hardware is built, like a blueprint. Recipes are the test programs; the inspector is the testbench.',
+          why: 'The spec is the agreed definition of correct behaviour. A design that does something different is a design bug — even if no test has caught it yet.',
         },
       },
 
       // ── L2 ──────────────────────────────────────────────────────────────────
       {
         id: 'o1l2',
-        title: 'L2 — Where the design lives',
+        title: 'L2 — RTL and simulation: from blueprint to a working kitchen',
         level: 'G1',
         tab: null,
         rebuild: 'none',
         theory: `
 <div class="kitchen"><span class="kitchen-tag">The kitchen</span>
-<p>A big kitchen's blueprint is not one sheet. There is a sheet for order intake, one for the prep line,
-one for the stoves, one for the storeroom — plus a list of every sheet the builders need.</p></div>
-<h2>The VeeR design: ~30,550 lines of SystemVerilog</h2>
-<p>The design lives in the <code>design/</code> folder of the
-<a href="https://github.com/chipsalliance/Cores-VeeR-EL2/tree/main/design" target="_blank" rel="noopener">VeeR EL2 repository</a>.
-Each folder is one part of the processor:</p>
-<table class="truth-table">
-  <tr><th>Folder</th><th>Job</th><th>Kitchen</th><th>Lines</th></tr>
-  <tr><td><code>ifu</code></td><td>Instruction fetch: read the next instruction</td><td>Order intake</td><td>6,153</td></tr>
-  <tr><td><code>dec</code></td><td>Decode, registers, traps and interrupts</td><td>The head chef reading tickets</td><td>6,106</td></tr>
-  <tr><td><code>exu</code></td><td>Execute: ALU, multiply, divide</td><td>The stoves</td><td>3,512</td></tr>
-  <tr><td><code>lsu</code></td><td>Load/store: read and write memory</td><td>Runners to the counter and storeroom</td><td>3,955</td></tr>
-  <tr><td><code>lib</code>, <code>include</code></td><td>Shared building blocks: flip-flops, ECC</td><td>Standard equipment</td><td>3,750</td></tr>
-  <tr><td><code>dbg</code>, <code>dmi</code></td><td>Debug access</td><td>The manager's office</td><td>1,247</td></tr>
-  <tr><td>top level (<code>el2_veer.sv</code>, <code>el2_pmp.sv</code>, …)</td><td>Wiring the units together; memory protection</td><td>The floor plan</td><td>5,831</td></tr>
-</table>
-<p>The top of the design is the module <code>el2_veer_wrapper</code>, which connects the core to its memories.</p>
-<h3>Which files are actually built?</h3>
-<p>A plain text file, <code>testbench/flist</code>, lists every file the simulator compiles: <strong>51 design
-files</strong> plus include folders and settings. It is the builders' list of blueprint sheets.</p>
-<p>The design is written in <strong>SystemVerilog</strong>, the same language as the testbenches — but only the
-part of it that describes real hardware (no delays, no printing).</p>
-<p><strong>Ready?</strong> Open the design folder on GitHub (link above), look around, and answer below.</p>`,
+<p>You cannot cook in a blueprint. Before the chef can work, a construction crew has to turn the drawing into a real
+kitchen. In chip design, the "real kitchen" is first built in software: a simulation.</p></div>
+${veerKitchen(['rtl', 'crew', 'kitchen'])}
+<h2>Three terms</h2>
+<h3>RTL — Register-Transfer Level</h3>
+<p><strong>RTL</strong> is the style designers use to describe digital hardware: <strong>registers</strong> (storage
+that holds a value) and the <strong>logic</strong> that computes the next value between them. A tiny example in VeeR's
+own style:</p>
+<pre class="code-block">assign count_next = count + 1;                       // logic: an adder
+rvdff #(8) count_ff (.din(count_next), .dout(count), // register: 8 flip-flops
+                     .clk(clk), .rst_l(rst_l));</pre>
+<p>The <code>assign</code> line is not executed once; it is a circuit that always outputs <code>count + 1</code>.
+<code>rvdff</code> is VeeR's standard register: it copies <code>din</code> to <code>dout</code> on every clock edge.
+<em>Common confusion:</em> the order of RTL lines does not matter — all of them describe hardware working at once.</p>
+<h3>Clock cycle</h3>
+<p>A <strong>clock</strong> is a signal that ticks at a fixed rate. On each tick (one <strong>clock cycle</strong>),
+every register captures its new value at the same moment. Everything a processor does is counted in cycles — you will
+measure them in chapter vf1.</p>
+<h3>Simulator — Verilator</h3>
+<p>A <strong>simulator</strong> calculates, cycle by cycle, what the circuit described by the RTL would do.
+<strong>Verilator</strong>, the simulator used here, does it in two steps: it translates the SystemVerilog into C++,
+then a normal C++ compiler (<code>g++</code>) turns that into one program. Running that program <em>is</em> the
+simulation.</p>
+${veerFlow([
+  { t: '51 VeeR design files + testbench', s: 'SystemVerilog (.sv)', k: 'blueprint', e: 'verilator --cc' },
+  { t: 'C++ model of the chip', s: 'obj_dir/*.cpp', k: 'crew at work', e: 'g++' },
+  { t: 'One executable: obj_dir/Vtb_top', s: 'the simulator', k: 'working kitchen' },
+], 2)}
+<p><em>Common confusion:</em> the simulated chip is not "fake". It behaves exactly as the described hardware would; it
+is only slower than real silicon.</p>
+<p><strong>Ready?</strong> Answer the question below.</p>`,
         tasks: [
-          'Open the VeeR design folder on GitHub and find the lsu folder',
-          'Find el2_lsu_dccm_mem.sv inside lsu — you will verify it in chapter vf4',
-          'Which folder holds the logic that decides what happens on a trap?',
+          'Explain what the assign line and the rvdff line in the example each describe',
+          'Follow the three steps in the flowchart from .sv files to the simulator',
         ],
         hint:
-`lsu/el2_lsu_dccm_mem.sv is the DCCM (data memory) block.
-Traps and interrupts are handled in dec/ (the trap unit is
-dec/el2_dec_tlu_ctl.sv — you will read part of it in chapter o2).
-testbench/flist lists the 51 design files the simulator builds.`,
+`assign count_next = count + 1;  -> an adder circuit, always active
+rvdff #(8) ...                   -> 8 flip-flops: on each clock tick,
+                                    dout takes the value of din
+
+So every cycle, count goes up by one.
+
+SystemVerilog --verilator--> C++ --g++--> Vtb_top (the simulator)`,
         quiz: {
-          q: 'A load instruction reads a value from memory. Which design folder handles that?',
-          options: ['ifu', 'exu', 'lsu', 'dbg'],
-          answer: 2,
-          why: 'lsu is the load/store unit — the runners who carry ingredients between the counter, the storeroom and the stoves.',
+          q: 'In RTL, what happens if you swap the order of two assign statements?',
+          options: [
+            'The circuit behaves differently, because lines run in order',
+            'Nothing changes: both describe hardware that works at the same time',
+            'The simulator reports an error',
+            'Only the second one takes effect',
+          ],
+          answer: 1,
+          why: 'RTL describes circuits, not a sequence of steps. Two assign statements are two pieces of hardware that are always active, whatever order they are written in.',
         },
       },
 
       // ── L3 ──────────────────────────────────────────────────────────────────
       {
         id: 'o1l3',
-        title: 'L3 — How a C or assembly test reaches the chip',
+        title: 'L3 — Where the design lives',
         level: 'G1',
         tab: null,
         rebuild: 'none',
         theory: `
 <div class="kitchen"><span class="kitchen-tag">The kitchen</span>
-<p>The owner writes a recipe in plain language (C) or in shorthand (assembly). The chef only understands
-their own code words, so a translator rewrites the recipe, and it is pinned to the board before the kitchen opens.</p></div>
-<h2>Why the tests are programs</h2>
-<p>A processor's job is to run software, so the most direct test of a processor is software. Two languages are used:</p>
-<ul>
-  <li><strong>Assembly</strong> (<code>hello_world.s</code>) when the test needs exact control of every instruction —
-      for example placing an illegal instruction on purpose.</li>
-  <li><strong>C</strong> (<code>irq.c</code>, Dhrystone) for longer programs that would be tedious to write instruction by instruction.</li>
-</ul>
-<h3>From source to simulated memory</h3>
-<pre class="code-block">hello_world.s ── riscv64-unknown-elf-gcc ──► hello_world.exe  (machine code)
-               ── objcopy -O verilog     ──► program.hex      (text: address + bytes)
-               ── $readmemh in tb_top.sv  ──► the testbench's memory model</pre>
-<p>The start of the real <code>program.hex</code>:</p>
-<pre class="code-block">@80000000
-73 10 20 B0 73 10 20 B8 97 00 00 00 ...</pre>
-<p><code>@80000000</code> is the address. The testbench loads the file at time zero:</p>
-<pre class="code-block">$readmemh("program.hex",  lmem.mem);   // data memory model
-$readmemh("program.hex",  imem.mem);   // instruction memory model</pre>
-<p>On reset, VeeR starts fetching at <strong>0x80000000</strong>. Its first instruction is the bytes
-<code>73 10 20 B0</code>, which read backwards (RISC-V stores the lowest byte first) are <code>b0201073</code> —
-exactly instruction #1 in the trace you will meet in vf2.</p>
-<p><strong>Ready?</strong> Answer the question below.</p>`,
+<p>A large kitchen is split into stations — order intake, the head chef reading tickets, the stoves, the runners who
+fetch ingredients — and the blueprint has one sheet per station. VeeR's design is organised the same way.</p></div>
+<h2>A processor is a set of units</h2>
+${veerCore()}
+<h3>Unit</h3>
+<p>A <strong>unit</strong> is a part of the processor with one job. VeeR keeps each unit in its own folder of the
+<a href="https://github.com/chipsalliance/Cores-VeeR-EL2/tree/main/design" target="_blank" rel="noopener">design</a>.
+To run one instruction, the units work like a relay:</p>
+<table class="truth-table">
+  <tr><th>Unit (folder)</th><th>Job</th><th>Kitchen station</th><th>Lines</th></tr>
+  <tr><td>Fetch (<code>ifu/</code>)</td><td>Read the next instruction from memory</td><td>Order intake</td><td>6,153</td></tr>
+  <tr><td>Decode (<code>dec/</code>)</td><td>Work out what the instruction means; handle traps and interrupts</td><td>Head chef reading the ticket</td><td>6,106</td></tr>
+  <tr><td>Execute (<code>exu/</code>)</td><td>Do the arithmetic: add, compare, multiply, divide</td><td>The stoves</td><td>3,512</td></tr>
+  <tr><td>Load/store (<code>lsu/</code>)</td><td>Read and write data memory</td><td>Runners to the counter and storeroom</td><td>3,955</td></tr>
+</table>
+<p>Two small memories sit right next to the core: the <strong>ICCM</strong> (instructions) and the
+<strong>DCCM</strong> (data) — the chef's own counter. Everything else is reached over the <strong>system bus</strong>,
+like a storeroom down the hall. In this lab, that "storeroom" is a memory model inside the testbench.</p>
+<h3>Module and top module</h3>
+<p>Each file defines one or more <strong>modules</strong>: a block of hardware with input and output ports, which can
+contain other modules. The module at the very top, which contains all the others, is the <strong>top module</strong>.
+For the VeeR core it is <code>el2_veer_wrapper</code>; in the lab, the testbench <code>tb_top</code> sits above it.
+<em>Common confusion:</em> a folder is not a module. A folder groups files for one unit; the files contain the modules.</p>
+<h3>File list</h3>
+<p>The simulator needs to know which files make up the design. VeeR lists them in <code>testbench/flist</code>:
+<strong>51 design files</strong>. If a file is not on that list, it is not part of the chip being simulated.</p>
+<p><strong>Ready?</strong> Open the design folder (link above), find <code>lsu/el2_lsu_dccm_mem.sv</code>, then answer below.</p>`,
         tasks: [
-          'Follow hello_world.s through gcc, objcopy and $readmemh to the memory model',
-          'Explain why the bytes 73 10 20 B0 become the instruction b0201073',
+          'Trace one instruction through the diagram: fetch, decode, execute or load/store',
+          'Open the design folder on GitHub and find lsu/el2_lsu_dccm_mem.sv (the DCCM, verified in vf4)',
+          'Explain the difference between a folder, a file and a module',
         ],
         hint:
-`gcc       turns source into RISC-V machine code (an .exe / ELF file)
-objcopy   writes it as text: "@address" lines followed by bytes
-$readmemh (SystemVerilog) reads that text into the memory arrays
+`An add instruction:   fetch (ifu) -> decode (dec) -> execute (exu)
+A load instruction:   fetch (ifu) -> decode (dec) -> load/store (lsu) -> DCCM or bus
 
-Little-endian: the lowest byte is stored first.
-Bytes 73 10 20 B0  ->  word 0xB0201073  ->  csrrw zero, minstret, zero`,
+Folder  = one unit's files (lsu/)
+File    = el2_lsu_dccm_mem.sv
+Module  = the hardware block defined inside: module el2_lsu_dccm_mem ...
+Top     = el2_veer_wrapper (core), tb_top (whole lab)`,
         quiz: {
-          q: 'Which SystemVerilog task loads the compiled test into the simulated memory?',
-          options: ['$display', '$readmemh', '$finish', '$fwrite'],
+          q: 'A load instruction reads a value from the DCCM. Which units does it pass through, in order?',
+          options: [
+            'Execute → Fetch → Decode',
+            'Fetch → Decode → Load/store',
+            'Load/store → Fetch → Decode',
+            'Decode → Execute → Fetch',
+          ],
           answer: 1,
-          why: '$readmemh ("read memory, hex") fills a memory array from a hex text file. tb_top.sv calls it for both memory models at time zero.',
+          why: 'Every instruction is fetched first, then decoded. A load is then handed to the load/store unit, which reads the DCCM (or the bus).',
         },
       },
 
       // ── L4 ──────────────────────────────────────────────────────────────────
       {
         id: 'o1l4',
-        title: 'L4 — The tools behind the Run button',
+        title: 'L4 — From a C or assembly test to the chip’s memory',
         level: 'G1',
         tab: null,
         rebuild: 'none',
         theory: `
 <div class="kitchen"><span class="kitchen-tag">The kitchen</span>
-<p>The translator rewrites recipes. A construction crew turns the blueprint into a working kitchen.
-A foreman with a checklist decides who does what, in which order.</p></div>
-<h2>Four tools, one job each</h2>
-<table class="truth-table">
-  <tr><th>Tool</th><th>Kitchen</th><th>What it does here</th></tr>
-  <tr><td>RISC-V GCC (<code>riscv64-unknown-elf-gcc</code>)</td><td>Translator</td><td>Compiles C/assembly tests to machine code</td></tr>
-  <tr><td>Verilator 5.052</td><td>Construction crew</td><td>Turns the SystemVerilog design + testbench into C++</td></tr>
-  <tr><td>g++</td><td>Crew's power tools</td><td>Compiles that C++ into one executable: the simulator</td></tr>
-  <tr><td>make</td><td>Foreman</td><td>Runs the steps in the right order (<code>tools/Makefile</code>)</td></tr>
-</table>
-<h3>What Verilator really does</h3>
-<pre class="code-block">51 design files + tb_top.sv ── verilator --cc ──► C++ model (obj_dir/)
-C++ model + test_tb_top.cpp  ── g++         ──► obj_dir/Vtb_top  (the simulator)
-./Vtb_top  reads program.hex, runs, writes the logs you see</pre>
-<p><code>test_tb_top.cpp</code> is a small C++ <code>main()</code> that calls <code>tb-&gt;eval()</code> in a loop: every
-call moves the simulated chip forward. Building <code>Vtb_top</code> takes about a minute, so this server builds it
-<strong>once</strong>; each Run only loads a new <code>program.hex</code>.</p>
-<h3>One honest detail</h3>
-<p>This server has no RISC-V GCC installed. The VeeR repository ships the programs already compiled
-(<code>testbench/hex/</code>), and the lab uses those. The source is still there to read: in the
-<strong>Run the CPU</strong> tab, open the <strong>Program source</strong> view.</p>
-<p><strong>Ready?</strong> Select <code>hello_world</code> in the lab below, open <strong>Program source</strong>, then answer the question.</p>`,
+<p>The owner writes a recipe in plain language (C) or in kitchen shorthand (assembly). The chef only reads code
+numbers, so a translator rewrites it, and the result is pinned to the board before the kitchen opens.</p></div>
+${veerKitchen(['recipe', 'translator', 'board'])}
+<h2>Why the tests are programs</h2>
+<p>A processor's job is to run software, so the most direct way to test one is to give it software. Tests come in two
+languages: <strong>assembly</strong>, one line per processor instruction, when the test must control every instruction
+exactly (for example, placing an illegal one on purpose); and <strong>C</strong> for longer programs such as
+benchmarks.</p>
+<h3>Machine code and the compiler</h3>
+<p>The processor understands only <strong>machine code</strong>: each instruction is a 32-bit (or 16-bit) number.
+A <strong>compiler</strong> — here <code>riscv64-unknown-elf-gcc</code>, built for RISC-V — turns C or assembly into
+machine code. <em>Common confusion:</em> this is not the compiler that builds the simulator (that one is
+<code>g++</code>). Two different compilers, two different jobs.</p>
+<h3>program.hex and $readmemh</h3>
+${veerFlow([
+  { t: 'hello_world.s', s: 'assembly source', k: 'recipe', e: 'riscv64-unknown-elf-gcc' },
+  { t: 'hello_world.exe', s: 'machine code (ELF file)', k: 'translated recipe', e: 'objcopy -O verilog' },
+  { t: 'program.hex', s: '@80000000  73 10 20 B0 73 10 20 B8 ...', k: 'pinned to the board', e: '$readmemh at time 0' },
+  { t: 'Testbench memory models', s: 'imem (instructions), lmem (data)', k: 'storeroom' },
+], 2)}
+<p><code>program.hex</code> is plain text: an address line (<code>@80000000</code>) followed by bytes. The testbench
+loads it at the very start of simulation with the SystemVerilog task <code>$readmemh</code> ("read memory, hex"):</p>
+<pre class="code-block">$readmemh("program.hex",  lmem.mem);   // testbench/tb_top.sv
+$readmemh("program.hex",  imem.mem);</pre>
+<h3>Reset vector</h3>
+<p>When the core comes out of reset, it starts fetching at a fixed address, the <strong>reset vector</strong>. In this
+build it is <code>0x80000000</code> — exactly where the hex file begins. So the very first instruction is the bytes
+<code>73 10 20 B0</code>. RISC-V stores the lowest byte first, so the instruction is <code>0xB0201073</code>.</p>
+<p><strong>Ready?</strong> In the lab below, select <code>hello_world</code> and open <strong>Program source</strong>, then answer.</p>`,
         tasks: [
+          'Follow hello_world.s through the four boxes of the flowchart',
           'In the Run the CPU tab, select hello_world and open the Program source view',
-          'Find the loop that stores each character to STDOUT',
-          'Say which tool turns SystemVerilog into C++, and which turns C++ into the simulator',
+          'Explain why the bytes 73 10 20 B0 become the instruction 0xB0201073',
         ],
         hint:
-`Verilator: SystemVerilog -> C++
-g++:       C++ -> executable (obj_dir/Vtb_top)
-make:      runs the steps
-RISC-V GCC: compiles the test programs (prebuilt .hex here)
+`.s / .c --gcc--> .exe (machine code) --objcopy--> program.hex (text)
+program.hex --$readmemh--> the testbench's memory models (imem, lmem)
 
-In hello_world.s the loop is:
-  loop: lb x5, 0(x4); sb x5, 0(x3); addi x4, x4, 1; bnez x5, loop`,
+The core starts at the reset vector 0x80000000.
+Bytes in memory:  73 10 20 B0   (lowest byte first)
+As one word:      0xB0201073    (csrrw zero, minstret, zero)`,
         quiz: {
-          q: 'Why does pressing Run on a new program take well under a second, when building the simulator takes about a minute?',
+          q: 'Which compiler turns hello_world.s into machine code for VeeR?',
+          options: ['g++', 'Verilator', 'riscv64-unknown-elf-gcc', '$readmemh'],
+          answer: 2,
+          why: 'The RISC-V GCC compiler produces machine code for the processor. g++ compiles the simulator itself, Verilator translates SystemVerilog, and $readmemh only loads a hex file.',
+        },
+      },
+
+      // ── L5 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o1l5',
+        title: 'L5 — What happens when you press Run',
+        level: 'G1',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>The kitchen is already built. Each time a new recipe arrives it is pinned up, the chef cooks, and the inspector
+watches the order window. When the chef rings the bell with "done", the inspector writes the verdict.</p></div>
+${veerKitchen(['kitchen', 'inspector', 'verdict'])}
+<h2>One run, step by step</h2>
+${veerFlow([
+  { t: 'You press Run on VeeR', s: 'the page sends the program name to the server', k: 'new order' },
+  { t: 'Server copies program.hex into a fresh folder', s: 'testbench/hex/user_mode0/hello_world.hex', k: 'pin the recipe' },
+  { t: 'Server starts the simulator', s: 'obj_dir/Vtb_top  (built once, ahead of time)', k: 'open the kitchen' },
+  { t: 'The core runs the program', s: 'fetch at 0x80000000, one instruction after another', k: 'chef cooks' },
+  { t: 'Program writes to the mailbox', s: 'address 0xD0580000: characters, then 0xFF', k: 'rings the bell' },
+  { t: 'Testbench prints TEST_PASSED and stops', s: 'logs go back to this page', k: 'verdict' },
+], [4, 5])}
+<h3>Mailbox</h3>
+<p>The <strong>mailbox</strong> is one memory address the testbench watches. Each byte the program stores there is
+either a character to print, or a verdict: <code>0xFF</code> means pass, <code>0x01</code> means fail. It is how a
+program "talks" to the testbench — chapter vf1 shows it in detail.</p>
+<h3>What comes back to the page</h3>
+<table class="truth-table">
+  <tr><th>View</th><th>What it is</th><th>Kitchen</th></tr>
+  <tr><td>Program output</td><td>Only the characters the program wrote to the mailbox</td><td>What was said at the order window</td></tr>
+  <tr><td>Simulation log</td><td>The testbench's own messages, including the verdict and the instruction and cycle counts</td><td>The inspector's report</td></tr>
+  <tr><td>Instruction trace</td><td>One line for every instruction the core finished</td><td>The chef's logbook</td></tr>
+</table>
+<h3>Why a run takes under a second</h3>
+<p>Building the simulator (Verilator + g++) takes about a minute, so the server does it <strong>once</strong>. A Run
+only copies a new <code>program.hex</code> and starts the existing simulator. In the kitchen: you do not rebuild the
+kitchen for every new recipe.</p>
+<h3>One honest detail</h3>
+<p>This server has no RISC-V GCC compiler installed. The VeeR repository ships its test programs already compiled
+(<code>testbench/hex/</code>), and the lab uses those files. The source code is still there to read in the
+<strong>Program source</strong> view.</p>
+<p>In the next chapter you will meet the specs those programs are checking.</p>
+<p><strong>Ready?</strong> Optional: press <strong>Run on VeeR</strong> with <code>hello_world</code> in the lab below and find
+<code>TEST_PASSED</code>. Then answer the question.</p>`,
+        tasks: [
+          'Match each flowchart step to its kitchen action',
+          'Optional: run hello_world in the lab and find TEST_PASSED in the Simulation log',
+          'Explain why a new run does not rebuild the simulator',
+        ],
+        hint:
+`Press Run -> hex copied -> Vtb_top starts -> core runs from 0x80000000
+-> program stores bytes to the mailbox 0xD0580000
+-> 0xFF arrives -> testbench prints TEST_PASSED -> logs to the page
+
+The hardware (kitchen) does not change between programs,
+so the simulator executable is built once and reused.`,
+        quiz: {
+          q: 'How does the testbench know that hello_world has finished successfully?',
           options: [
-            'Verilator rebuilds only the changed design files',
-            'The simulator executable is built once; a run only loads a new program.hex',
-            'The program runs on the server’s own CPU instead of the simulator',
-            'Results are cached from earlier runs',
+            'The simulator runs out of instructions',
+            'The program writes 0xFF to the mailbox address 0xD0580000',
+            'The server checks the instruction count',
+            'The program prints the word PASSED',
           ],
           answer: 1,
-          why: 'The hardware (the kitchen) does not change between programs. Only the recipe changes, and loading a new program.hex costs almost nothing.',
+          why: 'The testbench watches the mailbox. When the program stores 0xFF there, the testbench prints TEST_PASSED and ends the simulation; 0x01 would mean TEST_FAILED.',
         },
       },
     ],
