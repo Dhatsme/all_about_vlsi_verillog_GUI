@@ -16,6 +16,10 @@ deploy rules) and `CLAUDE.md` (branch rules, voice and tone).
 
 ## Status
 
+**Foundation track complete (2026-10-23): 6 chapters, 20 lessons, all verified in a browser
+against real runs.** Next: Professional track spec (`vp1`–`vp8`); diagnose the reads-return-0
+bug before writing vp3.
+
 | # | Chapter ID | Title | Lessons | Status |
 |---|---|---|---|---|
 | 1 | `vf1` | Lab tour and first run | L1 Meet VeeR EL2, L2 How a program talks to the testbench, L3 Same program, different memory | ✅ done |
@@ -23,7 +27,7 @@ deploy rules) and `CLAUDE.md` (branch rules, voice and tone).
 | 3 | `vf3` | Tests as specifications | L1 What a directed test proves (`illegal_instruction`), L2 Interrupts (`irq`), L3 Errors on purpose (`ecc`), L4 Memory protection (`pmp`) | ✅ done |
 | 4 | `vf4` | UVM tour | L1 Stimulus: item and sequence, L2 Drive and observe: driver and monitor, L3 Checking: scoreboard and test, L4 The report summary | ✅ done |
 | 5 | `vf5` | Changing stimulus | L1 Predict, edit, check (loop count), L2 Verbosity and what you can see, L3 Breaking it on purpose (syntax errors) | ✅ done |
-| 6 | `vf6` | Reading results critically | L1 Count the checks, L2 A pass that proves nothing, L3 What a real fix needs (bridge to Professional track) | ❌ **build this next** |
+| 6 | `vf6` | Reading results critically | L1 Count the checks, L2 A pass that proves nothing, L3 What a real fix needs (bridge to Professional track) | ✅ done |
 
 ---
 

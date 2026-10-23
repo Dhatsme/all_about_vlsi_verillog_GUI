@@ -939,4 +939,164 @@ The second error is a follow-on: fixing the first removes both.`,
       },
     ],
   },
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'vf6',
+    track: 'Foundation',
+    title: 'vf6 — Reading results critically',
+    lessons: [
+      // ── L1 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf6l1',
+        title: 'L1 — Count the checks',
+        level: 'G3',
+        tab: 'uvm',
+        open_file: 'dccm_scoreboard.sv',
+        rebuild: 'none',
+        theory: `
+<h2>A green result is a claim. Check it.</h2>
+<p>Since vf4 you have seen <code>DCCM TEST PASSED</code> with zero errors. Before trusting any pass,
+an experienced verification engineer asks one question: <strong>what did this test actually check?</strong></p>
+<p>The scoreboard prints a different block for each kind of transaction:</p>
+<table class="truth-table">
+  <tr><th>Transaction</th><th>Scoreboard prints</th><th>Is anything compared?</th></tr>
+  <tr><td>Write</td><td><code>------ :: WRITE DATA :: ------</code></td><td>No — it only remembers the data</td></tr>
+  <tr><td>Read, data matches</td><td><code>------ :: READ DATA Match :: ------</code></td><td>Yes</td></tr>
+  <tr><td>Read, data differs</td><td><code>------ :: READ DATA Mismatch :: ------</code> (as UVM_ERROR)</td><td>Yes</td></tr>
+</table>
+<p>So the number of real checks equals the number of <code>READ DATA</code> blocks.</p>
+<h3>Predict first</h3>
+<p>The driver makes 10 writes and 10 reads. How many <code>WRITE DATA</code> blocks and how many
+<code>READ DATA</code> blocks do you expect?</p>
+<p><strong>Ready?</strong> Make sure the testbench is unchanged (Reset all), press <strong>Build &amp; run</strong>,
+and count — use your browser's find (Ctrl+F / Cmd+F) on the output.</p>`,
+        tasks: [
+          'Press Reset all so the testbench is the original',
+          'Write your prediction: how many WRITE DATA and READ DATA blocks?',
+          'Press ▶ Build & run',
+          'Count "WRITE DATA" and "READ DATA" in the output',
+          'Compare with the 10 WR: and 10 RD: lines from the driver',
+        ],
+        hint:
+`Unchanged run:
+  WRITE DATA blocks: 20
+  READ DATA blocks:   0
+
+10 writes happened, but the scoreboard saw 20 "writes".
+Every read was handled as a write, so nothing was compared.
+The test reports 0 errors because it never checked anything.`,
+        expected: ['WRITE DATA', '[dccm_scoreboard]    80', 'DCCM TEST PASSED'],
+      },
+
+      // ── L2 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf6l2',
+        title: 'L2 — A pass that proves nothing',
+        level: 'G3',
+        tab: 'uvm',
+        open_file: 'dccm_monitor.sv',
+        rebuild: 'none',
+        theory: `
+<h2>Following the evidence</h2>
+<p>Line up the driver and the scoreboard at the same simulated time:</p>
+<pre class="code-block">@ 45000: [dccm_driver]     RD: 0x0000c776 => 0x00000000
+@ 45000: [dccm_scoreboard] ------ :: WRITE DATA       :: ------
+@ 45000: [dccm_scoreboard] Addr: c776</pre>
+<p>The driver did a <em>read</em>; at the same moment the scoreboard recorded a <em>write</em> to the same
+address. The scoreboard only knows what the monitor tells it, so the monitor is the suspect.</p>
+<h3>Two problems in the monitor</h3>
+<ul>
+  <li><strong>One object, reused.</strong> The transaction is created once, in <code>new()</code>, and the
+      same object is filled in and sent for every bus operation. The scoreboard keeps a queue of
+      transactions — but every entry in it is the same object, overwritten again and again.</li>
+  <li><strong><code>wr_en</code> is set but never cleared.</strong> On a write, the monitor sets
+      <code>transaction.wr_en = 1</code>. On a read, it sets <code>rd_en</code> but never puts
+      <code>wr_en</code> back to 0. From the first write on, every transaction says "write".</li>
+</ul>
+<p>The scoreboard checks <code>if (mem_pkt.wr_en)</code> first, so every read lands in the write branch.</p>
+<h3>And the second warning sign</h3>
+<p>Every <code>RD:</code> line returns <code>0x00000000</code>, although each address was written with
+random data shortly before. A working memory returns what was written. Nothing flagged it, because no
+read was ever compared.</p>
+<p>Remember the pass rule from vf4: <em>pass = no errors reported</em>. A checker that never checks
+reports no errors. This is one of the most common ways real verification goes wrong.</p>
+<p><strong>Ready?</strong> Read <code>dccm_monitor.sv</code> below, find both problems, then run the
+unchanged testbench and confirm the <code>RD:</code> values.</p>`,
+        tasks: [
+          'In dccm_monitor.sv, find where the transaction object is created — how many times does that happen?',
+          'Find the line that sets transaction.wr_en. Is there any line that clears it?',
+          'In dccm_scoreboard.sv, find the if (mem_pkt.wr_en) check — why does a read land there?',
+          'Press ▶ Build & run with no edits and check the value every RD: line returns',
+          'Write one sentence: why did this test pass?',
+        ],
+        hint:
+`dccm_monitor.sv:
+  line 14: transaction = new();               <- in new(): created once
+  line 34: transaction.wr_en = memory_vif.wr_en;  <- set to 1 on a write
+           (nothing ever sets wr_en back to 0)
+
+Every RD: line: => 0x00000000
+
+The test passed because the scoreboard never compared a read,
+so it never reported an error — and "no errors" is the pass rule.`,
+        expected: ['RD: 0x0000c776 => 0x00000000', 'DCCM TEST PASSED'],
+      },
+
+      // ── L3 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf6l3',
+        title: 'L3 — What a real fix needs',
+        level: 'G3',
+        tab: 'uvm',
+        open_file: 'dccm_scoreboard.sv',
+        rebuild: 'none',
+        theory: `
+<h2>Fixing a checker means expecting to fail</h2>
+<p>Suppose you repair the monitor: a new transaction for every bus operation, with <code>wr_en</code>
+taken from the bus each time. What happens? We tried it on this server:</p>
+<table class="truth-table">
+  <tr><th>Run</th><th>READ DATA checks</th><th>UVM_ERROR</th><th>Result</th></tr>
+  <tr><td>Original monitor</td><td>0</td><td>0</td><td>PASSED</td></tr>
+  <tr><td>Fixed monitor</td><td>10 — all <code>Mismatch</code></td><td>40</td><td>FAILED</td></tr>
+</table>
+<p>The "better" testbench fails. That is the correct outcome: the checks now run, and they expose that
+every read returns 0. A fix to a checker should make you <em>expect</em> new failures; if it changes
+nothing, be suspicious.</p>
+<h3>What is still wrong after that</h3>
+<ul>
+  <li><strong>The scoreboard model.</strong> It remembers only the <em>last</em> value written
+      (<code>sc_mem</code> is one variable), not one value per address. Any test that writes two addresses
+      before reading would compare against the wrong data.</li>
+  <li><strong>Reads return 0.</strong> Either the memory, its wiring in <code>tbench_top.sv</code>, or the
+      driver's timing for sampling <code>rdata</code> is wrong. Finding which is a real debugging job.</li>
+</ul>
+<h3>A habit to keep</h3>
+<p>To test a testbench, break the design on purpose and check that the test notices. If a deliberately
+broken design still passes, the testbench is broken. Here, the design was broken all along (reads return
+0) — and the test still passed.</p>
+<p>Fixing the monitor, the scoreboard and the read bug is the work of the <strong>Professional track</strong>.
+Be ready for slower runs there: a fix that creates a new UVM object rebuilds much of the UVM library and
+takes several minutes.</p>
+<p><strong>You have finished the Foundation track.</strong> Run the unchanged testbench one last time and read
+the scoreboard below with fresh eyes.</p>`,
+        tasks: [
+          'Press Reset all and ▶ Build & run once more',
+          'In dccm_scoreboard.sv, find sc_mem: why can one variable not model a whole memory?',
+          'List the three problems this testbench hides (monitor, scoreboard model, reads return 0)',
+          'Describe how you would test a testbench: what would you break on purpose?',
+        ],
+        hint:
+`The three hidden problems:
+  1. Monitor reuses one object and never clears wr_en
+     -> every read is reported as a write, nothing is compared.
+  2. Scoreboard keeps one value (sc_mem), not one per address
+     -> wrong expectations once two addresses are in flight.
+  3. Reads return 0 -> the design path or the driver timing is wrong.
+
+With problem 1 fixed: 10 READ DATA Mismatch, 40 UVM_ERROR,
+DCCM TEST FAILED. That failure is progress.`,
+        expected: ['UVM_ERROR :    0', 'DCCM TEST PASSED'],
+      },
+    ],
+  },
 ];
