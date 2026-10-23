@@ -117,6 +117,24 @@
                      font-family: var(--mono); font-size: 0.76rem; line-height: 1.55; color: var(--text);
                      white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; }
   .lesson-check { margin: 14px 0 4px; font-size: 0.86rem; color: var(--dim); }
+  .lesson-quiz { margin: 16px 0 6px; padding: 14px 16px; background: var(--panel); border: 1px solid var(--border2);
+                 border-radius: 8px; }
+  .lesson-quiz[hidden] { display: none; }
+  .quiz-q { font-size: 0.9rem; color: var(--text); margin-bottom: 10px; }
+  .quiz-q b { color: var(--accent2); font-family: var(--head); margin-right: 6px; }
+  .quiz-opts { display: grid; gap: 6px; }
+  .quiz-opt { text-align: left; background: var(--card); color: var(--dim); border: 1px solid var(--border2);
+              border-radius: 6px; padding: 8px 11px; font-family: var(--body); font-size: 0.86rem; cursor: pointer; }
+  .quiz-opt:hover { color: var(--text); border-color: var(--dim); }
+  .quiz-opt.right { border-color: var(--success); color: var(--success); }
+  .quiz-opt.wrong { border-color: var(--warn); color: var(--warn); }
+  .quiz-why { margin-top: 10px; font-size: 0.85rem; color: var(--dim); line-height: 1.55; }
+  .lesson-theory .kitchen { border-left: 3px solid var(--accent3); background: rgba(247,147,79,.07);
+                            padding: 10px 14px; border-radius: 0 6px 6px 0; margin: 4px 0 14px; }
+  .lesson-theory .kitchen p { margin-bottom: 6px; }
+  .lesson-theory .kitchen p:last-child { margin-bottom: 0; }
+  .lesson-theory .kitchen-tag { font-family: var(--mono); font-size: 0.68rem; color: var(--accent3);
+                                text-transform: uppercase; letter-spacing: .05em; display: block; margin-bottom: 4px; }
   .lesson-check .ok  { color: var(--success); font-weight: 600; }
   .lesson-check .no  { color: var(--accent3); }
   .lesson-check code { font-family: var(--mono); font-size: 0.8rem; color: var(--text); }
@@ -171,6 +189,7 @@
         <summary>💡 Show hint</summary>
         <pre id="lesson-hint"></pre>
       </details>
+      <div class="lesson-quiz" id="lesson-quiz" hidden></div>
       <div class="lesson-check" id="lesson-check"></div>
       <div class="lab-lesson-nav">
         <button class="btn ghost" id="lesson-prev">← Previous</button>
@@ -203,6 +222,7 @@
     <p class="about" id="cpu-about" style="margin-top:8px"></p>
 
     <div class="out-tabs" id="cpu-out-tabs">
+      <button class="out-tab" data-out="source">Program source</button>
       <button class="out-tab active" data-out="console">Program output</button>
       <button class="out-tab" data-out="output">Simulation log</button>
       <button class="out-tab" data-out="exec_log">Instruction trace</button>
@@ -315,10 +335,28 @@
     const t = info && info.cpu_tests.find(x => x.name === $('cpu-test').value);
     $('cpu-about').textContent = t ? t.about : '';
   }
-  $('cpu-test').onchange = showAbout;
+  $('cpu-test').onchange = () => { showAbout(); if (cpuView === 'source') showCpu(); };
+
+  // Program source: read-only C/assembly of the selected program; works before any run.
+  const sourceCache = {};
+  async function showSource() {
+    const test = $('cpu-test').value;
+    if (!test) return;
+    if (!sourceCache[test]) {
+      $('cpu-out').textContent = 'Loading source…';
+      try { sourceCache[test] = await (await fetch('/veer/program-source?test=' + encodeURIComponent(test))).json(); }
+      catch { $('cpu-out').textContent = 'Could not load the source.'; return; }
+    }
+    if (cpuView !== 'source' || $('cpu-test').value !== test) return;   // view changed meanwhile
+    const d = sourceCache[test];
+    $('cpu-out').textContent = d.ok
+      ? d.files.map(f => `// ===== testbench/${f.name} =====\n\n${f.content}`).join('\n\n')
+      : 'The source for this program is not available on this server.';
+  }
 
   function showCpu() {
-    if (!cpuResult) return;
+    if (cpuView === 'source') { showSource(); return; }
+    if (!cpuResult) { $('cpu-out').textContent = 'Press Run to see this view.'; return; }
     const text = cpuResult[cpuView] || (cpuView === 'console'
       ? '(this program printed nothing to the console — see the Simulation log)' : '(empty)');
     $('cpu-out').innerHTML = paint(text);
@@ -492,13 +530,16 @@
   }
 
   function setCheck(html) { $('lesson-check').innerHTML = html; }
+  const isTheory = l => !l.expected || !l.expected.length;
   function needLine() {
+    if (isTheory(cur)) return 'Answer the question above to complete this lesson.';
     return 'Run it to check this lesson. The run must show: ' +
       cur.expected.map(e => `<code>${esc(e)}</code>`).join(', ');
   }
 
   // Put the lab in the state the lesson needs: tab, program, output view.
   function applyLabState() {
+    if (!cur.tab) return;                      // theory-only lesson: leave the lab as it is
     const tab = document.querySelector(`.tab[data-pane="${cur.tab}"]`);
     if (tab && !tab.classList.contains('active')) tab.click();
     if (cur.tab === 'cpu' && cur.program) {
@@ -520,6 +561,36 @@
     if (tries > 0) setTimeout(() => openFileWhenReady(name, tries - 1), 100);
   }
 
+  // Check-your-understanding question. Completes theory-only lessons.
+  function renderQuiz(l) {
+    const box = $('lesson-quiz'), q = l.quiz;
+    if (!q) { box.hidden = true; box.innerHTML = ''; return; }
+    box.hidden = false;
+    const answered = store.get('quiz:' + l.id) === '1';
+    box.innerHTML = `<div class="quiz-q"><b>Check your understanding</b>${esc(q.q)}</div>` +
+      `<div class="quiz-opts">${q.options.map((o, i) =>
+        `<button class="quiz-opt${answered && i === q.answer ? ' right' : ''}" data-i="${i}">${esc(o)}</button>`).join('')}</div>` +
+      `<div class="quiz-why" id="quiz-why">${answered ? '<span class="ok" style="color:var(--success)">✓ Correct.</span> ' + esc(q.why) : ''}</div>`;
+    box.querySelectorAll('.quiz-opt').forEach(b => b.onclick = () => {
+      const i = +b.dataset.i;
+      box.querySelectorAll('.quiz-opt').forEach(x => x.classList.remove('wrong'));
+      if (i === q.answer) {
+        b.classList.add('right');
+        $('quiz-why').innerHTML = '<span style="color:var(--success)">✓ Correct.</span> ' + esc(q.why);
+        store.set('quiz:' + l.id, '1');
+        if (isTheory(l) && !isDone(l.id)) {
+          store.set('done:' + l.id, '1');
+          const nxt = lessons[lessons.indexOf(l) + 1];
+          setCheck('<span class="ok">✓ Lesson complete.</span>' + (nxt ? ` Next: <strong>${esc(nxt.title)}</strong>.` : ''));
+          progress();
+        }
+      } else {
+        b.classList.add('wrong');
+        $('quiz-why').innerHTML = '<span style="color:var(--accent3)">Not quite.</span> Read the lesson again and try another answer.';
+      }
+    });
+  }
+
   function show(l) {
     cur = l; store.set('lesson', l.id);
     $('chapter-select').value = l.chapter.id;
@@ -528,7 +599,7 @@
       `<span class="badge track">${esc(l.chapter.track)}</span>` +
       `<span class="badge">${esc(l.title)}</span>` +
       `<span class="badge">${esc(LEVEL[l.level] || l.level)}</span>` +
-      `<span class="badge">${esc(REBUILD[l.rebuild] || l.rebuild)}</span>`;
+      `<span class="badge">${esc(!l.tab ? 'theory, no lab' : (REBUILD[l.rebuild] || l.rebuild))}</span>`;
     $('lesson-theory').innerHTML = l.theory;            // trusted: our own lesson file
     $('lesson-tasks').innerHTML = l.tasks.map((t, k) => {
       const key = `task:${l.id}:${k}`, on = store.get(key) === '1';
@@ -542,7 +613,8 @@
     $('lesson-hint').textContent = l.hint || '';
     $('lesson-hint-wrap').hidden = !l.hint;
     $('lesson-hint-wrap').open = false;
-    setCheck(isDone(l.id) ? '<span class="ok">✓ Lesson complete.</span> Run again any time.' : needLine());
+    renderQuiz(l);
+    setCheck(isDone(l.id) ? '<span class="ok">✓ Lesson complete.</span>' + (isTheory(l) ? '' : ' Run again any time.') : needLine());
     $('lesson-prev').disabled = i === 0;
     $('lesson-next').disabled = i === lessons.length - 1;
     progress();
@@ -561,7 +633,7 @@
   // Check every run against the current lesson.
   document.addEventListener('veer:result', ev => {
     const d = ev.detail;
-    if (d.tab !== cur.tab) return;
+    if (!cur.tab || isTheory(cur) || d.tab !== cur.tab) return;
     if (cur.tab === 'cpu' && cur.program && d.program !== cur.program) {
       setCheck(`<span class="no">That run was <code>${esc(d.program)}</code>.</span> ` +
                `This lesson needs <code>${esc(cur.program)}</code>.`);

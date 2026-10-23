@@ -74,6 +74,20 @@ CPU_TESTS = {
     "pmp":              "Physical memory protection checks",
 }
 
+# Source files behind each bundled program (paths under testbench/), main
+# file first. Shown read-only in the page's "Program source" view.
+CPU_SOURCES = {
+    "hello_world":         ["asm/hello_world.s"],
+    "hello_world_dccm":    ["asm/hello_world_dccm.s"],
+    "dhry":                ["tests/dhry/dhry_1.c", "tests/dhry/dhry_2.c"],
+    "cmark":               ["asm/cmark.c"],
+    "cmark_dccm":          ["asm/cmark.c"],
+    "irq":                 ["tests/irq/irq.c", "tests/irq/crt0.s"],
+    "ecc":                 ["tests/ecc/ecc.c", "tests/ecc/crt0.s"],
+    "illegal_instruction": ["asm/illegal_instruction.s", "asm/common.s"],
+    "pmp":                 ["tests/pmp/main.c", "tests/pmp/pmp.c"],
+}
+
 _uvm_lock = threading.Lock()
 
 
@@ -134,6 +148,20 @@ def veer_uvm_files():
     """Original (unedited) testbench files, so the page can load and reset them."""
     src = UVM_PRISTINE if UVM_PRISTINE.is_dir() else UVM_HDL
     return {p.name: p.read_text() for p in sorted(src.glob("*.sv"))}
+
+
+@router.get("/program-source")
+def veer_program_source(test: str = "hello_world"):
+    """Read-only source of a bundled CPU program (only names in CPU_SOURCES)."""
+    if test not in CPU_SOURCES:
+        return {"ok": False, "files": [], "error": f"Unknown program '{test}'."}
+    base = VEER_ROOT / "testbench"
+    files = []
+    for rel in CPU_SOURCES[test]:
+        p = base / rel
+        if p.is_file():
+            files.append({"name": rel, "content": p.read_text(errors="replace")[:MAX_FILE_BYTES]})
+    return {"ok": bool(files), "files": files}
 
 
 # ── CPU run ───────────────────────────────────────────────────────────────────

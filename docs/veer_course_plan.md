@@ -29,6 +29,8 @@ After the full course a learner can:
 
 ## 2. Prerequisites
 
+Full reference: **`docs/sv_essentials_for_veer.md`**.
+
 Stated on the lab page, before Chapter 0:
 
 | Needed | Where to get it |
@@ -193,6 +195,15 @@ All new pages and endpoints stay separate from the frozen lesson GUI.
 ## 8. Verified so far
 
 - Foundation track `vf1`–`vf6` (20 lessons) live and browser-verified, 2026-10-23.
+- **Part A started:** `o1` The big picture (4 lessons) and `o2` Specs (4 lessons)
+  built and browser-verified, 2026-10-23. Theory lessons complete through a
+  check-your-understanding quiz. Every RTL/spec excerpt is quoted from the real
+  files (e.g. the `mcause` selection in `el2_dec_tlu_ctl.sv` line 1451, the NMI
+  table in the VeeR manual's memory-map chapter).
+- **Platform:** quiz completion for theory lessons, kitchen callout style, and the
+  **Program source** view (`GET /veer/program-source`) are live.
+- **Prerequisite reference:** `docs/sv_essentials_for_veer.md` — the SystemVerilog
+  that VeeR's RTL and testbenches actually use, measured on the code.
 - **Design runner feasibility:** real `rvecc_encode` + `rvecc_decode` from
   `lib/beh_lib.sv` with a plain SV testbench, Verilator 5.052, build in 4 s:
 
