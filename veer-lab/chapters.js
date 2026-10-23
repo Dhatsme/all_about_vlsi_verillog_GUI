@@ -7,6 +7,444 @@
 // in CPU_TESTS in veer_lab.py.
 // ─────────────────────────────────────────────────────────────────────────────
 window.VEER_CHAPTERS = [
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PART A — ORIENTATION   (spec: docs/veer_course_plan.md, section 5)
+  // Theory lessons: no lab run; a check-your-understanding quiz completes them.
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'o1',
+    track: 'Orientation',
+    title: 'o1 — The big picture',
+    lessons: [
+      // ── L1 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o1l1',
+        title: 'L1 — What is in this lab',
+        level: 'G1',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>Picture a restaurant kitchen. Someone drew the <strong>blueprint</strong> of the kitchen. A crew
+<strong>built</strong> it. Owners write <strong>recipes</strong> for the chef. And an inspector checks that the
+food that comes out is right. This whole course uses that kitchen to explain a real processor.</p></div>
+<h2>Four things make up a chip project</h2>
+<table class="truth-table">
+  <tr><th>Piece</th><th>Kitchen</th><th>In this lab</th></tr>
+  <tr><td>Specification</td><td>The rules the kitchen must follow</td><td>RISC-V spec + the VeeR manual</td></tr>
+  <tr><td>Design (RTL)</td><td>The blueprint</td><td>VeeR EL2, written in SystemVerilog</td></tr>
+  <tr><td>Tests</td><td>Recipes that exercise the kitchen</td><td>Programs in C and assembly</td></tr>
+  <tr><td>Testbench + tools</td><td>The inspector and the construction crew</td><td>SystemVerilog testbenches, Verilator, compilers</td></tr>
+</table>
+<p>The <strong>design</strong> describes hardware: wires, logic gates and flip-flops, written as code. You cannot
+run a blueprint, so a tool called <strong>Verilator</strong> turns the design into a program that behaves
+exactly like the chip, cycle by cycle — a <strong>simulation</strong>.</p>
+<p>A <strong>test</strong> gives that simulated chip something to do. A <strong>testbench</strong> is the code
+around the chip that feeds it, watches it, and decides whether it behaved correctly.</p>
+<p>Everything here is real: VeeR EL2 is an open-source RISC-V processor core from Western Digital, now
+maintained by CHIPS Alliance, used as the basis for real silicon.</p>
+<p><strong>Ready?</strong> Read the table again, then answer the question below.</p>`,
+        tasks: [
+          'Match each of the four pieces to its kitchen equivalent',
+          'Say in one sentence why a design must be simulated before it can be tested',
+        ],
+        hint:
+`Specification  = the rules           (RISC-V spec, VeeR manual)
+Design (RTL)   = the blueprint       (VeeR EL2 in SystemVerilog)
+Tests          = the recipes         (C / assembly programs)
+Testbench      = the inspector       (SystemVerilog code around the chip)
+Tools          = construction crew   (Verilator, compilers)
+
+A design is a description of hardware, not a program,
+so a simulator must turn it into something that can run.`,
+        quiz: {
+          q: 'In the kitchen picture, what is the VeeR SystemVerilog RTL?',
+          options: ['The recipe', 'The blueprint of the kitchen', 'The inspector', 'The chef’s logbook'],
+          answer: 1,
+          why: 'RTL describes how the hardware is built, like a blueprint. Recipes are the test programs; the inspector is the testbench.',
+        },
+      },
+
+      // ── L2 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o1l2',
+        title: 'L2 — Where the design lives',
+        level: 'G1',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>A big kitchen's blueprint is not one sheet. There is a sheet for order intake, one for the prep line,
+one for the stoves, one for the storeroom — plus a list of every sheet the builders need.</p></div>
+<h2>The VeeR design: ~30,550 lines of SystemVerilog</h2>
+<p>The design lives in the <code>design/</code> folder of the
+<a href="https://github.com/chipsalliance/Cores-VeeR-EL2/tree/main/design" target="_blank" rel="noopener">VeeR EL2 repository</a>.
+Each folder is one part of the processor:</p>
+<table class="truth-table">
+  <tr><th>Folder</th><th>Job</th><th>Kitchen</th><th>Lines</th></tr>
+  <tr><td><code>ifu</code></td><td>Instruction fetch: read the next instruction</td><td>Order intake</td><td>6,153</td></tr>
+  <tr><td><code>dec</code></td><td>Decode, registers, traps and interrupts</td><td>The head chef reading tickets</td><td>6,106</td></tr>
+  <tr><td><code>exu</code></td><td>Execute: ALU, multiply, divide</td><td>The stoves</td><td>3,512</td></tr>
+  <tr><td><code>lsu</code></td><td>Load/store: read and write memory</td><td>Runners to the counter and storeroom</td><td>3,955</td></tr>
+  <tr><td><code>lib</code>, <code>include</code></td><td>Shared building blocks: flip-flops, ECC</td><td>Standard equipment</td><td>3,750</td></tr>
+  <tr><td><code>dbg</code>, <code>dmi</code></td><td>Debug access</td><td>The manager's office</td><td>1,247</td></tr>
+  <tr><td>top level (<code>el2_veer.sv</code>, <code>el2_pmp.sv</code>, …)</td><td>Wiring the units together; memory protection</td><td>The floor plan</td><td>5,831</td></tr>
+</table>
+<p>The top of the design is the module <code>el2_veer_wrapper</code>, which connects the core to its memories.</p>
+<h3>Which files are actually built?</h3>
+<p>A plain text file, <code>testbench/flist</code>, lists every file the simulator compiles: <strong>51 design
+files</strong> plus include folders and settings. It is the builders' list of blueprint sheets.</p>
+<p>The design is written in <strong>SystemVerilog</strong>, the same language as the testbenches — but only the
+part of it that describes real hardware (no delays, no printing).</p>
+<p><strong>Ready?</strong> Open the design folder on GitHub (link above), look around, and answer below.</p>`,
+        tasks: [
+          'Open the VeeR design folder on GitHub and find the lsu folder',
+          'Find el2_lsu_dccm_mem.sv inside lsu — you will verify it in chapter vf4',
+          'Which folder holds the logic that decides what happens on a trap?',
+        ],
+        hint:
+`lsu/el2_lsu_dccm_mem.sv is the DCCM (data memory) block.
+Traps and interrupts are handled in dec/ (the trap unit is
+dec/el2_dec_tlu_ctl.sv — you will read part of it in chapter o2).
+testbench/flist lists the 51 design files the simulator builds.`,
+        quiz: {
+          q: 'A load instruction reads a value from memory. Which design folder handles that?',
+          options: ['ifu', 'exu', 'lsu', 'dbg'],
+          answer: 2,
+          why: 'lsu is the load/store unit — the runners who carry ingredients between the counter, the storeroom and the stoves.',
+        },
+      },
+
+      // ── L3 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o1l3',
+        title: 'L3 — How a C or assembly test reaches the chip',
+        level: 'G1',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>The owner writes a recipe in plain language (C) or in shorthand (assembly). The chef only understands
+their own code words, so a translator rewrites the recipe, and it is pinned to the board before the kitchen opens.</p></div>
+<h2>Why the tests are programs</h2>
+<p>A processor's job is to run software, so the most direct test of a processor is software. Two languages are used:</p>
+<ul>
+  <li><strong>Assembly</strong> (<code>hello_world.s</code>) when the test needs exact control of every instruction —
+      for example placing an illegal instruction on purpose.</li>
+  <li><strong>C</strong> (<code>irq.c</code>, Dhrystone) for longer programs that would be tedious to write instruction by instruction.</li>
+</ul>
+<h3>From source to simulated memory</h3>
+<pre class="code-block">hello_world.s ── riscv64-unknown-elf-gcc ──► hello_world.exe  (machine code)
+               ── objcopy -O verilog     ──► program.hex      (text: address + bytes)
+               ── $readmemh in tb_top.sv  ──► the testbench's memory model</pre>
+<p>The start of the real <code>program.hex</code>:</p>
+<pre class="code-block">@80000000
+73 10 20 B0 73 10 20 B8 97 00 00 00 ...</pre>
+<p><code>@80000000</code> is the address. The testbench loads the file at time zero:</p>
+<pre class="code-block">$readmemh("program.hex",  lmem.mem);   // data memory model
+$readmemh("program.hex",  imem.mem);   // instruction memory model</pre>
+<p>On reset, VeeR starts fetching at <strong>0x80000000</strong>. Its first instruction is the bytes
+<code>73 10 20 B0</code>, which read backwards (RISC-V stores the lowest byte first) are <code>b0201073</code> —
+exactly instruction #1 in the trace you will meet in vf2.</p>
+<p><strong>Ready?</strong> Answer the question below.</p>`,
+        tasks: [
+          'Follow hello_world.s through gcc, objcopy and $readmemh to the memory model',
+          'Explain why the bytes 73 10 20 B0 become the instruction b0201073',
+        ],
+        hint:
+`gcc       turns source into RISC-V machine code (an .exe / ELF file)
+objcopy   writes it as text: "@address" lines followed by bytes
+$readmemh (SystemVerilog) reads that text into the memory arrays
+
+Little-endian: the lowest byte is stored first.
+Bytes 73 10 20 B0  ->  word 0xB0201073  ->  csrrw zero, minstret, zero`,
+        quiz: {
+          q: 'Which SystemVerilog task loads the compiled test into the simulated memory?',
+          options: ['$display', '$readmemh', '$finish', '$fwrite'],
+          answer: 1,
+          why: '$readmemh ("read memory, hex") fills a memory array from a hex text file. tb_top.sv calls it for both memory models at time zero.',
+        },
+      },
+
+      // ── L4 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o1l4',
+        title: 'L4 — The tools behind the Run button',
+        level: 'G1',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>The translator rewrites recipes. A construction crew turns the blueprint into a working kitchen.
+A foreman with a checklist decides who does what, in which order.</p></div>
+<h2>Four tools, one job each</h2>
+<table class="truth-table">
+  <tr><th>Tool</th><th>Kitchen</th><th>What it does here</th></tr>
+  <tr><td>RISC-V GCC (<code>riscv64-unknown-elf-gcc</code>)</td><td>Translator</td><td>Compiles C/assembly tests to machine code</td></tr>
+  <tr><td>Verilator 5.052</td><td>Construction crew</td><td>Turns the SystemVerilog design + testbench into C++</td></tr>
+  <tr><td>g++</td><td>Crew's power tools</td><td>Compiles that C++ into one executable: the simulator</td></tr>
+  <tr><td>make</td><td>Foreman</td><td>Runs the steps in the right order (<code>tools/Makefile</code>)</td></tr>
+</table>
+<h3>What Verilator really does</h3>
+<pre class="code-block">51 design files + tb_top.sv ── verilator --cc ──► C++ model (obj_dir/)
+C++ model + test_tb_top.cpp  ── g++         ──► obj_dir/Vtb_top  (the simulator)
+./Vtb_top  reads program.hex, runs, writes the logs you see</pre>
+<p><code>test_tb_top.cpp</code> is a small C++ <code>main()</code> that calls <code>tb-&gt;eval()</code> in a loop: every
+call moves the simulated chip forward. Building <code>Vtb_top</code> takes about a minute, so this server builds it
+<strong>once</strong>; each Run only loads a new <code>program.hex</code>.</p>
+<h3>One honest detail</h3>
+<p>This server has no RISC-V GCC installed. The VeeR repository ships the programs already compiled
+(<code>testbench/hex/</code>), and the lab uses those. The source is still there to read: in the
+<strong>Run the CPU</strong> tab, open the <strong>Program source</strong> view.</p>
+<p><strong>Ready?</strong> Select <code>hello_world</code> in the lab below, open <strong>Program source</strong>, then answer the question.</p>`,
+        tasks: [
+          'In the Run the CPU tab, select hello_world and open the Program source view',
+          'Find the loop that stores each character to STDOUT',
+          'Say which tool turns SystemVerilog into C++, and which turns C++ into the simulator',
+        ],
+        hint:
+`Verilator: SystemVerilog -> C++
+g++:       C++ -> executable (obj_dir/Vtb_top)
+make:      runs the steps
+RISC-V GCC: compiles the test programs (prebuilt .hex here)
+
+In hello_world.s the loop is:
+  loop: lb x5, 0(x4); sb x5, 0(x3); addi x4, x4, 1; bnez x5, loop`,
+        quiz: {
+          q: 'Why does pressing Run on a new program take well under a second, when building the simulator takes about a minute?',
+          options: [
+            'Verilator rebuilds only the changed design files',
+            'The simulator executable is built once; a run only loads a new program.hex',
+            'The program runs on the server’s own CPU instead of the simulator',
+            'Results are cached from earlier runs',
+          ],
+          answer: 1,
+          why: 'The hardware (the kitchen) does not change between programs. Only the recipe changes, and loading a new program.hex costs almost nothing.',
+        },
+      },
+    ],
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'o2',
+    track: 'Orientation',
+    title: 'o2 — Specs: what the design must do',
+    lessons: [
+      // ── L1 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o2l1',
+        title: 'L1 — Six kinds of specs',
+        level: 'G1',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>Head office sets rules for every kitchen in the chain. This kitchen has its own operating manual. The
+delivery company has rules for the loading dock. Each station has a job sheet, the shelves have labels, and the
+inspector carries a checklist. Each document answers a different question.</p></div>
+<h2>A spec answers one kind of question</h2>
+<table class="truth-table">
+  <tr><th>Spec</th><th>Kitchen</th><th>Example here</th><th>Answers</th></tr>
+  <tr><td>ISA spec</td><td>Head-office rules</td><td>RISC-V specifications</td><td>What must every RISC-V core do? What does <code>mcause</code> = 2 mean?</td></tr>
+  <tr><td>Micro-architecture spec</td><td>This kitchen's manual</td><td>VeeR EL2 Programmer's Reference Manual</td><td>How does <em>this</em> core do it? DCCM size, ECC, mailbox</td></tr>
+  <tr><td>Interface / protocol spec</td><td>Loading-dock rules</td><td>AXI4, AHB-Lite</td><td>How does the core talk to memory over a bus?</td></tr>
+  <tr><td>Block design spec</td><td>Station job sheet</td><td>Per-unit sections of the manual</td><td>What exactly must one module do?</td></tr>
+  <tr><td>Register spec</td><td>Shelf labels</td><td>CSR maps</td><td>Which address, which bits, what meaning?</td></tr>
+  <tr><td>Verification plan</td><td>Inspector's checklist</td><td>Testplan</td><td>What must be tested, and how do we know we are done?</td></tr>
+</table>
+<h3>Why the order matters</h3>
+<p>Specs form layers. The ISA spec sometimes leaves a choice open; the micro-architecture spec makes the choice; the
+RTL implements it; a test checks it. When a test fails, the first question is always <em>which spec says this is
+wrong?</em> — not "what does the code do?"</p>
+<p>From now on, many lessons follow one thread: <strong>the spec says → the RTL does → the test checks.</strong></p>
+<p><strong>Ready?</strong> Answer the question below.</p>`,
+        tasks: [
+          'For each spec type, say which kitchen document it matches',
+          'Pick one question you have about VeeR and decide which spec would answer it',
+        ],
+        hint:
+`"What is mcause 2?"            -> ISA spec (RISC-V)
+"How big is VeeR's DCCM?"       -> micro-architecture spec (VeeR manual)
+"How does a bus read work?"     -> interface spec (AXI4 / AHB-Lite)
+"Which bits of mdccmect count?" -> register spec
+"Have we tested ECC enough?"    -> verification plan`,
+        quiz: {
+          q: 'You want to know how many bytes VeeR EL2’s data memory (DCCM) can be configured to. Which spec answers that?',
+          options: ['The RISC-V ISA spec', 'The VeeR EL2 Programmer’s Reference Manual', 'The AXI4 protocol spec', 'The verification plan'],
+          answer: 1,
+          why: 'DCCM is a VeeR feature, not part of the RISC-V standard. The VeeR manual lists the sizes it can be built with (4 KB up to 512 KB).',
+        },
+      },
+
+      // ── L2 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o2l2',
+        title: 'L2 — The ISA spec: trap causes',
+        level: 'G2',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>Head office says: when a cook stops work, they must write the reason on the board using a standard code —
+"2" for a recipe step nobody can read, "7" for the kitchen timer. Every kitchen in the chain uses the same codes.</p></div>
+<h2>The spec says</h2>
+<p>The RISC-V Privileged specification defines the <code>mcause</code> register: when a trap happens, the core writes
+a code saying why. Excerpt of its table <em>(RISC-V Privileged Architecture, CC BY 4.0)</em>:</p>
+<table class="truth-table">
+  <tr><th>Interrupt</th><th>Code</th><th>Meaning</th></tr>
+  <tr><td>0</td><td>1</td><td>Instruction access fault</td></tr>
+  <tr><td>0</td><td>2</td><td>Illegal instruction</td></tr>
+  <tr><td>0</td><td>5</td><td>Load access fault</td></tr>
+  <tr><td>0</td><td>7</td><td>Store/AMO access fault</td></tr>
+  <tr><td>1</td><td>3</td><td>Machine software interrupt</td></tr>
+  <tr><td>1</td><td>7</td><td>Machine timer interrupt</td></tr>
+  <tr><td>1</td><td>11</td><td>Machine external interrupt</td></tr>
+</table>
+<p>"Interrupt = 1" is bit 31 of <code>mcause</code>, so a timer interrupt reads <code>0x80000007</code>.</p>
+<h2>The RTL does</h2>
+<p>In VeeR's trap unit, <code>design/dec/el2_dec_tlu_ctl.sv</code>, line 1451, that table is written as logic:</p>
+<pre class="code-block">assign exc_cause_r[4:0] = ( ({5{take_timer_int}}  &amp; 5'h07) |
+                            ({5{take_soft_int}}   &amp; 5'h03) |
+                            ({5{illegal_r}}       &amp; 5'h02) |
+                            ({5{inst_acc_r}}      &amp; 5'h01) | ...</pre>
+<p>Each line is "if this condition, use this code". <code>{5{illegal_r}}</code> copies one bit five times, so the
+AND passes <code>5'h02</code> only when the instruction was illegal. This AND-OR style is how VeeR writes most logic.</p>
+<h2>The test checks</h2>
+<p>The <code>illegal_instruction</code> test (chapter vf3) loads <code>x4 = 2</code>, runs an illegal instruction,
+and its trap handler fails the test unless <code>mcause</code> equals <code>x4</code>.</p>
+<p><strong>Ready?</strong> Answer the question below.</p>`,
+        tasks: [
+          'Find code 2 in the spec table, in the RTL excerpt, and in the test description',
+          'Work out the full 32-bit mcause value for a machine software interrupt',
+        ],
+        hint:
+`Spec:  illegal instruction = code 2, interrupt bit 0
+RTL:   ({5{illegal_r}} & 5'h02)
+Test:  li x4, 0x2  ... handler: bne mcause, x4, fail
+
+Machine software interrupt: interrupt bit 1, code 3
+-> 0x80000000 | 3 = 0x80000003`,
+        quiz: {
+          q: 'A trap is reported with mcause = 0x80000007. What happened?',
+          options: ['An illegal instruction', 'A store access fault', 'A machine timer interrupt', 'A load access fault'],
+          answer: 2,
+          why: 'Bit 31 set means interrupt; code 7 with the interrupt bit is the machine timer. Without bit 31, code 7 would be a store access fault.',
+        },
+      },
+
+      // ── L3 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o2l3',
+        title: 'L3 — The VeeR manual: choices the ISA leaves open',
+        level: 'G2',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>Head office says "kitchens may have an emergency alarm" but not what code to write when it rings. This kitchen's
+own manual fills the gap: "alarm from the wall button: write 0".</p></div>
+<h2>The ISA leaves it open; the manual decides</h2>
+<p>The RISC-V spec does not fix the <code>mcause</code> value for a <strong>non-maskable interrupt (NMI)</strong> — it
+leaves it to each implementation. The VeeR EL2 manual defines it (Programmer's Reference Manual, memory map chapter,
+Apache-2.0):</p>
+<table class="truth-table">
+  <tr><th>mcause</th><th>VeeR NMI cause</th></tr>
+  <tr><td>0x0000_0000</td><td>NMI pin assertion (<code>nmi_int</code> input)</td></tr>
+  <tr><td>0xF000_0000</td><td>D-bus store error</td></tr>
+  <tr><td>0xF000_0001</td><td>D-bus non-blocking load error</td></tr>
+</table>
+<p>The RTL implements the pin case at the end of the same assignment you saw in L2:</p>
+<pre class="code-block">  ... | ({5{lsu_exc_acc_r &amp; lsu_exc_st_r}} &amp; 5'h07)
+  ) &amp; ~{5{take_nmi}};      // an NMI forces the cause code to 0</pre>
+<p>And the <code>irq</code> test (chapter vf3) checks it: the NMI traps with <code>mcause=0x0</code>.</p>
+<h3>A second example: ECC</h3>
+<p>The manual also specifies VeeR's memory protection: <em>"The design can use the (39, 32) code - 32 data bits and 7
+parity bits"</em>, using a Hamming <strong>SECDED</strong> code (single-bit error correction, double-bit error detection).
+The RTL: <code>rvecc_encode</code> produces exactly 7 check bits (<code>output [6:0] ecc_out</code>). The UVM
+testbench in vf4 drives 39-bit words for the same reason.</p>
+<p><strong>Ready?</strong> Answer the question below.</p>`,
+        tasks: [
+          'Explain why the NMI mcause value comes from the VeeR manual, not the RISC-V spec',
+          'Find the number 39 in three places: the manual, the RTL, the UVM testbench',
+        ],
+        hint:
+`NMI cause:  RISC-V leaves it implementation-defined
+            -> VeeR manual: pin NMI = 0x0000_0000
+            -> RTL: ... & ~{5{take_nmi}}  (forces 0)
+            -> irq test sees mcause=0x0 for the NMI
+
+ECC: manual (39,32) code = 32 data + 7 check bits
+     RTL rvecc_encode: output [6:0] ecc_out
+     UVM item: wdata is 39 bits (pt.DCCM_FDATA_WIDTH)`,
+        quiz: {
+          q: 'Another RISC-V core reports its pin NMI with a different mcause value than VeeR. Is that core breaking the RISC-V spec?',
+          options: [
+            'Yes — every RISC-V core must use 0 for NMIs',
+            'No — the RISC-V spec leaves the NMI cause to each implementation',
+            'Yes — NMIs must use 0xF000_0000',
+            'No — RISC-V cores do not have NMIs',
+          ],
+          answer: 1,
+          why: 'The ISA spec leaves the value open. Each core’s own manual defines it, which is why you check the micro-architecture spec, not only the ISA spec.',
+        },
+      },
+
+      // ── L4 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'o2l4',
+        title: 'L4 — From spec to testplan',
+        level: 'G2',
+        tab: null,
+        rebuild: 'none',
+        theory: `
+<div class="kitchen"><span class="kitchen-tag">The kitchen</span>
+<p>The inspector does not taste food at random. They turn each rule in the manual into a checklist line: what to
+check, how to check it, and what counts as a pass.</p></div>
+<h2>A testplan turns requirements into checks</h2>
+<p>A <strong>verification plan</strong> (testplan) lists every requirement from the specs and says how it will be
+verified. Take one requirement from the VeeR manual:</p>
+<p><em>"The count field of the mdccmect register is incremented, if a correctable ECC error is detected on either a
+retired load/store instruction or a DMA read access to the DCCM."</em></p>
+<p>As testplan rows:</p>
+<table class="truth-table">
+  <tr><th>ID</th><th>Requirement</th><th>Stimulus</th><th>Check</th><th>Test</th></tr>
+  <tr><td>ECC-1</td><td>Single-bit DCCM error is corrected</td><td>Inject a 1-bit error on a write, then load</td><td>Loaded value equals the written value</td><td>ecc</td></tr>
+  <tr><td>ECC-2</td><td>Correctable error is counted</td><td>Same as ECC-1</td><td><code>mdccmect</code> count is not 0</td><td>ecc</td></tr>
+  <tr><td>ECC-3</td><td>Double-bit error is detected, not used</td><td>Inject a 2-bit error, then load</td><td>Trap with the expected <code>mcause</code></td><td>ecc</td></tr>
+  <tr><td>ECC-4</td><td>Count also increments on a DMA read</td><td>Inject, then read by DMA</td><td><code>mdccmect</code> increments</td><td>— <em>(gap)</em></td></tr>
+</table>
+<p>The <code>ecc</code> test you will run in vf3 covers ECC-1 to ECC-3: it reads back the corrected value and fails
+the test if <code>mdccmect</code> did not register the error. Nothing in this lab exercises ECC-4. Writing the plan
+is how you <strong>find that gap</strong> — before a customer does.</p>
+<p>In the next chapter you will open the design itself and follow one instruction through the core.</p>
+<p><strong>Ready?</strong> Answer the question below.</p>`,
+        tasks: [
+          'Read the four testplan rows and match each to a phrase in the manual sentence',
+          'Explain why ECC-4 is a gap, and what a test for it would need',
+        ],
+        hint:
+`The manual sentence has two triggers:
+  "a retired load/store instruction"  -> ECC-1, ECC-2 (covered by the ecc test)
+  "or a DMA read access to the DCCM"   -> ECC-4 (no test drives DMA here)
+
+A test for ECC-4 needs DMA traffic into the DCCM plus error injection,
+then a check that mdccmect increased.`,
+        quiz: {
+          q: 'What is the main job of a verification plan?',
+          options: [
+            'To describe how the RTL is written',
+            'To list each requirement and how it will be checked, so gaps become visible',
+            'To store the test results',
+            'To configure the simulator',
+          ],
+          answer: 1,
+          why: 'A testplan maps every requirement to a stimulus and a check. Requirements with no test, like ECC-4, stand out immediately.',
+        },
+      },
+    ],
+  },
+
   {
     id: 'vf1',
     track: 'Foundation',
