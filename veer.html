@@ -574,6 +574,10 @@
       setCheck('<span class="ok">✓ Lesson complete.</span>' +
         (nxt ? ` Next: <strong>${esc(nxt.title)}</strong>.` : ' You finished every lesson here.'));
       progress();
+    } else if (isDone(cur.id)) {
+      // Already completed earlier (e.g. this was a clean-up run after Reset all).
+      setCheck('<span class="ok">✓ Lesson complete.</span> This latest run does not show the lesson\'s ' +
+        'result lines — that is expected if you were resetting or experimenting.');
     } else {
       setCheck('<span class="no">Not yet.</span> Still missing from the output: ' +
         missing.map(e => `<code>${esc(e)}</code>`).join(', '));
