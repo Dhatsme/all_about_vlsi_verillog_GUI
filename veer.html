@@ -86,7 +86,46 @@
   .counts { font-family: var(--mono); font-size: 0.76rem; color: var(--dim); }
   .counts b { color: var(--text); }
 
+  /* ── course panel ───────────────────────────────────────────────────────── */
+  .course { margin-bottom: 22px; }
+  .course-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .course-bar select { min-width: 240px; }
+  .lesson-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill { background: var(--panel); border: 1px solid var(--border2); color: var(--dim); border-radius: 999px;
+          font-family: var(--mono); font-size: 0.74rem; padding: 5px 11px; cursor: pointer; }
+  .pill:hover { color: var(--text); }
+  .pill.active { border-color: var(--accent); color: var(--accent); }
+  .pill.done::after { content: ' ✓'; color: var(--success); }
+  .course-progress { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+  .btn.small { padding: 6px 11px; font-size: 0.8rem; margin-left: auto; }
+  .lesson-card { padding: 20px 22px; }
+  .lesson-card[hidden] { display: none; }
+  .lesson-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .badge { font-family: var(--mono); font-size: 0.68rem; padding: 3px 8px; border-radius: 4px;
+           background: var(--panel); border: 1px solid var(--border); color: var(--dim); }
+  .badge.track { color: var(--accent); border-color: rgba(0,212,170,.35); }
+  .lesson-theory.theory-content { padding: 0; overflow: visible; }
+  .lesson-theory.theory-content p, .lesson-theory.theory-content li { font-size: 0.9rem; }
+  .lesson-sub { font-family: var(--head); font-size: 0.9rem; color: var(--accent2); margin: 16px 0 8px; }
+  .lesson-tasks { list-style: none; padding: 0; margin: 0 0 12px; }
+  .lesson-tasks li { display: flex; gap: 9px; align-items: flex-start; color: var(--dim); font-size: 0.88rem;
+                     line-height: 1.5; padding: 4px 0; }
+  .lesson-tasks input { margin-top: 4px; accent-color: var(--accent); flex-shrink: 0; }
+  .lesson-tasks li.ticked span { color: var(--muted); text-decoration: line-through; }
+  .lesson-hint summary { cursor: pointer; color: var(--accent3); font-size: 0.88rem; margin: 6px 0; }
+  .lesson-hint pre { background: var(--card); border: 1px solid var(--border); border-radius: 6px; padding: 12px;
+                     font-family: var(--mono); font-size: 0.76rem; line-height: 1.55; color: var(--text);
+                     white-space: pre-wrap; word-break: break-word; margin: 6px 0 0; }
+  .lesson-check { margin: 14px 0 4px; font-size: 0.86rem; color: var(--dim); }
+  .lesson-check .ok  { color: var(--success); font-weight: 600; }
+  .lesson-check .no  { color: var(--accent3); }
+  .lesson-check code { font-family: var(--mono); font-size: 0.8rem; color: var(--text); }
+  .lab-lesson-nav { display: flex; justify-content: space-between; gap: 10px; margin-top: 14px; }
+
   @media (max-width: 760px) {
+    .course-bar select { min-width: 0; width: 100%; }
+    .btn.small { margin-left: 0; }
+    .lesson-card { padding: 16px; }
     .landing-nav { padding: 0 16px; }
     .lab-title { font-size: 1.45rem; }
     .editor-grid { grid-template-columns: 1fr; }
@@ -114,6 +153,31 @@
     change it, and rerun it.
   </p>
   <div class="status" id="status"><span class="dot"></span>Checking server…</div>
+
+  <!-- ── Course: chapter + lesson ──────────────────────────────────────────── -->
+  <section class="course" id="course" hidden>
+    <div class="course-bar">
+      <select id="chapter-select" aria-label="Chapter"></select>
+      <div class="lesson-pills" id="lesson-pills" role="tablist" aria-label="Lessons"></div>
+      <span class="course-progress" id="course-progress"></span>
+      <button class="btn ghost small" id="lesson-toggle" aria-expanded="true">Hide lesson</button>
+    </div>
+    <article class="card lesson-card" id="lesson-card">
+      <div class="lesson-meta" id="lesson-meta"></div>
+      <div class="theory-content lesson-theory" id="lesson-theory"></div>
+      <h3 class="lesson-sub">Your tasks</h3>
+      <ul class="lesson-tasks" id="lesson-tasks"></ul>
+      <details class="lesson-hint" id="lesson-hint-wrap">
+        <summary>💡 Show hint</summary>
+        <pre id="lesson-hint"></pre>
+      </details>
+      <div class="lesson-check" id="lesson-check"></div>
+      <div class="lab-lesson-nav">
+        <button class="btn ghost" id="lesson-prev">← Previous</button>
+        <button class="btn ghost" id="lesson-next">Next →</button>
+      </div>
+    </article>
+  </section>
 
   <div class="tabs" role="tablist">
     <button class="tab active" data-pane="cpu" role="tab"><small>01</small>Run the CPU</button>
@@ -230,6 +294,7 @@
       ` &nbsp; · &nbsp;${esc(d.verilator)}`;
     $('cpu-test').innerHTML = d.cpu_tests.map(t => `<option value="${esc(t.name)}">${esc(t.name)}</option>`).join('');
     showAbout();
+    document.dispatchEvent(new CustomEvent('veer:ready'));
     if (!d.cpu_ready || !d.cpu_tests.length) notReady('cpu');
     if (!d.uvm_ready) notReady('uvm');
   }).catch(() => {
@@ -283,6 +348,10 @@
       verdict($('cpu-verdict'), cpuResult.success ? 'pass' : 'fail',
               `${cpuResult.success ? 'TEST_PASSED' : 'FAILED'}${cpuResult.seconds != null ? ' · ' + cpuResult.seconds + ' s' : ''}`);
       showCpu();
+      // Lets the course panel check the run against the current lesson.
+      document.dispatchEvent(new CustomEvent('veer:result', { detail: {
+        tab: 'cpu', program: $('cpu-test').value,
+        text: [cpuResult.output, cpuResult.console, cpuResult.exec_log].join('\n') } }));
     } catch (e) {
       clearInterval(t); verdict($('cpu-verdict'), 'fail', 'request failed');
       $('cpu-out').textContent = String(e);
@@ -383,11 +452,139 @@
         ? `UVM_ERROR <b>${c.error ?? '?'}</b> · UVM_FATAL <b>${c.fatal ?? '?'}</b> · UVM_WARNING <b>${c.warning ?? '?'}</b>`
         : '';
       $('uvm-out').innerHTML = paint(d.output || '');
+      document.dispatchEvent(new CustomEvent('veer:result', { detail: {
+        tab: 'uvm', text: d.output || '' } }));
     } catch (e) {
       clearInterval(t); verdict($('uvm-verdict'), 'fail', 'request failed');
       $('uvm-out').textContent = String(e);
     } finally { btn.disabled = false; }
   };
+})();
+</script>
+
+<!-- ── Course panel: chapters + lessons from veer-lab/chapters.js ─────────── -->
+<script src="veer-lab/chapters.js"></script>
+<script>
+(() => {
+  const CH = window.VEER_CHAPTERS || [];
+  if (!CH.length) return;                       // no course data: page works as a plain lab
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const store = {
+    get(k) { try { return localStorage.getItem('veer:' + k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem('veer:' + k, v); } catch {} },
+  };
+  const lessons = CH.flatMap(c => c.lessons.map(l => ({ ...l, chapter: c })));
+  const isDone = id => store.get('done:' + id) === '1';
+  const REBUILD = { none: 'no rebuild', fast: 'rebuild ~30 s', slow: 'rebuild several min' };
+  const LEVEL = { G1: 'guided', G2: 'find it', G3: 'predict, then check' };
+
+  let cur = lessons.find(l => l.id === store.get('lesson')) || lessons.find(l => !isDone(l.id)) || lessons[0];
+
+  $('course').hidden = false;
+  $('chapter-select').innerHTML = CH.map(c =>
+    `<option value="${esc(c.id)}">${esc(c.title)}</option>`).join('');
+  $('chapter-select').onchange = () => {
+    const c = CH.find(x => x.id === $('chapter-select').value);
+    show(c.lessons.find(l => !isDone(l.id)) ? lessons.find(l => l.id === c.lessons.find(x => !isDone(x.id)).id)
+                                            : lessons.find(l => l.id === c.lessons[0].id));
+  };
+
+  function progress() {
+    const c = cur.chapter, n = c.lessons.filter(l => isDone(l.id)).length;
+    $('course-progress').textContent = `${n} / ${c.lessons.length} lessons done`;
+    $('lesson-pills').innerHTML = c.lessons.map((l, i) =>
+      `<button class="pill${l.id === cur.id ? ' active' : ''}${isDone(l.id) ? ' done' : ''}" data-id="${esc(l.id)}"` +
+      ` role="tab" aria-selected="${l.id === cur.id}" title="${esc(l.title)}">L${i + 1}</button>`).join('');
+    $('lesson-pills').querySelectorAll('.pill').forEach(b =>
+      b.onclick = () => show(lessons.find(l => l.id === b.dataset.id)));
+  }
+
+  function setCheck(html) { $('lesson-check').innerHTML = html; }
+  function needLine() {
+    return 'Run it to check this lesson. The run must show: ' +
+      cur.expected.map(e => `<code>${esc(e)}</code>`).join(', ');
+  }
+
+  // Put the lab in the state the lesson needs: tab, program, output view.
+  function applyLabState() {
+    const tab = document.querySelector(`.tab[data-pane="${cur.tab}"]`);
+    if (tab && !tab.classList.contains('active')) tab.click();
+    if (cur.tab === 'cpu' && cur.program) {
+      const sel = $('cpu-test');
+      if ([...sel.options].some(o => o.value === cur.program)) {
+        sel.value = cur.program; sel.dispatchEvent(new Event('change'));
+      }
+    }
+    if (cur.output_view) {
+      const b = document.querySelector(`#cpu-out-tabs .out-tab[data-out="${cur.output_view}"]`);
+      if (b) b.click();
+    }
+  }
+
+  function show(l) {
+    cur = l; store.set('lesson', l.id);
+    $('chapter-select').value = l.chapter.id;
+    const i = lessons.indexOf(l);
+    $('lesson-meta').innerHTML =
+      `<span class="badge track">${esc(l.chapter.track)}</span>` +
+      `<span class="badge">${esc(l.title)}</span>` +
+      `<span class="badge">${esc(LEVEL[l.level] || l.level)}</span>` +
+      `<span class="badge">${esc(REBUILD[l.rebuild] || l.rebuild)}</span>`;
+    $('lesson-theory').innerHTML = l.theory;            // trusted: our own lesson file
+    $('lesson-tasks').innerHTML = l.tasks.map((t, k) => {
+      const key = `task:${l.id}:${k}`, on = store.get(key) === '1';
+      return `<li class="${on ? 'ticked' : ''}"><input type="checkbox" data-key="${key}"${on ? ' checked' : ''}` +
+             ` id="${key}"><span><label for="${key}">${esc(t)}</label></span></li>`;
+    }).join('');
+    $('lesson-tasks').querySelectorAll('input').forEach(cb => cb.onchange = () => {
+      store.set(cb.dataset.key, cb.checked ? '1' : '0');
+      cb.closest('li').classList.toggle('ticked', cb.checked);
+    });
+    $('lesson-hint').textContent = l.hint || '';
+    $('lesson-hint-wrap').hidden = !l.hint;
+    $('lesson-hint-wrap').open = false;
+    setCheck(isDone(l.id) ? '<span class="ok">✓ Lesson complete.</span> Run again any time.' : needLine());
+    $('lesson-prev').disabled = i === 0;
+    $('lesson-next').disabled = i === lessons.length - 1;
+    progress();
+    applyLabState();
+  }
+
+  $('lesson-prev').onclick = () => show(lessons[Math.max(0, lessons.indexOf(cur) - 1)]);
+  $('lesson-next').onclick = () => show(lessons[Math.min(lessons.length - 1, lessons.indexOf(cur) + 1)]);
+  $('lesson-toggle').onclick = () => {
+    const hide = !$('lesson-card').hidden;
+    $('lesson-card').hidden = hide;
+    $('lesson-toggle').textContent = hide ? 'Show lesson' : 'Hide lesson';
+    $('lesson-toggle').setAttribute('aria-expanded', String(!hide));
+  };
+
+  // Check every run against the current lesson.
+  document.addEventListener('veer:result', ev => {
+    const d = ev.detail;
+    if (d.tab !== cur.tab) return;
+    if (cur.tab === 'cpu' && cur.program && d.program !== cur.program) {
+      setCheck(`<span class="no">That run was <code>${esc(d.program)}</code>.</span> ` +
+               `This lesson needs <code>${esc(cur.program)}</code>.`);
+      return;
+    }
+    const missing = cur.expected.filter(e => !d.text.includes(e));
+    if (!missing.length) {
+      store.set('done:' + cur.id, '1');
+      const nxt = lessons[lessons.indexOf(cur) + 1];
+      setCheck('<span class="ok">✓ Lesson complete.</span>' +
+        (nxt ? ` Next: <strong>${esc(nxt.title)}</strong>.` : ' You finished every lesson here.'));
+      progress();
+    } else {
+      setCheck('<span class="no">Not yet.</span> Still missing from the output: ' +
+        missing.map(e => `<code>${esc(e)}</code>`).join(', '));
+    }
+  });
+
+  // Program options arrive with /veer/info; re-apply the lesson's program then.
+  document.addEventListener('veer:ready', applyLabState);
+  show(cur);
 })();
 </script>
 </body>
