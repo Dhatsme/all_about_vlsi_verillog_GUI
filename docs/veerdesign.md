@@ -19,8 +19,8 @@ deploy rules) and `CLAUDE.md` (branch rules, voice and tone).
 | # | Chapter ID | Title | Lessons | Status |
 |---|---|---|---|---|
 | 1 | `vf1` | Lab tour and first run | L1 Meet VeeR EL2, L2 How a program talks to the testbench, L3 Same program, different memory | ✅ done |
-| 2 | `vf2` | Reading an instruction trace | L1 Trace anatomy, L2 Matching source to trace, L3 Instructions per cycle | ❌ **build this next** |
-| 3 | `vf3` | Tests as specifications | L1 What a directed test proves, L2 Interrupts (`irq`), L3 Errors on purpose (`ecc`, `illegal_instruction`), L4 Memory protection (`pmp`) | ❌ |
+| 2 | `vf2` | Reading an instruction trace | L1 Trace anatomy, L2 Matching source to trace, L3 Instructions per cycle | ✅ done |
+| 3 | `vf3` | Tests as specifications | L1 What a directed test proves, L2 Interrupts (`irq`), L3 Errors on purpose (`ecc`, `illegal_instruction`), L4 Memory protection (`pmp`) | ❌ **build this next** |
 | 4 | `vf4` | UVM tour | L1 Stimulus: item and sequence, L2 Drive and observe: driver and monitor, L3 Checking: scoreboard and test, L4 The report summary | ❌ |
 | 5 | `vf5` | Changing stimulus | L1 Predict, edit, check (loop count), L2 Verbosity and what you can see, L3 Breaking it on purpose (syntax errors) | ❌ |
 | 6 | `vf6` | Reading results critically | L1 Count the checks, L2 A pass that proves nothing, L3 What a real fix needs (bridge to Professional track) | ❌ |
@@ -122,7 +122,9 @@ Format: `cycle : #inst 0 pc opcode reg=value csr=value ; mnemonic`.
   `csr_305` = mtvec, `lui gp,0xd0580000` = STDOUT address).
 - L3: instructions per cycle = minstret / mcycle; compare `hello_world`,
   `hello_world_dccm`, `dhry` (343,115 instructions / ~355,033 cycles ≈ 0.97 IPC).
-Verify the 150-line limit is enough for L2 before writing.
+Verified: the first 150 trace lines cover setup and ~15 loop iterations. Counts are
+deterministic run to run: hello_world 330/726, hello_world_dccm 330/414,
+dhry 343115/355033, cmark_dccm 283001/299857 (minstret/mcycle).
 
 ## vf3 — Tests as specifications  (G2, rebuild: none)
 Programs: `irq`, `ecc`, `illegal_instruction`, `pmp`. Each lesson: what feature

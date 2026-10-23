@@ -170,4 +170,182 @@ than loads that travel over the bus to external memory.`,
       },
     ],
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'vf2',
+    track: 'Foundation',
+    title: 'vf2 — Reading an instruction trace',
+    lessons: [
+      // ── L1 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf2l1',
+        title: 'L1 — Trace anatomy',
+        level: 'G1',
+        tab: 'cpu',
+        program: 'hello_world',
+        rebuild: 'none',
+        output_view: 'exec_log',
+        theory: `
+<h2>One line per finished instruction</h2>
+<p>The <strong>Instruction trace</strong> (the file <code>exec.log</code>) is the most detailed record
+the testbench keeps. Every time the core <strong>retires</strong> an instruction — finishes it and makes
+its result permanent — the testbench writes one line. Verification engineers compare traces like this
+against a reference model to catch the exact instruction where the hardware went wrong.</p>
+<p>Here is line 9 of the <code>hello_world</code> trace:</p>
+<pre class="code-block">        62 :       #9 0 80000020 d05801b7  gp=d0580000                ; lui     gp,0xd0580000</pre>
+<h3>Column by column</h3>
+<table class="truth-table">
+  <tr><th>Field</th><th>In the example</th><th>Meaning</th></tr>
+  <tr><td>Cycle</td><td>62</td><td>Clock cycle when the instruction retired</td></tr>
+  <tr><td>#inst</td><td>#9</td><td>It is the 9th instruction to retire</td></tr>
+  <tr><td>0</td><td>0</td><td>Hardware thread number; VeeR EL2 has one, so always 0</td></tr>
+  <tr><td>pc</td><td>80000020</td><td>Address of the instruction in memory</td></tr>
+  <tr><td>opcode</td><td>d05801b7</td><td>The instruction itself, as machine code</td></tr>
+  <tr><td>reg=value</td><td>gp=d0580000</td><td>Register it wrote, and the new value</td></tr>
+  <tr><td>csr=value</td><td>(empty here)</td><td>Control register it wrote, if any</td></tr>
+  <tr><td>; mnemonic</td><td>lui gp,0xd0580000</td><td>The instruction in readable assembly; loads and stores add the memory address in [ ]</td></tr>
+</table>
+<h3>The odd lines: <code>nbL</code></h3>
+<p>Some lines have no <code>#inst</code> and end in <code>; nbL</code>, for example
+<code>t0=0000002d ; nbL</code>. VeeR EL2 does not freeze while a load is fetching data from slow memory:
+the load retires first, and its data arrives a few cycles later as a <strong>non-blocking load</strong>
+(nbL) write. <code>0x2d</code> is the ASCII code for <code>-</code>, the first character of the banner.</p>
+<p><strong>Ready?</strong> Run <code>hello_world</code>; the view switches to the Instruction trace.</p>`,
+        tasks: [
+          'Press ▶ Run on VeeR; the Instruction trace opens',
+          'Find instruction #9 and read each of its columns',
+          'Find the first line ending in "; nbL" — which register gets which value?',
+          'Look at the lb line directly above it: how many cycles until its data arrived?',
+        ],
+        hint:
+`The start of the loop in the hello_world trace:
+
+        73 :      #12 0 8000002c 00020283     ; lb      t0,0(tp) [80000130]
+        75 :                    t0=0000002d   ; nbL
+        78 :      #13 0 80000030 00518023     ; sb      t0,0(gp) [d0580000]
+
+The lb retires at cycle 73 without a result.
+Its data (0x2d = '-') arrives at cycle 75: 2 cycles later.
+The sb at cycle 78 then stores that byte to the mailbox.`,
+        expected: ['gp=d0580000', 'nbL', 'TEST_PASSED'],
+      },
+
+      // ── L2 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf2l2',
+        title: 'L2 — Matching source to trace',
+        level: 'G2',
+        tab: 'cpu',
+        program: 'hello_world',
+        rebuild: 'none',
+        output_view: 'exec_log',
+        theory: `
+<h2>From assembly source to retired instructions</h2>
+<p>The trace is the ground truth of what the core did. Lining it up with the source code shows how the
+program you wrote turns into the instructions the core actually runs — and they are not always one to one.</p>
+<p>The start of <code>hello_world.s</code>:</p>
+<pre class="code-block">csrw minstret, zero      # clear the instruction counter
+csrw minstreth, zero
+la   x1, _trap           # address of the trap handler
+csrw mtvec, x1           # tell the core where to jump on an error
+li   x1, 0x5f555555
+csrw 0x7c0, x1           # enable caches
+li   x3, STDOUT          # x3 = 0xd0580000, the mailbox
+la   x4, hw_data         # x4 = address of the string
+loop:
+   lb   x5, 0(x4)
+   sb   x5, 0(x3)
+   addi x4, x4, 1
+   bnez x5, loop</pre>
+<h3>Three things that surprise people</h3>
+<ul>
+  <li><strong>Register names change.</strong> The trace uses ABI names: <code>x1</code>=<code>ra</code>,
+      <code>x3</code>=<code>gp</code>, <code>x4</code>=<code>tp</code>, <code>x5</code>=<code>t0</code>.</li>
+  <li><strong>One line of source can become two instructions.</strong> <code>la</code> and a large
+      <code>li</code> are pseudo-instructions: the assembler expands them, for example into
+      <code>auipc</code> + <code>addi</code> or <code>lui</code> + <code>addi</code>.</li>
+  <li><strong>CSRs appear by number.</strong> <code>csrw minstret</code> shows as <code>csr_b02</code>,
+      <code>mtvec</code> as <code>csr_305</code>, and <code>csrw</code> as <code>csrrw zero,...</code>.
+      Some instructions are compressed to 16 bits: <code>addi x4,x4,1</code> retires as <code>c.addi tp,1</code>.</li>
+</ul>
+<p><strong>Ready?</strong> Run <code>hello_world</code> and match every source line above to its trace line(s).</p>`,
+        tasks: [
+          'Press ▶ Run on VeeR and stay on the Instruction trace',
+          'Find the trace lines for "la x1, _trap": which two instructions, and which numbers (#)?',
+          'Find "csrw mtvec, x1": which csr_ number does mtvec have?',
+          'Find the first instruction of the loop: what is its pc?',
+          'Count the cycles for one full loop iteration (lb to the next lb)',
+        ],
+        hint:
+`Source                    Trace (#inst: mnemonic)
+csrw minstret, zero    -> #1  csrrw zero,csr_b02,zero
+csrw minstreth, zero   -> #2  csrrw zero,csr_b82,zero
+la   x1, _trap         -> #3  auipc ra,0x0   + #4 addi ra,ra,280
+csrw mtvec, x1         -> #5  csrrw zero,csr_305,ra
+li   x1, 0x5f555555    -> #6  lui ra,...     + #7 addi ra,ra,1365
+csrw 0x7c0, x1         -> #8  csrrw zero,csr_7c0,ra
+li   x3, STDOUT        -> #9  lui gp,0xd0580000
+la   x4, hw_data       -> #10 auipc tp,0x0   + #11 addi tp,tp,268
+loop (pc 8000002c)     -> #12 lb, #13 sb, #14 c.addi, #15 bne
+
+One iteration: lb at cycle 85, next lb at cycle 93 -> 8 cycles
+(a few take 9). The first one takes 12 while caches warm up.`,
+        expected: ['csr_305', '8000002c', 'c.addi', 'TEST_PASSED'],
+      },
+
+      // ── L3 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf2l3',
+        title: 'L3 — Instructions per cycle',
+        level: 'G2',
+        tab: 'cpu',
+        program: 'cmark_dccm',
+        rebuild: 'none',
+        output_view: 'output',
+        theory: `
+<h2>IPC: how busy is the core?</h2>
+<p><strong>Instructions per cycle</strong> (IPC) is the number of instructions retired divided by the
+number of clock cycles:</p>
+<pre class="code-block">IPC = minstret / mcycle</pre>
+<p>VeeR EL2 retires at most one instruction per cycle, so its best possible IPC is 1.0. Every cycle
+below that is a cycle the core spent waiting — usually for memory.</p>
+<h3>What you have measured so far</h3>
+<table class="truth-table">
+  <tr><th>Program</th><th>minstret</th><th>mcycle</th><th>IPC</th></tr>
+  <tr><td>hello_world</td><td>330</td><td>726</td><td>0.45</td></tr>
+  <tr><td>hello_world_dccm</td><td>330</td><td>414</td><td>0.80</td></tr>
+  <tr><td>dhry (Dhrystone)</td><td>343,115</td><td>355,033</td><td>0.97</td></tr>
+  <tr><td>cmark_dccm (CoreMark)</td><td>?</td><td>?</td><td>?</td></tr>
+</table>
+<h3>Why hello_world is so slow</h3>
+<p>Remember the <code>nbL</code> lines: each <code>lb</code> from external memory delivers its byte
+2 cycles late, and the very next instruction, <code>sb</code>, needs that byte. The core has nothing
+else to do, so it waits. Run <code>hello_world_dccm</code> and look at its trace: the
+<code>lb</code> lines carry <code>t0=...</code> directly, there are no <code>nbL</code> lines, and an
+iteration takes about 5 cycles instead of about 9.</p>
+<p>Benchmarks like Dhrystone and CoreMark do real computation with data mostly close to the core,
+so they keep it busy almost every cycle.</p>
+<p>In the next chapter you will stop looking at speed and start looking at <em>correctness</em>: what
+the other test programs prove about the core.</p>
+<p><strong>Ready?</strong> <code>cmark_dccm</code> is selected. Run it (about 5 seconds), then work out its IPC.</p>`,
+        tasks: [
+          'Predict: will CoreMark’s IPC be closer to hello_world or to dhry?',
+          'Press ▶ Run on VeeR with cmark_dccm selected',
+          'Find the Finished line and compute IPC = minstret / mcycle',
+          'Optional: run hello_world_dccm and check its trace has no nbL lines',
+        ],
+        hint:
+`cmark_dccm finishes with:
+
+  Finished : minstret = 283001, mcycle = 299857
+
+IPC = 283001 / 299857 = 0.94
+
+Close to dhry (0.97): both are compute-heavy benchmarks with
+their data in the DCCM, so the core rarely waits for memory.`,
+        expected: ['minstret = 283001', 'TEST_PASSED'],
+      },
+    ],
+  },
 ];
