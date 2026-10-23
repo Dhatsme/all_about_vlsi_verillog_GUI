@@ -566,4 +566,222 @@ End of output:
       },
     ],
   },
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'vf4',
+    track: 'Foundation',
+    title: 'vf4 — UVM tour',
+    lessons: [
+      // ── L1 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf4l1',
+        title: 'L1 — Stimulus: item and sequence',
+        level: 'G2',
+        tab: 'uvm',
+        open_file: 'dccm_transaction_sequence_item.sv',
+        rebuild: 'none',
+        theory: `
+<h2>A different kind of test</h2>
+<p>In vf1–vf3 a program ran <em>inside</em> the CPU and checked itself. Now you switch to the way most
+chips are verified: a <strong>UVM testbench</strong>, written in SystemVerilog, that drives one block
+from the outside and checks it. The block here is VeeR's <strong>DCCM</strong> — the data memory you met
+in vf1 — on its own, with no CPU around it: 8 memory banks storing 39-bit words (32 data bits + 7 ECC
+check bits).</p>
+<p>UVM splits the job into pieces with fixed roles. This lesson covers where stimulus comes from.</p>
+<h3>The sequence item: one transaction</h3>
+<p>A <strong>sequence item</strong> describes one operation on the block — here, one memory access:</p>
+<pre class="code-block">rand bit [pt.DCCM_BITS-1:0]        addr;   // 16 bits, random
+rand bit [pt.DCCM_FDATA_WIDTH-1:0] wdata;  // 39 bits, random
+bit  [pt.DCCM_FDATA_WIDTH-1:0]     rdata;  // filled in by the driver
+bit wr_en;  bit rd_en;                     // set by the sequence, not random</pre>
+<p><code>rand</code> marks fields that <code>randomize()</code> fills in. The
+<code>\`uvm_field_int</code> macros register fields with UVM so the item can print itself — that is the
+table you will see in the log.</p>
+<h3>The sequences: what to send, in what order</h3>
+<pre class="code-block">// dccm_write_read_sequence: one random write, then read the same address
+req.randomize();  req.wr_en = 1;  ...send...
+                  req.wr_en = 0;  req.rd_en = 1;  ...send...
+// dccm_memtest_sequence: repeat that loops times
+repeat (loops) \`uvm_do(seq)</pre>
+<p>The test sets <code>memtest.loops = 10</code> (in <code>dccm_memtest.sv</code>), so one run makes
+10 writes and 10 reads.</p>
+<p><strong>Ready?</strong> Read the item file opened below, then press <strong>Build &amp; run</strong>
+without changing anything (no rebuild needed, a few seconds).</p>`,
+        tasks: [
+          'If you edited any testbench file before, press Reset all first',
+          'Read dccm_transaction_sequence_item.sv: which fields are rand, which are not?',
+          'Open dccm_memtest.sv and find the line that sets loops',
+          'Press ▶ Build & run with no edits',
+          'In the output, find the first "WR:" line and the item table printed after it',
+          'Count the WR: and RD: lines — do they match loops?',
+        ],
+        hint:
+`First write in the log:
+
+  [dccm_driver] WR: 0x0000c776 <= 0x6376d99b27
+  Name                           Type                            Size  Value
+  dccm_transation_sequence_item  dccm_transaction_sequence_item  -     @201
+    addr                         integral                        16    'hc776
+    wr_en                        integral                        1     'h1
+    wdata                        integral                        39    'h6376d99b27
+
+10 loops -> 10 WR: lines and 10 RD: lines.
+(The random values repeat run to run: the simulator uses a fixed seed.)`,
+        expected: ['WR: 0x', 'dccm_transaction_sequence_item', 'DCCM TEST PASSED'],
+      },
+
+      // ── L2 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf4l2',
+        title: 'L2 — Drive and observe: driver and monitor',
+        level: 'G2',
+        tab: 'uvm',
+        open_file: 'dccm_driver.sv',
+        rebuild: 'none',
+        theory: `
+<h2>From transactions to wires, and back</h2>
+<p>Sequences speak in transactions; the memory has wires. Two components translate.</p>
+<h3>The driver: transaction → pins</h3>
+<p>The <strong>driver</strong> asks the sequencer for the next item, wiggles the interface signals, and
+reports back that it is done:</p>
+<pre class="code-block">forever begin
+  seq_item_port.get_next_item(req);   // wait for the next transaction
+  drive();                            // set addr, wr_en/rd_en, wdata on the pins
+  seq_item_port.item_done();          // tell the sequence it may send another
+end</pre>
+<p>For a read, <code>drive()</code> raises <code>rd_en</code> for one clock, waits one more clock,
+then samples <code>rdata</code> and prints <code>RD:</code>.</p>
+<h3>The monitor: pins → transaction</h3>
+<p>The <strong>monitor</strong> (<code>dccm_monitor.sv</code>) never drives anything. It watches the same
+pins, rebuilds a transaction from what it sees, and broadcasts it through an <strong>analysis
+port</strong> to anyone listening — here, the scoreboard. Keeping driving and watching separate is
+deliberate: the monitor reports what really happened on the wires, not what the driver intended.</p>
+<h3>The raw pins</h3>
+<p><code>tbench_top.sv</code> also prints the interface every clock, as lines like
+<code>a:0000c776 w:1 wd:6376d99b27 r:0 rd:00000000</code> (address, write enable, write data, read
+enable, read data). That is the closest thing to a waveform in this log.</p>
+<p><strong>Ready?</strong> Read the driver opened below, then press <strong>Build &amp; run</strong> with no edits.</p>`,
+        tasks: [
+          'If you edited any testbench file before, press Reset all first',
+          'In dccm_driver.sv, find get_next_item, drive() and item_done',
+          'Open dccm_monitor.sv: which line sends the transaction to the scoreboard?',
+          'Press ▶ Build & run with no edits',
+          'Find the first RD: line. Which value did the read return? Keep that in mind for vf6',
+          'Find a pin line (a:... w:... r:...) where w:1, and one where r:1',
+        ],
+        hint:
+`Monitor -> scoreboard:
+  transaction_analisys_port.write(transaction);
+  (the misspelling is in the original source)
+
+First read in the log:
+  [dccm_driver] RD: 0x0000c776 => 0x00000000
+
+The driver wrote 0x6376d99b27 to address c776, and the read
+returned 0. A memory should return what was written. Note it:
+vf6 asks why the test still says PASSED.`,
+        expected: ['RD: 0x', 'a:0000c776', 'DCCM TEST PASSED'],
+      },
+
+      // ── L3 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf4l3',
+        title: 'L3 — Checking: scoreboard and test',
+        level: 'G2',
+        tab: 'uvm',
+        open_file: 'dccm_base_test.sv',
+        rebuild: 'none',
+        theory: `
+<h2>Who decides pass or fail?</h2>
+<p>The <strong>scoreboard</strong> receives every transaction from the monitor and checks it. This one
+keeps a model of memory: on a write it remembers the data; on a read it compares the data the
+memory returned with what it remembered, and reports <code>uvm_error</code> on a mismatch.</p>
+<p>The <strong>test</strong> builds everything and connects it. <code>dccm_base_test.sv</code> does three
+jobs, one per UVM <strong>phase</strong>:</p>
+<table class="truth-table">
+  <tr><th>Phase</th><th>What the base test does</th></tr>
+  <tr><td>build_phase</td><td>Creates the agent (driver + monitor + sequencer) and the scoreboard</td></tr>
+  <tr><td>connect_phase</td><td>Connects the monitor's analysis port to the scoreboard</td></tr>
+  <tr><td>report_phase</td><td>Counts UVM_ERROR + UVM_FATAL; prints PASSED if zero, else FAILED</td></tr>
+</table>
+<p><code>mem_wr_rd_test</code> (in <code>dccm_memtest.sv</code>) extends it: it sets
+<code>loops = 10</code>, then in <code>run_phase</code> raises an <strong>objection</strong> (keeps the
+simulation alive), starts the sequence, and drops the objection when it is done.</p>
+<p>Notice what that pass rule means: <strong>the test passes if nothing reported an error</strong>. It does
+not check that anything was actually checked. Keep that in mind.</p>
+<p><strong>Ready?</strong> Read the base test opened below, then press <strong>Build &amp; run</strong> with no edits.</p>`,
+        tasks: [
+          'If you edited any testbench file before, press Reset all first',
+          'In dccm_base_test.sv, find build_phase, connect_phase and report_phase',
+          'Find the exact rule that decides "DCCM TEST PASSED"',
+          'Open dccm_memtest.sv: where is the objection raised and dropped?',
+          'Press ▶ Build & run with no edits and find "DCCM TEST PASSED"',
+        ],
+        hint:
+`report_phase in dccm_base_test.sv:
+
+  errors = svr.get_severity_count(UVM_FATAL)
+         + svr.get_severity_count(UVM_ERROR);
+  if (errors > 0)  -> "DCCM TEST FAILED!!"
+  else             -> "DCCM TEST PASSED!!"
+
+The test passes when nothing reported an error.`,
+        expected: ['[mem_wr_rd_test] DCCM TEST PASSED', 'Report counts by severity'],
+      },
+
+      // ── L4 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf4l4',
+        title: 'L4 — The report summary',
+        level: 'G2',
+        tab: 'uvm',
+        open_file: 'dccm_scoreboard.sv',
+        rebuild: 'none',
+        theory: `
+<h2>Reading the scoreboard of the scoreboard</h2>
+<p>Every UVM run ends with a <strong>report summary</strong>: how many messages of each severity, and how
+many from each source (the ID in square brackets). Engineers read it first, before any detail.</p>
+<pre class="code-block">** Report counts by severity
+UVM_INFO :  105
+UVM_WARNING :   23
+UVM_ERROR :    0
+UVM_FATAL :    0
+** Report counts by id
+[UVM/COMP/NAME]    23
+[dccm_driver]    20
+[dccm_scoreboard]    80</pre>
+<h3>What each number tells you</h3>
+<ul>
+  <li><strong>23 warnings, all <code>[UVM/COMP/NAME]</code>.</strong> UVM checks component names with a
+      pattern matcher that needs DPI (C code linked into the simulation). This build runs without DPI,
+      so UVM warns about every component name. They are known and harmless here — but you only know
+      that because you read them. Never ignore warnings unread.</li>
+  <li><strong><code>[dccm_driver] 20</code></strong>: 10 <code>WR:</code> + 10 <code>RD:</code> lines.</li>
+  <li><strong><code>[dccm_scoreboard] 80</code></strong>: the scoreboard prints 4 lines per transaction it
+      handles. 20 transactions × 4 = 80.</li>
+</ul>
+<p>Here is the question that opens the last two chapters: of those 20 transactions the scoreboard
+handled, how many were <em>reads</em> that it compared? Open <code>dccm_scoreboard.sv</code> (below)
+and find what it prints for a write and for a read.</p>
+<p>In the next chapter you will change the stimulus yourself and predict how these numbers move.</p>
+<p><strong>Ready?</strong> Press <strong>Build &amp; run</strong> with no edits and read the summary at the end of the output.</p>`,
+        tasks: [
+          'If you edited any testbench file before, press Reset all first',
+          'Press ▶ Build & run with no edits and scroll to "UVM Report Summary"',
+          'Check that all 23 warnings have the same ID',
+          'Explain where 20 (driver) and 80 (scoreboard) come from',
+          'In dccm_scoreboard.sv, find what is printed for a write and for a read — then search the output for "READ DATA"',
+        ],
+        hint:
+`For a write, the scoreboard prints:   ------ :: WRITE DATA :: ------
+For a read, it prints:                ------ :: READ DATA Match :: ------
+                                  or  ------ :: READ DATA Mismatch :: ------
+
+Search the output for "READ DATA": it does not appear at all.
+All 80 scoreboard lines are WRITE DATA blocks — 20 of them,
+although only 10 writes happened. vf6 is about why.`,
+        expected: ['UVM_WARNING :   23', 'UVM_ERROR :    0', 'UVM_FATAL :    0', '[dccm_scoreboard]    80'],
+      },
+    ],
+  },
 ];
