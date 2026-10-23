@@ -21,8 +21,8 @@ deploy rules) and `CLAUDE.md` (branch rules, voice and tone).
 | 1 | `vf1` | Lab tour and first run | L1 Meet VeeR EL2, L2 How a program talks to the testbench, L3 Same program, different memory | ✅ done |
 | 2 | `vf2` | Reading an instruction trace | L1 Trace anatomy, L2 Matching source to trace, L3 Instructions per cycle | ✅ done |
 | 3 | `vf3` | Tests as specifications | L1 What a directed test proves (`illegal_instruction`), L2 Interrupts (`irq`), L3 Errors on purpose (`ecc`), L4 Memory protection (`pmp`) | ✅ done |
-| 4 | `vf4` | UVM tour | L1 Stimulus: item and sequence, L2 Drive and observe: driver and monitor, L3 Checking: scoreboard and test, L4 The report summary | ❌ **build this next** |
-| 5 | `vf5` | Changing stimulus | L1 Predict, edit, check (loop count), L2 Verbosity and what you can see, L3 Breaking it on purpose (syntax errors) | ❌ |
+| 4 | `vf4` | UVM tour | L1 Stimulus: item and sequence, L2 Drive and observe: driver and monitor, L3 Checking: scoreboard and test, L4 The report summary | ✅ done |
+| 5 | `vf5` | Changing stimulus | L1 Predict, edit, check (loop count), L2 Verbosity and what you can see, L3 Breaking it on purpose (syntax errors) | ❌ **build this next** |
 | 6 | `vf6` | Reading results critically | L1 Count the checks, L2 A pass that proves nothing, L3 What a real fix needs (bridge to Professional track) | ❌ |
 
 ---
@@ -133,6 +133,10 @@ shows in the logs. Read the matching `testbench/asm/*.s` (or `tests/`) source
 before writing each lesson; quote snippets only.
 
 ## vf4 — UVM tour  (G2, rebuild: none — run unchanged)
+Built. Lessons open their file via `open_file`. Real counts (unchanged run):
+UVM_INFO 105, UVM_WARNING 23 (all [UVM/COMP/NAME]), [dccm_driver] 20,
+[dccm_scoreboard] 80 = 20 WRITE DATA blocks, 0 READ DATA. Output is ~405
+lines; the API limit was raised to 2,000 lines for vf5's longer runs.
 Map the 11 files in the UVM tab to UVM roles (the page already labels them).
 L4 reads the report summary: `UVM_ERROR : 0`, `UVM_FATAL : 0`,
 `UVM_WARNING : 23` (component-name warnings), `DCCM TEST PASSED`.

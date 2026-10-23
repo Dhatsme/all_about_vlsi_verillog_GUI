@@ -223,15 +223,6 @@
          much of the UVM library, which can take several minutes — leave the page open while it builds.</p>
     </div>
 
-    <div class="card exercise">
-      <h2>Exercise: a test that passes but checks nothing</h2>
-      <p>Run the test unchanged. It prints <code>DCCM TEST PASSED</code> with 0 errors. Now count how often the
-         scoreboard prints <code>READ DATA Match</code> or <code>READ DATA Mismatch</code> in the log.</p>
-      <p>Then open <code>dccm_monitor.sv</code>: the monitor creates one transaction object and reuses it for every
-         bus cycle, and <code>wr_en</code> is set but never cleared. Fix it so the scoreboard really checks reads.
-         What does the scoreboard report now?</p>
-    </div>
-
     <div class="editor-grid">
       <div class="files" id="files" aria-label="Testbench files"></div>
       <div>
@@ -520,6 +511,13 @@
       const b = document.querySelector(`#cpu-out-tabs .out-tab[data-out="${cur.output_view}"]`);
       if (b) b.click();
     }
+    // UVM lessons: open the lesson's file once the file list has loaded.
+    if (cur.tab === 'uvm' && cur.open_file) openFileWhenReady(cur.open_file, 60);
+  }
+  function openFileWhenReady(name, tries) {
+    const b = document.querySelector(`.file[data-name="${name}"]`);
+    if (b) { if (!b.classList.contains('active')) b.click(); return; }
+    if (tries > 0) setTimeout(() => openFileWhenReady(name, tries - 1), 100);
   }
 
   function show(l) {

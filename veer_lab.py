@@ -58,7 +58,7 @@ CPU_TIMEOUT_S = 30          # coremark at default size finishes well inside this
 UVM_LOCK_WAIT_S = 120       # how long a request waits for a busy UVM build
 UVM_TIMEOUT_S = 900         # cold rebuild after a big edit can take minutes
 MAX_FILE_BYTES = 200_000
-MAX_LOG_LINES = 400
+MAX_LOG_LINES = 2000      # UVM runs with more loops print ~40 lines per transaction
 
 # Programs shown in the CPU dropdown, with a one-line explanation each.
 # Only names in this dict can be run.
