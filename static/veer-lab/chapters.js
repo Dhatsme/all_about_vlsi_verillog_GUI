@@ -784,4 +784,159 @@ although only 10 writes happened. vf6 is about why.`,
       },
     ],
   },
+  // ═══════════════════════════════════════════════════════════════════════════
+  {
+    id: 'vf5',
+    track: 'Foundation',
+    title: 'vf5 — Changing stimulus',
+    lessons: [
+      // ── L1 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf5l1',
+        title: 'L1 — Predict, edit, check',
+        level: 'G3',
+        tab: 'uvm',
+        open_file: 'dccm_memtest.sv',
+        rebuild: 'fast',
+        theory: `
+<h2>The habit that separates engineers from button-pressers</h2>
+<p>From here on, every change follows the same loop: <strong>predict</strong> what the run will show,
+<strong>edit</strong>, <strong>run</strong>, then <strong>compare</strong> with your prediction. When the
+result surprises you, you have learned something about the testbench — or found a bug in it.</p>
+<p>Your first edit is one number. In <code>dccm_memtest.sv</code> the test sets how many write-then-read
+pairs the sequence makes:</p>
+<pre class="code-block">memtest.loops = 10;</pre>
+<h3>What you know from vf4 (loops = 10)</h3>
+<table class="truth-table">
+  <tr><th>Quantity</th><th>loops = 10</th><th>loops = 3 (your prediction)</th></tr>
+  <tr><td>WR: lines / RD: lines</td><td>10 / 10</td><td>?</td></tr>
+  <tr><td>[dccm_driver] count</td><td>20</td><td>?</td></tr>
+  <tr><td>[dccm_scoreboard] count</td><td>80</td><td>?</td></tr>
+  <tr><td>Simulation ends at (<code>$finish at</code>)</td><td>495 ns</td><td>?</td></tr>
+</table>
+<p>A hint for the last row: the clock period is 10 ns, and each write-then-read pair takes 5 clocks.
+Reset is released at 5 ns.</p>
+<p>Changing a number inside an existing function is a <strong>fast</strong> edit: the server recompiles
+only that file, which takes about 30–50 seconds.</p>
+<p><strong>Ready?</strong> Fill in your predictions, change <code>10</code> to <code>3</code> in the file
+below, and press <strong>Build &amp; run</strong>.</p>`,
+        tasks: [
+          'If you edited any testbench file before, press Reset all first',
+          'Write your predictions for all four rows of the table',
+          'In dccm_memtest.sv, change memtest.loops = 10; to memtest.loops = 3;',
+          'Press ▶ Build & run and wait for the rebuild (about 30–50 s)',
+          'Compare every number in the report summary and the $finish line with your predictions',
+          'Leave the edit in place for now; the next lesson starts with Reset all',
+        ],
+        hint:
+`loops = 3:
+
+  WR: lines 3, RD: lines 3
+  [dccm_driver]     6      (3 + 3)
+  [dccm_scoreboard]    24  (6 transactions x 4 lines)
+  $finish at 145ns         (3 pairs x 50 ns - 5 ns)
+
+Everything scales with loops, except the 23 name warnings:
+those come from building the components, not from traffic.`,
+        expected: ['[dccm_driver]     6', '[dccm_scoreboard]    24', 'DCCM TEST PASSED'],
+      },
+
+      // ── L2 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf5l2',
+        title: 'L2 — Verbosity and what you can see',
+        level: 'G3',
+        tab: 'uvm',
+        open_file: 'dccm_driver.sv',
+        rebuild: 'fast',
+        theory: `
+<h2>Every message has a volume level</h2>
+<p>Each <code>uvm_info</code> message carries a <strong>verbosity</strong>: how important it is.
+The simulation also has a verbosity threshold; messages above it are thrown away before they are printed.</p>
+<table class="truth-table">
+  <tr><th>Verbosity</th><th>Printed at the default threshold (UVM_MEDIUM)?</th></tr>
+  <tr><td>UVM_NONE</td><td>Always</td></tr>
+  <tr><td>UVM_LOW</td><td>Yes</td></tr>
+  <tr><td>UVM_MEDIUM</td><td>Yes</td></tr>
+  <tr><td>UVM_HIGH</td><td>No</td></tr>
+  <tr><td>UVM_FULL, UVM_DEBUG</td><td>No</td></tr>
+</table>
+<p>The driver prints its <code>WR:</code> and <code>RD:</code> lines at <code>UVM_LOW</code>:</p>
+<pre class="code-block">\`uvm_info(get_type_name(), $sformatf("WR: 0x%08X &lt;= 0x%08X", req.addr, req.wdata), UVM_LOW)</pre>
+<p>Real projects print thousands of messages per test, so engineers choose levels carefully: summaries at
+LOW, per-transaction detail at HIGH, and raise the threshold only when debugging (with a run-time switch,
+<code>+UVM_VERBOSITY=UVM_HIGH</code>; this lab runs at the default).</p>
+<h3>Predict first</h3>
+<p>If both driver messages move to <code>UVM_HIGH</code>: will the test still pass? What happens to the
+<code>[dccm_driver]</code> line in the summary, and to the <code>UVM_INFO</code> total (105 with loops = 10)?</p>
+<p><strong>Ready?</strong> Press <strong>Reset all</strong>, change both <code>UVM_LOW</code> in the driver
+to <code>UVM_HIGH</code>, and press <strong>Build &amp; run</strong>.</p>`,
+        tasks: [
+          'Press Reset all (loops goes back to 10)',
+          'Write your predictions: pass or fail? [dccm_driver] count? UVM_INFO total?',
+          'In dccm_driver.sv, change UVM_LOW to UVM_HIGH on the WR: line and on the RD: line',
+          'Press ▶ Build & run (about 30 s)',
+          'Search the output for "WR:" and check the summary counts',
+          'Why is hiding a message different from removing a check?',
+        ],
+        hint:
+`With both driver messages at UVM_HIGH:
+
+  No WR: or RD: lines appear.
+  [dccm_driver] is gone from "Report counts by id".
+  UVM_INFO :   85     (105 - 20 hidden driver messages)
+  DCCM TEST PASSED    (the driver still drives every transaction)
+
+Verbosity only filters printing. The stimulus and the checks
+are unchanged, so the result is the same.`,
+        expected: ['UVM_INFO :   85', 'DCCM TEST PASSED'],
+      },
+
+      // ── L3 ──────────────────────────────────────────────────────────────────
+      {
+        id: 'vf5l3',
+        title: 'L3 — Breaking it on purpose',
+        level: 'G3',
+        tab: 'uvm',
+        open_file: 'dccm_memtest.sv',
+        rebuild: 'fast',
+        theory: `
+<h2>Reading compiler errors without panic</h2>
+<p>Every engineer breaks the build many times a day. The skill is reading the error message quickly
+and correctly. Verilator reports errors in this shape:</p>
+<pre class="code-block">%Error: hdl/dccm_memtest.sv:20:3: syntax error, unexpected endfunction, expecting ';'
+        ^ file           ^ line:column  ^ what it found      ^ what it wanted</pre>
+<h3>The trap: the line number</h3>
+<p>The compiler reports where it <em>noticed</em> the problem, which is often the line after the
+mistake. A missing semicolon on line 19 is only discovered when line 20 starts with something that
+cannot follow it. One mistake can also cause a second, follow-on error. Fix the <strong>first</strong>
+error, then run again.</p>
+<p>A syntax error is caught before any C++ is compiled, so the server answers in under a second: no
+rebuild, no simulation, <code>build failed</code>.</p>
+<h3>Predict first</h3>
+<p>If you delete the semicolon at the end of <code>memtest.loops = 10;</code> (line 19), which line number
+will the error report?</p>
+<p>In the last chapter of this track you will stop editing and start questioning the results themselves.</p>
+<p><strong>Ready?</strong> Press <strong>Reset all</strong>, delete that one semicolon, and press
+<strong>Build &amp; run</strong>.</p>`,
+        tasks: [
+          'Press Reset all',
+          'Predict the line number the error will report',
+          'In dccm_memtest.sv, delete the ; at the end of memtest.loops = 10',
+          'Press ▶ Build & run and read the first %Error line: file, line, column, found, expected',
+          'Put the semicolon back, run again, and confirm UVM PASS',
+          'Press Reset all to leave the testbench clean for the next chapter',
+        ],
+        hint:
+`%Error: hdl/dccm_memtest.sv:20:3: syntax error, unexpected endfunction, expecting ';'
+%Error: hdl/dccm_memtest.sv:28:3: syntax error, unexpected endtask, expecting endfunction
+%Error: Exiting due to 2 error(s)
+
+The mistake is on line 19; the compiler noticed it at line 20,
+where "endfunction" appeared instead of ";".
+The second error is a follow-on: fixing the first removes both.`,
+        expected: ["expecting ';'", 'Exiting due to'],
+      },
+    ],
+  },
 ];

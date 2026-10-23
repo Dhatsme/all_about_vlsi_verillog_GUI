@@ -22,8 +22,8 @@ deploy rules) and `CLAUDE.md` (branch rules, voice and tone).
 | 2 | `vf2` | Reading an instruction trace | L1 Trace anatomy, L2 Matching source to trace, L3 Instructions per cycle | ✅ done |
 | 3 | `vf3` | Tests as specifications | L1 What a directed test proves (`illegal_instruction`), L2 Interrupts (`irq`), L3 Errors on purpose (`ecc`), L4 Memory protection (`pmp`) | ✅ done |
 | 4 | `vf4` | UVM tour | L1 Stimulus: item and sequence, L2 Drive and observe: driver and monitor, L3 Checking: scoreboard and test, L4 The report summary | ✅ done |
-| 5 | `vf5` | Changing stimulus | L1 Predict, edit, check (loop count), L2 Verbosity and what you can see, L3 Breaking it on purpose (syntax errors) | ❌ **build this next** |
-| 6 | `vf6` | Reading results critically | L1 Count the checks, L2 A pass that proves nothing, L3 What a real fix needs (bridge to Professional track) | ❌ |
+| 5 | `vf5` | Changing stimulus | L1 Predict, edit, check (loop count), L2 Verbosity and what you can see, L3 Breaking it on purpose (syntax errors) | ✅ done |
+| 6 | `vf6` | Reading results critically | L1 Count the checks, L2 A pass that proves nothing, L3 What a real fix needs (bridge to Professional track) | ❌ **build this next** |
 
 ---
 
@@ -145,6 +145,10 @@ L4 reads the report summary: `UVM_ERROR : 0`, `UVM_FATAL : 0`,
 Only edits inside existing methods (fast class, ~26 s). Measure each edit's
 rebuild time before publishing; if any is slow class, change the exercise.
 L3 uses deliberate syntax errors (0.5 s, `%Error` lines).
+Built and measured (2 cores): loops 10->3 rebuild 28-47 s ([dccm_driver] 6,
+[dccm_scoreboard] 24, $finish at 145 ns = 50 ns x loops - 5); driver messages
+UVM_LOW->UVM_HIGH ~30 s (UVM_INFO 105->85, [dccm_driver] line gone); missing
+semicolon on line 19 -> error reported at 20:3, 2 errors, 0.6 s.
 
 ## vf6 — Reading results critically  (G3, rebuild: none)
 Count `READ DATA Match` / `READ DATA Mismatch` in an unchanged run: zero.
